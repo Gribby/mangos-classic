@@ -52,6 +52,7 @@
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgLoot.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1422,7 +1423,11 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     /* ******************************** Prepare loot if can ************************************ */
     // only lootable if it has loot or can drop gold, must be done before threat list is cleared
     if (!isPet && !victim->GetSettings().HasFlag(CreatureStaticFlags::DESPAWN_INSTANTLY))
+    {
         victim->PrepareBodyLootState(killer);
+        // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
+        Arpg::OnCorpseLoot(victim);
+    }
 
     /* ********************************* Set Death finally ************************************* */
     DEBUG_FILTER_LOG(LOG_FILTER_DAMAGE, "SET JUST_DIED");

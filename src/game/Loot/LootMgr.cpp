@@ -17,6 +17,7 @@
  */
 
 #include "Loot/LootMgr.h"
+#include "Arpg/ArpgLoot.h"
 #include "Log/Log.h"
 #include "Util/ProgressBar.h"
 #include "World/World.h"
@@ -2085,6 +2086,8 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
         else if (IsLootedFor(target))
             SendReleaseFor(target);
         ForceLootAnimationClientUpdate();
+        // ARPG: the taker's ground loot list follows what is left.
+        Arpg::OnLootChanged(this, target);
     }
     return msg;
 }
@@ -2289,6 +2292,9 @@ void Loot::SendGold(Player* player)
         }
     }
     m_gold = 0;
+
+    // ARPG: the taker's ground loot list follows what is left (before a release may free this).
+    Arpg::OnLootChanged(this, player);
 
     // animation update is done in Release if needed.
     if (IsLootedFor(player))

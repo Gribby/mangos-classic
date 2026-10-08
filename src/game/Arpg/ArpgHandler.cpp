@@ -13,9 +13,11 @@
  *     ACTION_CAST         uint32 spell id, uint8 aim (CastAim), float x, float y, float z,
  *                         uint64 intended
  *     ACTION_AIM          float x, float y, float z, uint64 intended (re-aims the running cast)
+ *     ACTION_LOOT         uint64 corpse, uint8 loot slot (0xFF the gold): pick it up off the ground
  */
 
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgLoot.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -109,6 +111,15 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             Arpg::OnHello(player);
             if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
                 Arpg::UpdateAim(player, x, y, z, intended);
+            break;
+        }
+        case Arpg::ACTION_LOOT:
+        {
+            ObjectGuid corpse;
+            uint8 slot;
+            recvPacket >> corpse >> slot;
+            Arpg::OnHello(player);
+            Arpg::PickLoot(player, corpse, slot);
             break;
         }
         default:

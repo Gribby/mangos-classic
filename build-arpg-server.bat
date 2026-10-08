@@ -21,6 +21,8 @@ if /i "%~1"=="pull" (
     git pull || goto :fail
 )
 
+rem Re-run the configure step: new source files are only picked up by it.
+cmake -S . -B build >nul || goto :fail
 echo Building mangosd...
 cmake --build build --config Release --target mangosd || goto :fail
 

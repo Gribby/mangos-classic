@@ -865,10 +865,12 @@ enum Opcodes
     SMSG_DEFENSE_MESSAGE                            = 0x33B,
     // ARPG: the benilla ARPG client's action packet, past the 1.12 range (Arpg/ArpgHandler.cpp)
     CMSG_ARPG_ACTION                                = 0x33C,
+    // ARPG: the ground loot a corpse holds for an ARPG player (Arpg/ArpgLoot.h)
+    SMSG_ARPG_LOOT                                  = 0x33D,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x33D
+#define NUM_MSG_TYPES 0x33E
 
 /// Player state
 enum SessionStatus
