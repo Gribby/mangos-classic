@@ -31,6 +31,13 @@ namespace
     // An aim point this close to the caster gives no bearing: the facing is used instead.
     constexpr float AIM_MIN = 1.0f;
 
+    // The flat distance from `object` to the point (x, y), in yards. GetDistance2d with
+    // DIST_CALC_NONE returns the squared distance, so it is not used for this.
+    float FlatDistance(WorldObject const* object, float x, float y)
+    {
+        return std::hypot(object->GetPositionX() - x, object->GetPositionY() - y);
+    }
+
     // Whether `unit` may catch `actor`'s swing or skillshot: the intended target always; anyone
     // else only as a fair enemy, as an area spell would take it (no PvP flagging of bystanders),
     // visible to the player, not a critter, not held by crowd control a hit would break, and
@@ -64,7 +71,7 @@ namespace
     // the spell's range and sight; the caster when nobody stands there.
     Unit* SelectAllyNear(Player* player, SpellEntry const* spellInfo, float x, float y, float maxRange)
     {
-        float const reach = std::min(player->GetDistance2d(x, y, DIST_CALC_NONE), maxRange) + ALLY_PICK;
+        float const reach = std::min(FlatDistance(player, x, y), maxRange) + ALLY_PICK;
         UnitList units;
         MaNGOS::AnyFriendlyUnitInObjectRangeCheck check(player, reach);
         MaNGOS::UnitListSearcher<MaNGOS::AnyFriendlyUnitInObjectRangeCheck> searcher(units, check);
@@ -198,11 +205,11 @@ namespace Arpg
         // The unit under the cursor: it may always catch the spell, so a neutral, a sheep or a
         // sapped mob can be opened on, but only if it is near where the player aimed.
         Unit* intended = intendedGuid ? player->GetMap()->GetUnit(intendedGuid) : nullptr;
-        if (intended && intended->GetDistance2d(x, y, DIST_CALC_NONE) > ALLY_PICK + intended->GetCombatReach())
+        if (intended && FlatDistance(intended, x, y) > ALLY_PICK + intended->GetCombatReach())
             intended = nullptr;
 
         // The line the player aimed along: toward the aim point, or ahead with the cursor underfoot.
-        bool const pointed = player->GetDistance2d(x, y, DIST_CALC_NONE) >= AIM_MIN;
+        bool const pointed = FlatDistance(player, x, y) >= AIM_MIN;
         float const bearing = pointed ? player->GetAngle(x, y) : player->GetOrientation();
 
         Unit* target = nullptr;
@@ -246,7 +253,7 @@ namespace Arpg
         Spell* spell = new Spell(player, spellInfo, TRIGGERED_NONE);
         spell->m_clientCast = true;
         if (aim == AIM_ENEMY && !melee)
-            spell->SetArpgAim(bearing, pointed ? player->GetDistance2d(x, y, DIST_CALC_NONE) : 0.0f);
+            spell->SetArpgAim(bearing, pointed ? FlatDistance(player, x, y) : 0.0f);
         spell->SpellStart(&targets);
     }
 
