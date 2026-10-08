@@ -5,8 +5,15 @@
  * as items lying on the ground around the corpse that the player clicks to pick up. The server
  * tells an ARPG player what a corpse holds for them (SMSG_ARPG_LOOT) when it dies and whenever
  * that changes, and takes one item or the gold off it on request (CMSG_ARPG_ACTION, ACTION_LOOT)
- * from a few yards away, through the stock loot code, so loot rights, rolls, full bags and the
- * corpse's looted state all work as they do for the loot window.
+ * from a few yards away, through the stock loot code, so loot rights, full bags and the corpse's
+ * looted state all work as they do for the loot window. A client that comes upon a lootable corpse
+ * it has no list for (it walked back, relogged, or a group member made the kill out of its sight)
+ * asks for one (ACTION_LOOT_QUERY).
+ *
+ * Known gap: under group, need-before-greed or master loot, an item at or over the loot threshold
+ * is held for a roll that only the loot window starts, so it never shows on the ground; such a
+ * corpse is opened with the loot window as in stock. Free-for-all, round robin and solo loot show
+ * everything.
  *
  *   SMSG_ARPG_LOOT: uint64 corpse, uint32 gold, uint8 item count, then per item:
  *                   uint8 loot slot, uint32 item id, uint32 display id, uint8 quality, uint8 count
@@ -42,7 +49,11 @@ namespace Arpg
     void OnLootChanged(Loot* loot, Player* player);
 
     // Take the item in `slot` (or the gold, LOOT_SLOT_GOLD) off `corpseGuid`'s loot for `player`.
+    // Runs on the world thread, as the stock loot opcodes do.
     void PickLoot(Player* player, ObjectGuid corpseGuid, uint8 slot);
+
+    // Send `player` `corpseGuid`'s ground loot list, if it is a corpse near them.
+    void QueryLoot(Player* player, ObjectGuid corpseGuid);
 }
 
 #endif

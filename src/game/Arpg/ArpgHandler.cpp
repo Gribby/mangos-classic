@@ -14,6 +14,10 @@
  *                         uint64 intended
  *     ACTION_AIM          float x, float y, float z, uint64 intended (re-aims the running cast)
  *     ACTION_LOOT         uint64 corpse, uint8 loot slot (0xFF the gold): pick it up off the ground
+ *     ACTION_LOOT_QUERY   uint64 corpse: send its ground loot list
+ *
+ * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
+ * a split of gold reaches group members on other maps).
  */
 
 #include "Arpg/ArpgCombat.h"
@@ -119,7 +123,25 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             uint8 slot;
             recvPacket >> corpse >> slot;
             Arpg::OnHello(player);
-            Arpg::PickLoot(player, corpse, slot);
+            GetMessager().AddMessage([corpse, slot](WorldSession* session)
+            {
+                if (Player* looter = session->GetPlayer())
+                    if (looter->IsInWorld())
+                        Arpg::PickLoot(looter, corpse, slot);
+            });
+            break;
+        }
+        case Arpg::ACTION_LOOT_QUERY:
+        {
+            ObjectGuid corpse;
+            recvPacket >> corpse;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([corpse](WorldSession* session)
+            {
+                if (Player* looter = session->GetPlayer())
+                    if (looter->IsInWorld())
+                        Arpg::QueryLoot(looter, corpse);
+            });
             break;
         }
         default:

@@ -91,13 +91,23 @@ namespace Arpg
 
     void OnLootChanged(Loot* loot, Player* player)
     {
-        if (!loot || !player || !Active(player) || loot->GetLootType() != LOOT_CORPSE)
+        if (!loot || !player || loot->GetLootType() != LOOT_CORPSE || !player->IsInWorld())
             return;
         ObjectGuid const guid = loot->GetLootGuid();
-        if (!guid.IsCreature() || !player->IsInWorld())
+        if (!guid.IsCreature())
             return;
-        if (Creature* creature = player->GetMap()->GetCreature(guid))
-            SendGroundLoot(player, creature);
+        Creature* creature = player->GetMap()->GetCreature(guid);
+        if (!creature)
+            return;
+        // The taker, and the ARPG players of their group at the corpse: what was left for them
+        // may have changed with it (a round robin turn passing, a shared item gone).
+        SendGroundLoot(player, creature);
+        if (Group* group = player->GetGroup())
+            for (Group::MemberSlot const& slot : group->GetMemberSlots())
+                if (slot.guid != player->GetObjectGuid())
+                    if (Player* member = ObjectAccessor::FindPlayer(slot.guid))
+                        if (member->IsInWorld() && member->GetMap() == player->GetMap())
+                            SendGroundLoot(member, creature);
     }
 
     void PickLoot(Player* player, ObjectGuid corpseGuid, uint8 slot)
@@ -106,6 +116,12 @@ namespace Arpg
             return;
         Creature* creature = corpseGuid.IsCreature() ? player->GetMap()->GetCreature(corpseGuid) : nullptr;
         if (!creature)
+            return;
+
+        // A loot window open on something else waits for its close: a release here, which an
+        // emptied corpse sends, would close that window under the player.
+        ObjectGuid const open = player->GetLootGuid();
+        if (!open.IsEmpty() && open != corpseGuid)
             return;
 
         Loot* loot = CorpseLootFor(player, creature);
@@ -117,9 +133,6 @@ namespace Arpg
             return;
         }
 
-        // Picking loot up breaks stealth, as opening a corpse does.
-        player->DoLoot();
-
         if (slot == LOOT_SLOT_GOLD)
         {
             if (loot->GetGoldAmount() == 0)
@@ -127,7 +140,10 @@ namespace Arpg
                 SendGroundLoot(player, creature);
                 return;
             }
-            // SendGold resends the list (OnLootChanged) and releases a corpse it emptied.
+            // Picking loot up breaks stealth, as opening a corpse does.
+            player->DoLoot();
+            // SendGold resends the list (OnLootChanged) and releases the corpse once nothing is
+            // left on it for the player.
             loot->SendGold(player);
             return;
         }
@@ -138,14 +154,23 @@ namespace Arpg
             SendGroundLoot(player, creature);
             return;
         }
-        // SendItem stores it (or reports full bags) and resends the list (OnLootChanged). The
-        // release settles the corpse once it is empty: its sparkle goes, skinning opens, it decays.
-        // A loot window the player has open on another corpse is left alone.
-        if (loot->SendItem(player, item) == EQUIP_ERR_OK)
-        {
-            ObjectGuid const open = player->GetLootGuid();
-            if (open.IsEmpty() || open == corpseGuid)
-                loot->Release(player);
-        }
+        player->DoLoot();
+        // SendItem stores it (or reports full bags) and resends the list (OnLootChanged). Once
+        // nothing is left for the player, the release settles the corpse as the loot window's
+        // close does: what the player passed on goes to the rest of the group, and an empty corpse
+        // loses its sparkle, opens for skinning and decays. Before that, the rest stays theirs.
+        if (loot->SendItem(player, item) == EQUIP_ERR_OK && loot->IsLootedFor(player))
+            loot->Release(player);
+    }
+
+    void QueryLoot(Player* player, ObjectGuid corpseGuid)
+    {
+        if (!Active(player) || !player->IsInWorld() || !corpseGuid.IsCreature())
+            return;
+        Creature* creature = player->GetMap()->GetCreature(corpseGuid);
+        // Only a corpse the player can see: the client asks as one streams in.
+        if (!creature || !player->HasAtClient(creature))
+            return;
+        SendGroundLoot(player, creature);
     }
 }
