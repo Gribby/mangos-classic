@@ -40,8 +40,10 @@ namespace
 
     // Whether `unit` may catch `actor`'s swing or skillshot: the intended target always; anyone
     // else only as a fair enemy, as an area spell would take it (no PvP flagging of bystanders),
-    // visible to the player, not a critter, not held by crowd control a hit would break, and
-    // hostile or already fighting, so a stray swing never pulls a neutral or a civilian.
+    // visible to the player, not a critter, not held by crowd control a hit would break, and either
+    // hostile, already fighting, or a neutral creature of the wilds (a wolf, a boar). A neutral
+    // townsperson (a vendor, a quest giver, any NPC with a service, a civilian) is never caught by
+    // a stray swing or shot, so one does not start a fight with a town.
     bool MayCatch(WorldObject* actor, Unit* unit, Unit const* intended)
     {
         if (unit == intended)
@@ -54,7 +56,12 @@ namespace
             return false;
         if (actor->GetTypeId() == TYPEID_PLAYER && !static_cast<Player*>(actor)->HasAtClient(unit))
             return false;
-        return actor->IsEnemy(unit) || unit->IsInCombat();
+        if (actor->IsEnemy(unit) || unit->IsInCombat())
+            return true;
+        if (unit->GetTypeId() != TYPEID_UNIT)
+            return false;
+        Creature const* creature = static_cast<Creature const*>(unit);
+        return creature->GetUInt32Value(UNIT_NPC_FLAGS) == 0 && !creature->IsCivilian();
     }
 
     // Live attackable units around `center` within `radius` yards, in line of sight, no totems.
