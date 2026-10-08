@@ -246,7 +246,7 @@ namespace Arpg
         Spell* spell = new Spell(player, spellInfo, TRIGGERED_NONE);
         spell->m_clientCast = true;
         if (aim == AIM_ENEMY && !melee)
-            spell->SetArpgAim(bearing);
+            spell->SetArpgAim(bearing, pointed ? player->GetDistance2d(x, y, DIST_CALC_NONE) : 0.0f);
         spell->SpellStart(&targets);
     }
 

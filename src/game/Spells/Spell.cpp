@@ -430,6 +430,7 @@ Spell::Spell(WorldObject* caster, SpellEntry const* info, uint32 triggeredFlags,
     m_castPositionX = m_castPositionY = m_castPositionZ = 0;
     m_arpgLine = false;
     m_arpgAim = 0.0f;
+    m_arpgAimDist = 0.0f;
     m_arpgAimSet = false;
     m_TriggerSpells.clear();
     m_preCastSpells.clear();
@@ -3210,14 +3211,25 @@ SpellCastResult Spell::cast(bool skipCheck)
     // enemy in its path now, whoever that is: one that stepped out of the line is missed, one that
     // stepped in front takes it, and a target that died meanwhile no longer stops it. With the
     // line clear the spell still flies: it is spent (cooldown, power, reagents) and its missile
-    // goes out to its range at a bare point, as a Diablo skillshot that misses does.
+    // flies on to a bare point past the aim, as a Diablo skillshot that misses does.
     if (m_arpgLine)
     {
         std::pair<float, float> const range = GetMinMaxRange(false);
         Unit* aimed = m_targets.getUnitTarget();
         if (aimed && !aimed->IsAlive())
             aimed = nullptr;
-        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, range.second, aimed);
+        // The shot flies a little past the point the player aimed at, not to the spell's full
+        // range, so a miss lands where the player looked.
+        float const reach = m_arpgAimDist > 0.0f
+            ? std::min(range.second, std::max(m_arpgAimDist, Arpg::MISS_MIN) + Arpg::MISS_OVERSHOOT)
+            : range.second;
+        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, reach, aimed);
+        // The unit the player aimed at stays locked on while it lives and is in range and sight,
+        // even if it stepped off the line during the cast; something on the line still takes the
+        // shot first.
+        if (!struck && aimed && m_trueCaster->GetDistance(aimed) <= range.second &&
+                m_trueCaster->IsWithinLOSInMap(aimed))
+            struck = aimed;
         if (!struck)
         {
             // The power may have been spent while the cast ran; the full check below is skipped.
@@ -3230,7 +3242,6 @@ SpellCastResult Spell::cast(bool skipCheck)
                     return power;
                 }
             }
-            float const reach = std::max(range.second, 5.0f);
             float x = m_trueCaster->GetPositionX() + std::cos(m_arpgAim) * reach;
             float y = m_trueCaster->GetPositionY() + std::sin(m_arpgAim) * reach;
             float z = m_trueCaster->GetPositionZ();

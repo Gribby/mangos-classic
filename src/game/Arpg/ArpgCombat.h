@@ -84,7 +84,12 @@ namespace Arpg
     Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended);
 
     // Half the width of a skillshot's path, in yards.
-    constexpr float LINE_HALF_WIDTH = 1.0f;
+    constexpr float LINE_HALF_WIDTH = 1.75f;
+
+    // A skillshot that misses flies this far past the aim point, in yards (capped at the spell's
+    // range), and never stops nearer than MISS_MIN.
+    constexpr float MISS_OVERSHOOT = 6.0f;
+    constexpr float MISS_MIN = 5.0f;
 }
 
 #endif
