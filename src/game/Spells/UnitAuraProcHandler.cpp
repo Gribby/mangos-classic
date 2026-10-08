@@ -19,6 +19,7 @@
 #include "Common.h"
 #include "Log/Log.h"
 #include "Globals/ObjectMgr.h"
+#include "Arpg/ArpgCombat.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
 #include "Entities/Unit.h"
@@ -757,7 +758,8 @@ SpellAuraProcResult Unit::HandleHasteAuraProc(ProcExecutionData& data)
         case 16278:
         case 16279:
         case 16280:
-            if (pVictim != GetTarget() || m_extraAttacksExecuting) // can only proc on main target
+            // ARPG: an ARPG player has no target; whatever its swing struck is its main target.
+            if ((pVictim != GetTarget() && !Arpg::Active(this)) || m_extraAttacksExecuting) // can only proc on main target
                 return SPELL_AURA_PROC_FAILED;
             break;
     }

@@ -676,6 +676,7 @@ class WorldSession
         void HandleUseItemOpcode(WorldPacket& recvPacket);
         void HandleOpenItemOpcode(WorldPacket& recvPacket);
         void HandleCastSpellOpcode(WorldPacket& recvPacket);
+        void HandleArpgActionOpcode(WorldPacket& recvPacket);   // ARPG: Arpg/ArpgHandler.cpp
         void HandleCancelCastOpcode(WorldPacket& recvPacket);
         void HandleCancelAuraOpcode(WorldPacket& recvPacket);
         void HandleCancelGrowthAuraOpcode(WorldPacket& recvPacket);

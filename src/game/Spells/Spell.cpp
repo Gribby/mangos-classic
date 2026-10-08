@@ -25,6 +25,7 @@
 #include "Server/Opcodes.h"
 #include "Log/Log.h"
 #include "World/World.h"
+#include "Arpg/ArpgCombat.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -427,6 +428,9 @@ Spell::Spell(WorldObject* caster, SpellEntry const* info, uint32 triggeredFlags,
     m_spellState = SPELL_STATE_CREATED;
 
     m_castPositionX = m_castPositionY = m_castPositionZ = 0;
+    m_arpgLine = false;
+    m_arpgAim = 0.0f;
+    m_arpgAimSet = false;
     m_TriggerSpells.clear();
     m_preCastSpells.clear();
     m_IsTriggeredSpell = triggeredFlags & TRIGGERED_OLD_TRIGGERED;
@@ -3055,6 +3059,20 @@ void Spell::Prepare()
     m_castPositionZ = m_trueCaster->GetPositionZ();
     m_castOrientation = m_trueCaster->GetOrientation();
 
+    // ARPG: an ARPG player's single-target hostile spell is a skillshot, aimed along
+    // the bearing from the caster to its target as the cast begins.
+    if (m_clientCast && !m_IsTriggeredSpell && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
+    {
+        Unit* target = m_targets.getUnitTarget();
+        if (target && target != m_trueCaster)
+        {
+            m_arpgLine = true;
+            // The ARPG cast packet sets the bearing the player aimed; else toward the target.
+            if (!m_arpgAimSet)
+                m_arpgAim = m_trueCaster->GetAngle(target);
+        }
+    }
+
     OnSuccessfulStart();
 
     // Unsummon active Warlock demons when trying to summon a new one - vanilla only location
@@ -3185,6 +3203,24 @@ SpellCastResult Spell::cast(bool skipCheck)
         m_trueCaster->DecreaseCastCounter();
         SetExecutedCurrently(false);
         return SPELL_FAILED_ERROR;
+    }
+
+    // ARPG: the spell flies along the line it was aimed and strikes the first
+    // enemy in its path now, whoever that is: one that stepped out of the line is missed, and one
+    // that stepped in front takes it. With the line clear it fizzles, costing no power.
+    if (m_arpgLine)
+    {
+        std::pair<float, float> const range = GetMinMaxRange(false);
+        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, range.second, m_targets.getUnitTarget());
+        if (!struck)
+        {
+            StopCast(SPELL_FAILED_BAD_TARGETS);
+            // A fizzled instant gives the global cooldown back, as a cancel does.
+            m_caster->ResetGCD(m_spellInfo);
+            return SPELL_FAILED_BAD_TARGETS;
+        }
+        if (struck != m_targets.getUnitTarget())
+            m_targets.setUnitTarget(struck);
     }
 
     if (m_trueCaster->IsCreature() && m_targets.getUnitTarget() && m_targets.getUnitTarget() != m_caster)
@@ -4927,7 +4963,7 @@ SpellCastResult Spell::CheckCast(bool strict)
                     return SPELL_FAILED_TARGET_AURASTATE;
 
             // Caster must be facing the targets back
-            if (m_spellInfo->HasAttribute(SPELL_ATTR_EX2_INITIATE_COMBAT_POST_CAST) && m_spellInfo->HasAttribute(SPELL_ATTR_EX_INITIATES_COMBAT_ENABLES_AUTO_ATTACK) && !m_trueCaster->IsFacingTargetsBack(target))
+            if (m_spellInfo->HasAttribute(SPELL_ATTR_EX2_INITIATE_COMBAT_POST_CAST) && m_spellInfo->HasAttribute(SPELL_ATTR_EX_INITIATES_COMBAT_ENABLES_AUTO_ATTACK) && !Arpg::FacingBack(m_trueCaster, target))
             {
                 // Exclusion for Pounce: Facing Limitation was removed in 2.0.1, but it still uses the same, old Ex-Flags
                 if (!m_spellInfo->IsFitToFamily(SPELLFAMILY_DRUID, uint64(0x0000000000020000)))
@@ -4935,11 +4971,13 @@ SpellCastResult Spell::CheckCast(bool strict)
             }
 
             // duplicate block to avoid previous block complex logic
-            if (m_spellInfo->HasAttribute(SPELL_ATTR_SS_FACING_BACK) && !m_trueCaster->IsFacingTargetsBack(target))
+            // ARPG: behind the target counts, whichever way an ARPG player faces.
+            if (m_spellInfo->HasAttribute(SPELL_ATTR_SS_FACING_BACK) && !Arpg::FacingBack(m_trueCaster, target))
                 return SPELL_FAILED_NOT_BEHIND;
 
             // Caster must be facing the targets front
-            if (((m_spellInfo->Attributes == (SPELL_ATTR_IS_ABILITY | SPELL_ATTR_NOT_SHAPESHIFT | SPELL_ATTR_DO_NOT_SHEATH | SPELL_ATTR_CANCELS_AUTO_ATTACK_COMBAT)) && !m_trueCaster->IsFacingTargetsFront(target)))
+            // ARPG: in front of the target counts, whichever way an ARPG player faces.
+            if (((m_spellInfo->Attributes == (SPELL_ATTR_IS_ABILITY | SPELL_ATTR_NOT_SHAPESHIFT | SPELL_ATTR_DO_NOT_SHEATH | SPELL_ATTR_CANCELS_AUTO_ATTACK_COMBAT)) && !Arpg::FacingFront(m_trueCaster, target)))
                 return SPELL_FAILED_NOT_INFRONT;
 
             // check if target is in combat
@@ -5240,7 +5278,8 @@ SpellCastResult Spell::CheckCast(bool strict)
                     // Prevents usage when cant neither attack or assist and not in front for shock attack
                     if (m_caster->CanAttack(target))
                     {
-                        if (!m_caster->HasInArc(target))
+                        // ARPG: an ARPG player casts from any facing.
+                        if (!Arpg::Active(m_caster) && !m_caster->HasInArc(target))
                             return SPELL_FAILED_UNIT_NOT_INFRONT;
                     }
                     else if (!m_caster->CanAssistSpell(target, m_spellInfo))
@@ -6243,7 +6282,8 @@ SpellCastResult Spell::CheckRange(bool strict)
            return SPELL_FAILED_OUT_OF_RANGE;
         if (minRange && dist < minRange * minRange)
             return SPELL_FAILED_TOO_CLOSE;
-        if (m_trueCaster->IsPlayer() &&
+        // ARPG: an ARPG player casts from any facing.
+        if (m_trueCaster->IsPlayer() && !Arpg::Active(m_trueCaster) &&
                 (sSpellMgr.GetSpellFacingFlag(m_spellInfo->Id) & SPELL_FACING_FLAG_INFRONT) && !m_trueCaster->HasInArc(target))
             return SPELL_FAILED_UNIT_NOT_INFRONT;
     }

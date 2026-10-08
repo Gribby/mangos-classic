@@ -24,6 +24,7 @@
 #include "World/World.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
+#include "Arpg/ArpgCombat.h"
 #include "Entities/Player.h"
 #include "Entities/Unit.h"
 #include "Spells/Spell.h"
@@ -5023,7 +5024,9 @@ void Spell::EffectCharge(SpellEffectIndex /*eff_idx*/)
 
     // Players: charge against hostiles initiates auto-attack
     // TODO: This is executed after spell effects. Verify if this should be executed before spell effects
-    if (m_caster->IsClientControlled() && m_caster->CanAttackNow(unitTarget) && m_caster->CanAttackSpell(unitTarget, m_spellInfo))
+    // ARPG: an ARPG player's melee is its held swing, never auto-attack.
+    if (m_caster->IsClientControlled() && m_caster->CanAttackNow(unitTarget) && m_caster->CanAttackSpell(unitTarget, m_spellInfo) &&
+            !Arpg::Active(m_caster))
         m_caster->Attack(unitTarget, !m_spellInfo->HasAttribute(SPELL_ATTR_USES_RANGED_SLOT));
 }
 

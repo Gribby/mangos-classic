@@ -839,6 +839,9 @@ void World::LoadConfigSettings(bool reload)
 
     setConfig(CONFIG_BOOL_REGEN_ZONE_AREA_ON_STARTUP, "Spawns.ZoneArea", false);
 
+    // ARPG combat for players on the benilla ARPG client (Arpg/ArpgCombat.h)
+    setConfig(CONFIG_BOOL_ARPG_ENABLE, "Arpg.Enable", false);
+
     sLog.outString();
 }
 

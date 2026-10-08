@@ -2191,6 +2191,19 @@ class Player : public Unit
 
         void SendLootError(ObjectGuid guid, LootError error) const;
 
+        // ARPG: this player is on the benilla ARPG client, and holds its swing (Arpg/ArpgCombat.h)
+        bool IsArpgClient() const { return m_arpgClient; }
+        void SetArpgClient(bool on) { m_arpgClient = on; }
+        bool IsArpgSwinging() const { return m_arpgSwinging; }
+        void SetArpgSwinging(bool on) { m_arpgSwinging = on; }
+        ObjectGuid GetArpgSwingTarget() const { return m_arpgSwingTarget; }
+        void SetArpgSwingTarget(ObjectGuid guid) { m_arpgSwingTarget = guid; }
+    private:
+        bool m_arpgClient = false;
+        bool m_arpgSwinging = false;
+        ObjectGuid m_arpgSwingTarget;                       // the unit the held swing was pressed on
+    public:
+
         void SetDeathPrevention(bool enable);
         bool IsPreventingDeath() const override;
 

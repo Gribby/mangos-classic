@@ -51,6 +51,7 @@
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
+#include "Arpg/ArpgCombat.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -649,6 +650,10 @@ enum SwingErrors
 
 bool Unit::UpdateMeleeAttackingState()
 {
+    // ARPG: an ARPG player's melee is its held swing (Arpg::UpdateSwing), never auto-attack.
+    if (Arpg::Active(this))
+        return false;
+
     Unit* victim = GetVictim();
     if (!victim || IsNonMeleeSpellCasted(false))
         return false;
@@ -3062,7 +3067,7 @@ bool Unit::CanDodgeInCombat(const Unit* attacker) const
         return false;
     // Players can't dodge attacks from behind
     if (GetTypeId() == TYPEID_PLAYER)
-        return attacker->IsFacingTargetsFront(this);
+        return Arpg::FacingFront(attacker, this);
     return true;
 }
 
@@ -3084,7 +3089,7 @@ bool Unit::CanParryInCombat() const
 
 bool Unit::CanParryInCombat(const Unit* attacker) const
 {
-    return (attacker && CanParryInCombat() && attacker->IsFacingTargetsFront(this));
+    return (attacker && CanParryInCombat() && Arpg::FacingFront(attacker, this));
 }
 
 bool Unit::CanBlockInCombat(SpellSchoolMask weaponSchoolMask) const
@@ -3113,7 +3118,7 @@ bool Unit::CanBlockInCombat(SpellSchoolMask weaponSchoolMask) const
 
 bool Unit::CanBlockInCombat(const Unit* attacker, SpellSchoolMask weaponSchoolMask) const
 {
-    return (attacker && CanBlockInCombat(weaponSchoolMask) && attacker->IsFacingTargetsFront(this));
+    return (attacker && CanBlockInCombat(weaponSchoolMask) && Arpg::FacingFront(attacker, this));
 }
 
 bool Unit::CanCrushInCombat() const
@@ -8428,7 +8433,14 @@ void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
         }
     }
 
+    // ARPG: an ARPG player always faces the cursor, so it backpedals as fast as it runs.
+    if (mtype == MOVE_RUN_BACK && Arpg::Active(this))
+        speed = GetSpeedRate(MOVE_RUN) * baseMoveSpeed[MOVE_RUN] / baseMoveSpeed[MOVE_RUN_BACK];
+
     SetSpeedRate(mtype, speed * ratio, forced);
+
+    if (mtype == MOVE_RUN && Arpg::Active(this))
+        UpdateSpeed(MOVE_RUN_BACK, forced, ratio);
 }
 
 float Unit::GetSpeedInMotion() const

@@ -1791,3 +1791,20 @@ Metric.Password = ""
 
 Dummy.Debug1 = 0
 Dummy.Debug2 = 0
+
+###################################################################################################
+# ARPG COMBAT (for the benilla ARPG client)
+#
+#    Arpg.Enable
+#        Accept the benilla ARPG client. A player on it (the client says so at login) plays
+#        targetless ARPG combat: held swings strike whatever stands in the arc toward the cursor
+#        (or whiff), ranged hostile spells are skillshots along the aimed line, melee abilities
+#        take the nearest enemy in the arc, helpful spells the friend nearest the cursor, facing
+#        never fails a cast, and backpedal is as fast as running. Every other player, playerbots
+#        included, keeps stock combat.
+#        Default: 0  (disable)
+#                 1  (enable)
+#
+###################################################################################################
+
+Arpg.Enable = 0

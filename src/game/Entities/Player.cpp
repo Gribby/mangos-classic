@@ -17,6 +17,7 @@
  */
 
 #include "Entities/Player.h"
+#include "Arpg/ArpgCombat.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -1451,6 +1452,9 @@ void Player::Update(const uint32 diff)
         }
     }
 
+    // ARPG: the ARPG client's held swing (Arpg/ArpgCombat.h)
+    Arpg::UpdateSwing(this);
+
     if (hasUnitState(UNIT_STAT_MELEE_ATTACKING))
     {
         UpdateMeleeAttackingState();
@@ -1964,6 +1968,10 @@ bool Player::TeleportTo(uint32 mapid, float x, float y, float z, float orientati
     if (duel && GetMapId() != mapid)
         if (GetMap()->GetGameObject(GetGuidValue(PLAYER_DUEL_ARBITER)))
             DuelComplete(DUEL_FLED);
+
+    // ARPG: a swing release sent during the loading screen never arrives, so a teleport ends the
+    // held swing; the client re-sends what it holds on arrival.
+    SetArpgSwinging(false);
 
     // reset movement flags at teleport, because player will continue move with these flags after teleport
     m_movementInfo.SetMovementFlags(MOVEFLAG_NONE);

@@ -572,6 +572,8 @@ class Spell
         bool m_channelOnly;
         // Not a trigger flag but same type of information
         bool m_clientCast;
+        // ARPG: the bearing an ARPG cast was aimed along, for its skillshot line (Arpg::CastAt)
+        void SetArpgAim(float aim) { m_arpgAim = aim; m_arpgAimSet = true; }
 
         // scriptable conditionals
         bool m_ignoreRoot; //
@@ -940,6 +942,11 @@ class Spell
         float m_castPositionY;
         float m_castPositionZ;
         float m_castOrientation;
+
+        // ARPG: this cast is a skillshot, and the bearing it was aimed along (Arpg/ArpgCombat.h)
+        bool m_arpgLine;
+        float m_arpgAim;
+        bool m_arpgAimSet;
 
         uint32 m_affectedTargetCount;
         float m_jumpRadius;

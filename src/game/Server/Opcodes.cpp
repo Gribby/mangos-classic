@@ -853,4 +853,5 @@ OpcodeHandler opcodeTable[NUM_MSG_TYPES] =
     /*0x339*/ { "SMSG_CHARACTER_PROFILE_REALM_CONNECTED",  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x33A*/ { "SMSG_UNK",                         STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x33B*/ { "SMSG_DEFENSE_MESSAGE",             STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x33C*/ { "CMSG_ARPG_ACTION",                 STATUS_LOGGEDIN,  PROCESS_THREADSAFE,   &WorldSession::HandleArpgActionOpcode},
 };

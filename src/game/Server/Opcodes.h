@@ -863,10 +863,12 @@ enum Opcodes
     SMSG_CHARACTER_PROFILE_REALM_CONNECTED          = 0x339,
     SMSG_UNK                                        = 0x33A,
     SMSG_DEFENSE_MESSAGE                            = 0x33B,
+    // ARPG: the benilla ARPG client's action packet, past the 1.12 range (Arpg/ArpgHandler.cpp)
+    CMSG_ARPG_ACTION                                = 0x33C,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x33C
+#define NUM_MSG_TYPES 0x33D
 
 /// Player state
 enum SessionStatus
