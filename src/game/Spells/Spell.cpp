@@ -3060,11 +3060,12 @@ void Spell::Prepare()
     m_castOrientation = m_trueCaster->GetOrientation();
 
     // ARPG: an ARPG player's single-target hostile spell is a skillshot, aimed along
-    // the bearing from the caster to its target as the cast begins.
+    // the bearing from the caster to its target as the cast begins, or along the bearing the ARPG
+    // cast packet aimed with nobody on the line yet (fired into the empty air).
     if (m_clientCast && !m_IsTriggeredSpell && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
     {
         Unit* target = m_targets.getUnitTarget();
-        if (target && target != m_trueCaster)
+        if ((target && target != m_trueCaster) || m_arpgAimSet)
         {
             m_arpgLine = true;
             // The ARPG cast packet sets the bearing the player aimed; else toward the target.
@@ -3196,8 +3197,8 @@ SpellCastResult Spell::cast(bool skipCheck)
     // update pointers base at GUIDs to prevent access to already nonexistent object
     UpdatePointers();
 
-    // cancel at lost main target unit
-    if (!m_targets.getUnitTarget() && m_targets.getUnitTargetGuid() && m_targets.getUnitTargetGuid() != m_trueCaster->GetObjectGuid())
+    // cancel at lost main target unit; an ARPG skillshot flies on along its line instead
+    if (!m_arpgLine && !m_targets.getUnitTarget() && m_targets.getUnitTargetGuid() && m_targets.getUnitTargetGuid() != m_trueCaster->GetObjectGuid())
     {
         cancel();
         m_trueCaster->DecreaseCastCounter();
@@ -3206,18 +3207,55 @@ SpellCastResult Spell::cast(bool skipCheck)
     }
 
     // ARPG: the spell flies along the line it was aimed and strikes the first
-    // enemy in its path now, whoever that is: one that stepped out of the line is missed, and one
-    // that stepped in front takes it. With the line clear it fizzles, costing no power.
+    // enemy in its path now, whoever that is: one that stepped out of the line is missed, one that
+    // stepped in front takes it, and a target that died meanwhile no longer stops it. With the
+    // line clear the spell still flies: it is spent (cooldown, power, reagents) and its missile
+    // goes out to its range at a bare point, as a Diablo skillshot that misses does.
     if (m_arpgLine)
     {
         std::pair<float, float> const range = GetMinMaxRange(false);
-        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, range.second, m_targets.getUnitTarget());
+        Unit* aimed = m_targets.getUnitTarget();
+        if (aimed && !aimed->IsAlive())
+            aimed = nullptr;
+        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, range.second, aimed);
         if (!struck)
         {
-            StopCast(SPELL_FAILED_BAD_TARGETS);
-            // A fizzled instant gives the global cooldown back, as a cancel does.
-            m_caster->ResetGCD(m_spellInfo);
-            return SPELL_FAILED_BAD_TARGETS;
+            // The power may have been spent while the cast ran; the full check below is skipped.
+            if (!skipCheck && !m_ignoreCosts)
+            {
+                SpellCastResult const power = CheckPower(false);
+                if (power != SPELL_CAST_OK)
+                {
+                    StopCast(power);
+                    return power;
+                }
+            }
+            float const reach = std::max(range.second, 5.0f);
+            float x = m_trueCaster->GetPositionX() + std::cos(m_arpgAim) * reach;
+            float y = m_trueCaster->GetPositionY() + std::sin(m_arpgAim) * reach;
+            float z = m_trueCaster->GetPositionZ();
+            m_trueCaster->UpdateAllowedPositionZ(x, y, z);
+            m_targets = SpellCastTargets();
+            m_targets.setDestination(x, y, z);
+
+            // The stock success path's bookkeeping, without the effects, targets and procs: no
+            // spell script runs (OnCast), as scripts may expect the unit the spell never found.
+            spellModController.SetSuccess();
+            SendSpellCooldown();
+            if (m_notifyAI && m_caster && m_caster->AI())
+                m_caster->AI()->OnSpellCooldownAdded(m_spellInfo);
+            TakePower();
+            TakeReagents();
+            TakeAmmo();
+            SendCastResult(SPELL_CAST_OK);
+            SendSpellGo();
+            // A missed shot still breaks what any cast breaks (stealth, Feign Death).
+            if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION))
+                m_caster->RemoveAurasOnCast(AURA_INTERRUPT_FLAG_ACTION_LATE, m_spellInfo);
+            finish(true);
+            m_trueCaster->DecreaseCastCounter();
+            SetExecutedCurrently(false);
+            return SPELL_CAST_OK;
         }
         if (struck != m_targets.getUnitTarget())
             m_targets.setUnitTarget(struck);
@@ -3564,7 +3602,8 @@ void Spell::update(uint32 difftime)
     // update pointers based at it's GUIDs
     UpdatePointers();
 
-    if (m_targets.getUnitTargetGuid() && !m_targets.getUnitTarget())
+    // an ARPG skillshot whose target is gone is not cancelled: it flies on along its line
+    if (!m_arpgLine && m_targets.getUnitTargetGuid() && !m_targets.getUnitTarget())
     {
         cancel();
         return;
@@ -3589,7 +3628,8 @@ void Spell::update(uint32 difftime)
         {
             if (m_timer)
             {
-                if (m_targets.getUnitTarget() && !m_IsTriggeredSpell && !IsAllowingDeadTarget(m_spellInfo) && !m_targets.getUnitTarget()->IsAlive())
+                // nor is one whose target died while it was cast: it is released along its line
+                if (!m_arpgLine && m_targets.getUnitTarget() && !m_IsTriggeredSpell && !IsAllowingDeadTarget(m_spellInfo) && !m_targets.getUnitTarget()->IsAlive())
                 {
                     cancel();
                     return;
@@ -5081,6 +5121,11 @@ SpellCastResult Spell::CheckCast(bool strict)
         }
     }
 
+    // ARPG: a skillshot fired into the empty air has no unit to check; Spell::cast
+    // picks whoever is on its line when it is released, or sends it out to its range.
+    bool const arpgUnaimed = m_clientCast && m_arpgAimSet && !m_IsTriggeredSpell && !m_targets.getUnitTarget() &&
+        Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo);
+
     // check targets
     for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
     {
@@ -5116,6 +5161,8 @@ SpellCastResult Spell::CheckCast(bool strict)
                     originalCaster = m_trueCaster;
                 if (data.type == TARGET_TYPE_UNIT && data.filter != TARGET_SCRIPT && (data.enumerator == TARGET_ENUMERATOR_SINGLE || data.enumerator == TARGET_ENUMERATOR_CHAIN))
                 {
+                    if (arpgUnaimed)
+                        break;
                     if (!target)
                         return SPELL_FAILED_BAD_TARGETS;
                     switch (data.filter)

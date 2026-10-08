@@ -213,8 +213,9 @@ namespace Arpg
             else
                 target = SelectAllyNear(player, spellInfo, x, y, maxRange);
             // A buff takes the rank the friend's level allows, as the stock cast does.
-            if (SpellEntry const* ranked = sSpellMgr.SelectAuraRankForLevel(spellInfo, target->GetLevel()))
-                spellInfo = ranked;
+            if (target)
+                if (SpellEntry const* ranked = sSpellMgr.SelectAuraRankForLevel(spellInfo, target->GetLevel()))
+                    spellInfo = ranked;
         }
         else if (melee)
         {
@@ -228,14 +229,19 @@ namespace Arpg
         else
             target = SelectLineTarget(player, bearing, minRange, maxRange, intended);
 
-        if (!target)
+        // A skillshot with nobody on its line still fires: it flies out to its range and is spent
+        // (Spell::cast's ARPG miss). Anything else needs a unit.
+        // An auto-repeat shot (Shoot, Auto Shot) needs a unit to repeat at.
+        bool const line = aim == AIM_ENEMY && !melee && IsLineSpell(spellInfo) && !IsAutoRepeatRangedSpell(spellInfo);
+        if (!target && !line)
         {
             Spell::SendCastResult(player, spellInfo, SPELL_FAILED_BAD_TARGETS);
             return;
         }
 
         SpellCastTargets targets;
-        targets.setUnitTarget(target);
+        if (target)
+            targets.setUnitTarget(target);
 
         Spell* spell = new Spell(player, spellInfo, TRIGGERED_NONE);
         spell->m_clientCast = true;
