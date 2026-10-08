@@ -364,20 +364,29 @@ namespace Arpg
         Unit* first = nullptr;
         float firstAlong = std::numeric_limits<float>::max();
         // Gather a little past the range: a large target's edge can reach into the line's end.
-        for (Unit* unit : EnemiesAround(caster, maxRange + 10.0f))
+        UnitList const around = EnemiesAround(caster, maxRange + 10.0f);
+        // ARPG debug (temporary): every candidate the line weighs, and why it is passed over.
+        sLog.outString("ARPG line: aim %.2f range %.1f-%.1f, %u candidate(s)", aim, minRange, maxRange,
+                       uint32(around.size()));
+        for (Unit* unit : around)
         {
-            if (!MayCatch(caster, unit, intended))
-                continue;
             float const reach = unit->GetCombatReach();
             float const offX = unit->GetPositionX() - originX;
             float const offY = unit->GetPositionY() - originY;
             // Distance along the line, and off to its side.
             float const along = offX * dirX + offY * dirY;
             float const across = std::fabs(offX * dirY - offY * dirX);
+            char const* skip = nullptr;
+            if (!MayCatch(caster, unit, intended))
+                skip = "may not catch";
             // Past the far end, or inside the dead zone of a spell with a minimum range.
-            if (along <= 0.0f || along - reach > maxRange || along + reach < minRange)
-                continue;
-            if (across > LINE_HALF_WIDTH + reach)
+            else if (along <= 0.0f || along - reach > maxRange || along + reach < minRange)
+                skip = "out of the line's length";
+            else if (across > LINE_HALF_WIDTH + reach)
+                skip = "off to the side";
+            sLog.outString("ARPG line:   %s along %.1f across %.1f reach %.1f: %s", unit->GetName(), along,
+                           across, reach, skip ? skip : "on the line");
+            if (skip)
                 continue;
             if (along < firstAlong)
             {
@@ -385,6 +394,7 @@ namespace Arpg
                 firstAlong = along;
             }
         }
+        sLog.outString("ARPG line: %s", first ? first->GetName() : "nobody, a miss");
         return first;
     }
 }
