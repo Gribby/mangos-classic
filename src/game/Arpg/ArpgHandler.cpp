@@ -2,6 +2,10 @@
  * CMSG_ARPG_ACTION, the benilla ARPG client's one packet: the hello, the held swing and the cast
  * at an aim point. See ArpgCombat.h.
  *
+ * The client says hello when it enters the world, which can be before the server has finished
+ * loading the character; the session then drops it ("the player has not logged in yet"). A swing
+ * or a cast, which only the ARPG client sends, therefore counts as the hello too.
+ *
  *   uint8 kind, then by kind:
  *     ACTION_HELLO        uint8 version
  *     ACTION_SWING_START  uint64 intended (the unit under the cursor, 0 for none)
@@ -53,8 +57,8 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
         {
             ObjectGuid intended;
             recvPacket >> intended;
-            if (!player->IsArpgClient())
-                return;
+            // Only the ARPG client sends this, so it stands in for a hello the server missed.
+            Arpg::OnHello(player);
             player->SetArpgSwingTarget(intended);
             player->SetArpgSwinging(true);
             // A swing ends a running wand or Auto Shot, as the stock attack does.
@@ -76,9 +80,11 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
             if (!spellInfo)
                 return;
+            // Only the ARPG client sends this, so it stands in for a hello the server missed.
+            Arpg::OnHello(player);
             // Every refusal answers as a cast failure, so the client's pending cast and GCD clear.
             // Only the player's own body casts this way, not a possessed unit.
-            if (!player->IsArpgClient() || player->GetMover() != player ||
+            if (player->GetMover() != player ||
                     !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
             {
                 Spell::SendCastResult(player, spellInfo, SPELL_FAILED_ERROR);
