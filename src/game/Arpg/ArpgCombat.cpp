@@ -257,6 +257,31 @@ namespace Arpg
         spell->SpellStart(&targets);
     }
 
+    void UpdateAim(Player* player, float x, float y, float /*z*/, ObjectGuid intendedGuid)
+    {
+        if (!Active(player))
+            return;
+        Spell* spell = player->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell || !spell->m_clientCast || spell->getState() != SPELL_STATE_CASTING ||
+                !IsLineSpell(spell->m_spellInfo))
+            return;
+        float const dist = FlatDistance(player, x, y);
+        if (dist < AIM_MIN)
+            return;
+        spell->SetArpgAim(player->GetAngle(x, y), dist);
+
+        // The unit under the cursor now locks the shot on, as at the press; with none, nothing
+        // does, and the shot takes the first enemy on the new line.
+        Unit* intended = intendedGuid ? player->GetMap()->GetUnit(intendedGuid) : nullptr;
+        if (intended && (!intended->IsAlive() ||
+                FlatDistance(intended, x, y) > ALLY_PICK + intended->GetCombatReach()))
+            intended = nullptr;
+        if (intended)
+            spell->m_targets.setUnitTarget(intended);
+        else if (spell->m_targets.getUnitTargetGuid())
+            spell->m_targets = SpellCastTargets();
+    }
+
     bool FacingFront(WorldObject const* actor, WorldObject const* target)
     {
         if (Active(actor))

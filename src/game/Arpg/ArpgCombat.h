@@ -40,6 +40,7 @@ namespace Arpg
         ACTION_SWING_START = 1,                             // uint64 intended
         ACTION_SWING_STOP  = 2,
         ACTION_CAST        = 3,                             // uint32 spell, uint8 CastAim, float x, y, z, uint64 intended
+        ACTION_AIM         = 4,                             // float x, y, z, uint64 intended
     };
 
     // What the client's cast aims at, by the spell's own target word.
@@ -64,6 +65,11 @@ namespace Arpg
 
     // Start a cast of `spellInfo` aimed at a world point, `intendedGuid` the unit under the cursor.
     void CastAt(Player* player, SpellEntry const* spellInfo, CastAim aim, float x, float y, float z, ObjectGuid intendedGuid);
+
+    // Re-aim the player's running skillshot at a world point, `intendedGuid` the unit under the
+    // cursor now: the client streams the cursor while a cast runs, so the shot goes where the
+    // player points when it is released. A cursor underfoot keeps the cast's aim.
+    void UpdateAim(Player* player, float x, float y, float z, ObjectGuid intendedGuid);
 
     // WorldObject::IsFacingTargetsFront / IsFacingTargetsBack, where for an ARPG actor only the
     // target's facing counts (the target faces it, or turns its back).

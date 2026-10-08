@@ -12,6 +12,7 @@
  *     ACTION_SWING_STOP   -
  *     ACTION_CAST         uint32 spell id, uint8 aim (CastAim), float x, float y, float z,
  *                         uint64 intended
+ *     ACTION_AIM          float x, float y, float z, uint64 intended (re-aims the running cast)
  */
 
 #include "Arpg/ArpgCombat.h"
@@ -98,6 +99,16 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             }
 
             Arpg::CastAt(player, spellInfo, aim == Arpg::AIM_ALLY ? Arpg::AIM_ALLY : Arpg::AIM_ENEMY, x, y, z, intended);
+            break;
+        }
+        case Arpg::ACTION_AIM:
+        {
+            float x, y, z;
+            ObjectGuid intended;
+            recvPacket >> x >> y >> z >> intended;
+            Arpg::OnHello(player);
+            if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
+                Arpg::UpdateAim(player, x, y, z, intended);
             break;
         }
         default:
