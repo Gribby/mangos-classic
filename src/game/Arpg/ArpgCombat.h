@@ -54,6 +54,7 @@ namespace Arpg
         ACTION_SKILL_SPEND  = 13,                           // uint16 node
         ACTION_SKILL_REFUND = 14,                           // uint16 node
         ACTION_SKILL_RESPEC = 15,                           // uint8 skill
+        ACTION_DEV_PACK     = 16,                           // uint8 size (0: by level); Arpg.DevTools
     };
 
     // What the client's cast aims at, by the spell's own target word.

@@ -55,6 +55,7 @@
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgPacks.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1436,6 +1437,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     if (!isPet && !victim->GetSettings().HasFlag(CreatureStaticFlags::DESPAWN_INSTANTLY))
     {
         victim->PrepareBodyLootState(killer);
+        // ARPG: a pack follower drops less (Arpg/ArpgPacks.h).
+        Arpg::ThinPackLoot(victim);
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
         Arpg::OnCorpseLoot(victim);
     }
@@ -8034,6 +8037,9 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
 
         if (creature->AI())
             creature->AI()->EnterCombat(enemy);
+
+        // ARPG: the rest of its pack joins in (Arpg/ArpgPacks.h).
+        Arpg::OnPackAggro(creature, enemy);
 
         // can be overriden by spellcast on Aggro hook, hence must be done after EnterCombat hook
         if (!creature->GetCreatedBySpellId() && creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE) && !creature->IsRooted() && !creature->IsInPanic() && !creature->IsNonMeleeSpellCasted(false) && enemy && enemy->IsPlayerControlled())

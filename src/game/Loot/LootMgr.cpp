@@ -3364,3 +3364,22 @@ bool LootMgr::ExistsRefLootTemplate(uint32 refLootId) const
 {
     return LootTemplates_Reference.HaveLootFor(refLootId);
 }
+
+void Loot::ThinArpgLoot(float share)
+{
+    share = std::max(0.0f, std::min(1.0f, share));
+    m_gold = uint32(m_gold * share);
+    for (auto it = m_lootItems.begin(); it != m_lootItems.end();)
+    {
+        LootItem* item = *it;
+        bool const quest = item->conditionId || (item->itemProto &&
+                           (item->itemProto->Class == ITEM_CLASS_QUEST || item->itemProto->StartQuest));
+        if (quest || roll_chance_f(share * 100.0f))
+        {
+            ++it;
+            continue;
+        }
+        delete item;
+        it = m_lootItems.erase(it);
+    }
+}

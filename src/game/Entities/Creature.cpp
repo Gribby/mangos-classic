@@ -21,6 +21,7 @@
 #include "Server/WorldPacket.h"
 #include "World/World.h"
 #include "Globals/ObjectMgr.h"
+#include "Arpg/ArpgPacks.h"
 #include "Globals/ObjectAccessor.h"
 #include "Entities/ObjectGuid.h"
 #include "Server/SQLStorages.h"
@@ -172,6 +173,9 @@ void Creature::CleanupsBeforeDelete()
 
 void Creature::AddToWorld()
 {
+    // ARPG: an open-world mob may lead a pack (Arpg/ArpgPacks.h), once its grid has loaded.
+    Arpg::OnCreatureAdded(this);
+
     ///- Register the creature for guid lookup
     if (!IsInWorld())
     {

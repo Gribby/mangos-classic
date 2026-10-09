@@ -22,6 +22,7 @@
 #include "World/World.h"
 // TODO: Required for classic honor system type HonorStandingList, needs redesign:
 #include "Globals/ObjectMgr.h"
+#include "Arpg/ArpgPacks.h"
 
 struct HonorScores
 {
@@ -381,6 +382,9 @@ namespace MaNGOS
             }
 
             xp_gain *= target->GetCreatureInfo()->ExperienceMultiplier;
+
+            // ARPG: a pack follower gives a share of a kill's XP (Arpg/ArpgPacks.h).
+            xp_gain *= Arpg::PackXpMod(target);
 
             xp_gain = target->GetModifierXpBasedOnDamageReceived(xp_gain);
 

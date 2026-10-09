@@ -1817,8 +1817,31 @@ Dummy.Debug2 = 0
 #        The creature entry that test loot lies on (killed as it spawns). Any creature will do.
 #        Default: 721 (Rabbit)
 #
+#    Arpg.Packs
+#        With Arpg.Enable on, open-world mobs spawn in packs: the spawned mob leads followers of
+#        its own kind, more of them at higher levels (1-2 in all to level 5, 3-5 from level 20).
+#        Dev tools add a client button that forms a pack around the nearest mob.
+#        Default: 1  (enable)
+#                 0  (disable)
+#
+#    Arpg.Packs.FollowerPower
+#        A follower's health and damage, as a share of its leader's.
+#        Default: 0.55
+#
+#    Arpg.Packs.FollowerXp
+#        A follower's XP, as a share of an ordinary kill's.
+#        Default: 0.3
+#
+#    Arpg.Packs.FollowerLoot
+#        A follower's gold, and its chance to keep each item that isn't for a quest.
+#        Default: 0.5
+#
 ###################################################################################################
 
 Arpg.Enable = 0
 Arpg.DevTools = 0
 Arpg.DevTools.Creature = 721
+Arpg.Packs = 1
+Arpg.Packs.FollowerPower = 0.55
+Arpg.Packs.FollowerXp = 0.3
+Arpg.Packs.FollowerLoot = 0.5

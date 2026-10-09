@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgTree.h"
@@ -423,6 +424,9 @@ namespace Arpg
 
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo)
     {
+        // A pack follower hits for its share (ArpgPacks.h).
+        if (attacker && attacker->GetTypeId() == TYPEID_UNIT)
+            return PackDamageMod(attacker);
         std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
         if (!totals)
             return 1.0f;
@@ -577,6 +581,7 @@ namespace Arpg
 
     void OnDamageTaken(Unit* victim, Unit* attacker, uint32 damage)
     {
+        OnPackDamage(attacker, victim, damage);
         if (!damage || !victim || attacker == victim || !HasKeystone(victim, KEY_MARTYR))
             return;
         R(victim).martyrPending += damage * MARTYR_SHARE_PCT / 100;
@@ -592,6 +597,7 @@ namespace Arpg
     {
         if (!victim || victim->GetTypeId() != TYPEID_UNIT)
             return;
+        OnPackMemberDied(victim);
         CreditBossKill(killer, victim);
         if (!Active(killer) || !killer->IsAlive())
             return;

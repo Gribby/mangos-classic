@@ -25,6 +25,8 @@
  *     ACTION_SKILL_SPEND  uint16 node: take a rank in a skill tree
  *     ACTION_SKILL_REFUND uint16 node: give a rank back
  *     ACTION_SKILL_RESPEC uint8 skill: give back every point in a skill
+ *     ACTION_DEV_PACK     uint8 size (0: by level): with Arpg.DevTools on, the nearest mob forms a
+ *                         pack (Arpg/ArpgPacks.h)
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -35,6 +37,7 @@
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgSkills.h"
+#include "Arpg/ArpgPacks.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -256,6 +259,19 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                         else
                             Arpg::RefundSkillNode(arpg, node);
                     }
+            });
+            break;
+        }
+        case Arpg::ACTION_DEV_PACK:
+        {
+            uint8 size;
+            recvPacket >> size;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([size](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::DevFormPack(arpg, size);
             });
             break;
         }

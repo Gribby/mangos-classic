@@ -61,6 +61,14 @@ Judgement script (Righteous Mind), `Arpg::SelectMeleeVictim` (Long Arm), and the
 damage and landing hooks. An ARPG character also gets its class trainers' spells free at their
 level (`TeachClassSpells`, spells without ranks' first pass).
 
+## Packs
+
+`Arpg/ArpgPacks.{h,cpp}`: open-world mobs lead packs of followers sized by level (Arpg.Packs,
+on by default with Arpg.Enable). Hooks: `Creature::AddToWorld` (form a pack), the combat start
+in `Unit` (the pack joins in), `MaNGOS::XP::Gain` (follower XP), the corpse loot (`Loot::ThinArpgLoot`),
+`Arpg::DamageDoneMod` (follower damage), and kind 16, the dev tools' test pack. Design: the
+client's `docs/ARPG-PROGRESSION.md`.
+
 ## Wire
 
 `CMSG_ARPG_ACTION` = 0x33C (`NUM_MSG_TYPES` 0x33D), protocol version 2. Body: `u8 kind`, then
