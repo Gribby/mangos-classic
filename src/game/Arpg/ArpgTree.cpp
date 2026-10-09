@@ -219,7 +219,7 @@ namespace
         };
         auto link = [&web](uint16 a, uint16 b) { web.links.emplace_back(a, b); };
 
-        uint16 const start = add(WEB_START, 3, 0.0f, 0.0f, { "Paladin", "Your starting point. Every path leads out from here.", {} });
+        uint16 const start = add(WEB_START, 3, 0.0f, 0.0f, { "Paladin", "Your starting point. Every path leads out from here.", {}, 20154 });
         uint16 entry[3] = {};
         uint16 tips[3][3] = {};
         for (uint8 ri = 0; ri < 3; ++ri)

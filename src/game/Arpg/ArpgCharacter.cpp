@@ -70,7 +70,8 @@ namespace
     constexpr float RICOCHET_RANGE = 10.0f;
     constexpr float BLESSED_RANGE = 15.0f;
     constexpr size_t BLESSED_COUNT = 3;
-    constexpr float WALK_FOLLOW = 2.5f;
+    constexpr float WALK_FOLLOW = 2.0f;
+    constexpr uint32 WALK_MS = 250;
 
     // What has been applied to a player, and the keystones' running state.
     struct Runtime
@@ -85,6 +86,7 @@ namespace
         uint32 momentum = 0;         // Momentum: hits in a row
         uint32 lastHit = 0;
         uint32 paceUntil = 0;        // Crusader's Pace: the time its speed ends
+        uint32 lastWalk = 0;         // Walking Consecration: the last time it followed
         SpellModifier* cooldownMod = nullptr;
         int32 cooldownPct = 0;
         float speed = 1.0f;
@@ -300,21 +302,13 @@ namespace
         }
     }
 
-    // Walking Consecration: the ground moves under the player, keeping what is left of its time.
+    // Walking Consecration: the ground itself moves under the player, so the auras it holds on
+    // the enemies inside keep ticking (a fresh cast would restart them before their first tick).
     void WalkConsecration(Player* player, DynamicObject* dyn)
     {
         if (!dyn || player->GetDistance(dyn, false, DIST_CALC_NONE) <= WALK_FOLLOW)
             return;
-        uint32 const left = dyn->GetDuration();
-        uint32 const spellId = dyn->GetSpellId();
-        SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
-        if (!spellInfo || left < 1000)
-            return;
-        player->RemoveDynObject(spellId);
-        player->CastSpell(player, spellInfo, TRIGGERED_OLD_TRIGGERED | TRIGGERED_IGNORE_COSTS | TRIGGERED_IGNORE_COOLDOWNS);
-        if (DynamicObject* fresh = player->GetDynObject(spellId))
-            if (fresh->GetDuration() > left)
-                fresh->Delay(int32(fresh->GetDuration() - left));
+        player->GetMap()->DynamicObjectRelocation(dyn, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
     }
 
     // The once-a-second refresh: speed, cooldown recovery, Zealot's drain, a level gained.
@@ -333,14 +327,8 @@ namespace
         SetCooldownMod(player, r, CooldownPct(player, t, r, now));
         SetHaste(player, r, HasteFor(player, t));
 
-        // Consecration's skill nodes.
-        DynamicObject* ground = (t.Has(KEY_WALKING_CONSECRATION) || t.Has(KEY_HALLOWED_GROUND) || t.Has(KEY_STEADFAST))
-                                ? OwnConsecration(player) : nullptr;
-        if (t.Has(KEY_WALKING_CONSECRATION) && player->IsAlive())
-        {
-            WalkConsecration(player, ground);
-            ground = OwnConsecration(player);
-        }
+        // Consecration's skill nodes (Walking Consecration moves it in UpdateCharacter).
+        DynamicObject* ground = (t.Has(KEY_HALLOWED_GROUND) || t.Has(KEY_STEADFAST)) ? OwnConsecration(player) : nullptr;
         bool const inside = Inside(player, ground);
         if (inside && t.Has(KEY_HALLOWED_GROUND) && player->IsAlive())
             player->ModifyHealth(int32(player->GetMaxHealth() * t.Rank(KEY_HALLOWED_GROUND) / 100));
@@ -414,6 +402,14 @@ namespace Arpg
             if (SpellEntry const* aura = sSpellTemplate.LookupEntry<SpellEntry>(RETRIBUTION_AURA))
                 for (Unit* unit : NearestFoes(player, player, MARTYR_RANGE, 10))
                     StrikeFoe(player, unit, aura, SPELL_SCHOOL_MASK_HOLY, share);
+        }
+
+        // Walking Consecration follows a few times a second.
+        if (WorldTimer::getMSTimeDiff(r.lastWalk, now) >= WALK_MS)
+        {
+            r.lastWalk = now;
+            if (player->IsAlive() && HasKeystone(player, KEY_WALKING_CONSECRATION))
+                WalkConsecration(player, OwnConsecration(player));
         }
 
         if (r.lastRefresh && WorldTimer::getMSTimeDiff(r.lastRefresh, now) < REFRESH_MS)

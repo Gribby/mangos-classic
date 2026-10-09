@@ -28,6 +28,11 @@ namespace
     constexpr float MELEE_ARC = 2 * M_PI_F / 3;
     // How far out to gather melee candidates, in yards: past any melee reach, combat reach included.
     constexpr float MELEE_SEARCH = 12.0f;
+    // A swing's blow lands this long after its animation starts, in ms: who it strikes is
+    // settled then, at the moment the weapon would connect, not as the swing begins.
+    constexpr uint32 SWING_IMPACT_MS = 300;
+    // Set while a delayed swing resolves: its animation has played, so the hit sends none.
+    thread_local bool sSwingAnimated = false;
     // A helpful spell lands on the friend standing within this many yards of the aim point.
     constexpr float ALLY_PICK = 4.0f;
     // An aim point this close to the caster gives no bearing: the facing is used instead.
@@ -131,18 +136,36 @@ namespace
         if (hand == OFF_ATTACK && player->getAttackTimer(BASE_ATTACK) < ATTACK_DISPLAY_DELAY)
             player->setAttackTimer(BASE_ATTACK, ATTACK_DISPLAY_DELAY);
 
-        if (Unit* struck = Arpg::SelectMeleeVictim(player, SwingTarget(player)))
+        // The off hand's swing animates with its own hit, as the stock swing does.
+        if (hand == OFF_ATTACK)
         {
+            if (Unit* struck = Arpg::SelectMeleeVictim(player, SwingTarget(player)))
+                player->AttackerStateUpdate(struck, hand);
+            player->resetAttackTimer(hand);
+            return;
+        }
+        // The main hand's swing plays now; its blow lands at the impact moment, on whoever is in
+        // the arc then.
+        player->HandleEmoteCommand(WhiffEmote(player));
+        player->resetAttackTimer(hand);
+        auto land = [hand](Unit& owner)
+        {
+            Player* swinger = static_cast<Player*>(&owner);
+            if (!swinger->IsInWorld() || !swinger->IsAlive() || !Arpg::Active(swinger) ||
+                    swinger->hasUnitState(UNIT_STAT_CAN_NOT_REACT_OR_LOST_CONTROL))
+                return;
+            Unit* struck = Arpg::SelectMeleeVictim(swinger, SwingTarget(swinger));
+            if (!struck)
+                return;
             // A queued next-swing ability (Heroic Strike, Cleave, Maul) lands with the swing.
             if (hand == BASE_ATTACK)
-                if (Spell* nextSwing = player->GetCurrentSpell(CURRENT_MELEE_SPELL))
+                if (Spell* nextSwing = swinger->GetCurrentSpell(CURRENT_MELEE_SPELL))
                     nextSwing->m_targets.setUnitTarget(struck);
-            player->AttackerStateUpdate(struck, hand);
-        }
-        else if (hand == BASE_ATTACK)
-            player->HandleEmoteCommand(WhiffEmote(player));
-
-        player->resetAttackTimer(hand);
+            sSwingAnimated = true;
+            swinger->AttackerStateUpdate(struck, hand);
+            sSwingAnimated = false;
+        };
+        player->m_events.AddEvent(new UnitLambdaEvent(*player, land), player->m_events.CalculateTime(SWING_IMPACT_MS));
     }
 }
 
@@ -343,6 +366,11 @@ namespace Arpg
             }
         }
         return nearest;
+    }
+
+    bool SwingAnimated(Unit const* attacker)
+    {
+        return sSwingAnimated && Active(attacker);
     }
 
     bool IsLineSpell(SpellEntry const* spellInfo)

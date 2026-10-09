@@ -102,6 +102,10 @@ namespace Arpg
     // effect, not channeled (Mind Control, Tame Beast) and not line-of-sight exempt.
     bool IsLineSpell(SpellEntry const* spellInfo);
 
+    // Whether `attacker`'s swing resolving now has played its animation already (an ARPG swing,
+    // delayed to its impact): its attacker state update carries HITINFO_NOACTION.
+    bool SwingAnimated(Unit const* attacker);
+
     // The first fair enemy (or `intended`) along the line from `caster` at `aim` (radians, world
     // orientation) between `minRange` and `maxRange` yards, the line LINE_HALF_WIDTH wide plus each
     // target's combat reach, in line of sight; nullptr when the line is clear.

@@ -153,6 +153,9 @@ class Map : public GridRefManager<NGridType>
         void PlayerRelocation(Player*, float x, float y, float z, float orientation);
         void CreatureRelocation(Creature* creature, float x, float y, float z, float ang);
         void GameObjectRelocation(GameObject* go, float x, float y, float z, float orientation, bool respawnRelocationOnFail = true);
+        // Fork-only (ARPG, Walking Consecration): move a dynamic object, cell and all, keeping it
+        // (and the auras it holds on units) alive. Clients that see it get it afresh at the new place.
+        void DynamicObjectRelocation(DynamicObject* dyn, float x, float y, float z);
 
         template<class T, class CONTAINER> void Visit(const Cell& cell, TypeContainerVisitor<T, CONTAINER>& visitor);
 

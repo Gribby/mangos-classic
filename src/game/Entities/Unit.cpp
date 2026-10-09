@@ -2672,6 +2672,9 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool ext
 
     CalcDamageInfo meleeDamageInfo;
     CalculateMeleeDamage(pVictim, &meleeDamageInfo, attType);
+    // ARPG: a swing resolved at its impact played its animation as it began (Arpg/ArpgCombat.h).
+    if (Arpg::SwingAnimated(this))
+        meleeDamageInfo.HitInfo |= HITINFO_NOACTION;
 
     // Send log damage message to client
     for (uint8 i = 0; i < m_weaponDamageInfo.weapon[attType].lines; i++)

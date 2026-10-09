@@ -19,6 +19,7 @@
 #include "Maps/Map.h"
 #include "Maps/MapManager.h"
 #include "Entities/Player.h"
+#include "Entities/DynamicObject.h"
 #include "Grids/GridNotifiers.h"
 #include "Log/Log.h"
 #include "Grids/ObjectGridLoader.h"
@@ -1214,6 +1215,33 @@ void Map::GameObjectRelocation(GameObject* go, float x, float y, float z, float 
     go->Relocate(x, y, z, orientation);
     go->UpdateModelPosition();
     go->UpdateObjectVisibility();
+}
+
+void Map::DynamicObjectRelocation(DynamicObject* dyn, float x, float y, float z)
+{
+    Cell new_cell(MaNGOS::ComputeCellPair(x, y));
+    Cell old_cell(MaNGOS::ComputeCellPair(dyn->GetPositionX(), dyn->GetPositionY()));
+    if (old_cell.DiffGrid(new_cell) && !loaded(new_cell.gridPair()))
+        return;
+    if (old_cell != new_cell)
+    {
+        NGridType* oldGrid = getNGrid(old_cell.GridX(), old_cell.GridY());
+        NGridType* newGrid = getNGrid(new_cell.GridX(), new_cell.GridY());
+        if (!oldGrid || !newGrid)
+            return;
+        RemoveFromGrid(dyn, oldGrid, old_cell);
+        AddToGrid(dyn, newGrid, new_cell);
+    }
+    dyn->Relocate(x, y, z, dyn->GetOrientation());
+    // A dynamic object's place goes out only in its create block: send it afresh.
+    for (auto const& ref : GetPlayers())
+        if (Player* player = ref.getSource())
+            if (player->HasAtClient(dyn))
+            {
+                dyn->DestroyForPlayer(player);
+                dyn->SendCreateUpdateToPlayer(player);
+            }
+    dyn->UpdateObjectVisibility();
 }
 
 bool Map::CreatureCellRelocation(Creature* c, const Cell& new_cell)
