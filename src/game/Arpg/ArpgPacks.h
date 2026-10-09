@@ -11,8 +11,10 @@
  * gives Arpg.Packs.FollowerXp of a kill's XP and Arpg.Packs.FollowerLoot of its gold, and keeps
  * each item that isn't for a quest at that chance.
  *
- * A pack leader is a hostile or neutral open-world creature of normal rank from the `creature`
- * table: no NPC flags, not a civilian, critter, pet, summon or member of a creature group.
+ * A pack leader is an open-world creature of normal rank from the `creature` table that isn't
+ * friendly to players: no NPC flags, not a civilian, critter, pet or summon. In a spawn group it
+ * leads only if the group isn't a formation and it is the group's first member, so a camp gets
+ * one pack. The dev tools' test pack logs why the nearest mob was refused.
  *
  * Each pack fight is logged when its last member falls ("ARPG packs:"): its size, level, how
  * long it took from the first aggro, and the damage it dealt, for tuning.

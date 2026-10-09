@@ -14,6 +14,7 @@
 #include "Log/Log.h"
 #include "Loot/LootMgr.h"
 #include "Maps/Map.h"
+#include "Maps/SpawnGroup.h"
 #include "MotionGenerators/MotionMaster.h"
 #include "Server/DBCStores.h"
 #include "Server/Opcodes.h"
@@ -273,21 +274,51 @@ namespace
         return { 3, 5 };
     }
 
+    // Why `creature` can't lead a pack, or nullptr when it can. A creature in a spawn group (most
+    // open-world mobs in the current database: random entries and camps) may lead one unless the
+    // group is a formation; in a group of several, only its first member does, so a camp gets one
+    // pack rather than one per mob.
+    char const* WhyNotLeader(Creature* creature)
+    {
+        if (!creature || !creature->IsInWorld())
+            return "not in the world";
+        if (!creature->IsAlive())
+            return "dead";
+        if (creature->IsInCombat())
+            return "in combat";
+        if (creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData())
+            return "not a database spawn";
+        if (creature->IsPet() || creature->IsTotem())
+            return "a pet or totem";
+        if (creature->GetMap()->Instanceable())
+            return "in an instance";
+        if (CreatureGroup* group = creature->GetCreatureGroup())
+        {
+            SpawnGroupEntry const& entry = group->GetGroupEntry();
+            if (entry.formationEntry)
+                return "in a formation";
+            if (!entry.DbGuids.empty() && entry.DbGuids.front().DbGuid != creature->GetDbGuid())
+                return "not the first of its spawn group";
+        }
+        CreatureInfo const* info = creature->GetCreatureInfo();
+        if (!info || info->Rank != CREATURE_ELITE_NORMAL)
+            return "not of normal rank";
+        if (info->NpcFlags || creature->IsCivilian())
+            return "an NPC or civilian";
+        if (info->CreatureType == CREATURE_TYPE_CRITTER)
+            return "a critter";
+        if (creature->IsNoXp())
+            return "gives no XP";
+        FactionTemplateEntry const* faction = creature->GetFactionTemplateEntry();
+        if (!faction || (faction->friendGroupMask & FACTION_GROUP_MASK_PLAYER) ||
+                (faction->factionGroupMask & FACTION_GROUP_MASK_PLAYER))
+            return "friendly to players";
+        return nullptr;
+    }
+
     bool Eligible(Creature* creature)
     {
-        if (!creature || !creature->IsInWorld() || !creature->IsAlive() || creature->IsInCombat())
-            return false;
-        if (creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData() ||
-                creature->IsPet() || creature->IsTotem() || creature->GetCreatureGroup())
-            return false;
-        if (creature->GetMap()->Instanceable())
-            return false;
-        CreatureInfo const* info = creature->GetCreatureInfo();
-        if (!info || info->Rank != CREATURE_ELITE_NORMAL || info->NpcFlags || creature->IsCivilian() ||
-                info->CreatureType == CREATURE_TYPE_CRITTER || creature->IsNoXp())
-            return false;
-        FactionTemplateEntry const* faction = creature->GetFactionTemplateEntry();
-        return faction && (faction->IsHostileToPlayers() || faction->IsNeutralToAll());
+        return WhyNotLeader(creature) == nullptr;
     }
 
     // Send away the followers that aren't fighting, and forget the pack.
@@ -700,11 +731,22 @@ namespace Arpg
             return;
         Creature* nearest = nullptr;
         float nearestDist = AGGRO_REACH;
+        Creature* refused = nullptr;
+        float refusedDist = AGGRO_REACH;
         for (Unit* unit : EnemiesNear(player, AGGRO_REACH))
         {
-            if (unit->GetTypeId() != TYPEID_UNIT || !Eligible(static_cast<Creature*>(unit)))
+            if (unit->GetTypeId() != TYPEID_UNIT)
                 continue;
             float const dist = player->GetDistance(unit);
+            if (!Eligible(static_cast<Creature*>(unit)))
+            {
+                if (dist < refusedDist)
+                {
+                    refused = static_cast<Creature*>(unit);
+                    refusedDist = dist;
+                }
+                continue;
+            }
             if (dist < nearestDist)
             {
                 nearest = static_cast<Creature*>(unit);
@@ -713,7 +755,12 @@ namespace Arpg
         }
         if (!nearest)
         {
-            sLog.outString("ARPG packs: %s asked for a test pack, but no mob near can lead one", player->GetName());
+            if (refused)
+                sLog.outString("ARPG packs: %s asked for a test pack, but the nearest mob, %s (entry %u), can't lead one: %s",
+                               player->GetName(), refused->GetName(), refused->GetEntry(), WhyNotLeader(refused));
+            else
+                sLog.outString("ARPG packs: %s asked for a test pack, but no mob is within %.0f yards",
+                               player->GetName(), AGGRO_REACH);
             return;
         }
         if (!PacksOn())
