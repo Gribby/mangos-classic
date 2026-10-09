@@ -315,6 +315,7 @@ namespace
     void Refresh(Player* player, Runtime& r, uint32 now)
     {
         UpdateTree(player);
+        SendNearbyChampions(player);
         std::shared_ptr<WebTotals const> totals = TotalsOf(player);
         WebTotals const& t = totals ? *totals : NoTotals();
 
@@ -385,6 +386,7 @@ namespace Arpg
     {
         // The player is going; its cooldown modifier stays in its spell modifier list, which
         // Player never frees, as an aura's stays until the aura goes.
+        ForgetChampionsSent(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
     }
@@ -518,6 +520,8 @@ namespace Arpg
 
     float MoveSpeedMod(Unit const* unit)
     {
+        if (unit && unit->GetTypeId() == TYPEID_UNIT)
+            return PackSpeedMod(unit);
         if (!Active(unit))
             return 1.0f;
         std::shared_ptr<WebTotals const> totals = TotalsOf(unit);

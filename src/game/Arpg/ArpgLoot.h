@@ -44,6 +44,9 @@ namespace Arpg
     // A creature died and its corpse loot was generated: tell its ARPG looters.
     void OnCorpseLoot(Creature* creature);
 
+    // A random droppable item of `quality` near item level `level` (0: none of that quality).
+    uint32 PickRandomItem(uint32 quality, uint32 level);
+
     // `loot` changed for `player` (an item or the gold taken, by any route): resend their list.
     void OnLootChanged(Loot* loot, Player* player);
 

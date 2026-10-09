@@ -54,7 +54,7 @@ level from 2 to 51, 20 at most in a skill, and the paladin's Strike, Seals, Judg
 Consecration and Hammer of Justice trees. Saved in `character_arpg_skill` and
 `character_arpg_skill_node`. Kinds 12 slot (`u8` slot, `u8` skill), 13 take (`u16` node), 14 give
 back (`u16` node), 15 respec a skill (`u8` skill); kind 10 answers with the skills too.
-`SMSG_ARPG_SKILLS` (0x340; `NUM_MSG_TYPES` 0x341). Nodes are spell modifiers, kit rows
+`SMSG_ARPG_SKILLS` (0x340). Nodes are spell modifiers, kit rows
 (`LearnedModifiers`) or keystone ranks; hooks in `Unit::AttackerStateUpdate` (swing nodes),
 `Unit::RemoveNoStackAurasDueToAuraHolder` (Twin Seals), the PPM proc chance (Relentless), the
 Judgement script (Righteous Mind), `Arpg::SelectMeleeVictim` (Long Arm), and the uniques' spell
@@ -66,8 +66,13 @@ level (`TeachClassSpells`, spells without ranks' first pass).
 `Arpg/ArpgPacks.{h,cpp}`: open-world mobs lead packs of followers sized by level (Arpg.Packs,
 on by default with Arpg.Enable). Hooks: `Creature::AddToWorld` (form a pack), the combat start
 in `Unit` (the pack joins in), `MaNGOS::XP::Gain` (follower XP), the corpse loot (`Loot::ThinArpgLoot`),
-`Arpg::DamageDoneMod` (follower damage), and kind 16, the dev tools' test pack. Design: the
-client's `docs/ARPG-PROGRESSION.md`.
+`Arpg::DamageDoneMod` (follower damage), and kind 16, the dev tools' test pack (`u8` size,
+optional `u8` tier). Champion and rare packs (from level 8) add affixed summons; their hooks are
+`Unit::SpellDamageBonusTaken` and `MeleeDamageBonusTaken` (Stone Skin), `Unit::UpdateSpeed`
+(Extra Fast), the melee proc point (`OnPackMelee`: Fire and Cold Enchanted, Vampiric, Thorns) and
+the death (Fire Enchanted's burst). `SMSG_ARPG_CHAMPIONS` (0x341; `NUM_MSG_TYPES` 0x342) tells
+each ARPG player of the champions within 100 yards. Design: the client's
+`docs/ARPG-PROGRESSION.md`.
 
 ## Wire
 

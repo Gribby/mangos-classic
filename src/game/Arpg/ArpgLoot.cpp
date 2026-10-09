@@ -98,6 +98,11 @@ namespace
 
 namespace Arpg
 {
+    uint32 PickRandomItem(uint32 quality, uint32 level)
+    {
+        return PickDevItem(quality, level);
+    }
+
     void SendGroundLoot(Player* player, Creature* creature)
     {
         if (!Active(player) || !creature)

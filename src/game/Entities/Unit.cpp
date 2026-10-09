@@ -2688,8 +2688,10 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool ext
     SendAttackStateUpdate(&meleeDamageInfo);
     DealMeleeDamage(&meleeDamageInfo, true);
     ProcDamageAndSpell(ProcSystemArguments(this, meleeDamageInfo.target, meleeDamageInfo.procAttacker, meleeDamageInfo.procVictim, meleeDamageInfo.procEx, meleeDamageInfo.totalDamage, meleeDamageInfo.absorb, meleeDamageInfo.attackType));
-    // ARPG: the Strike skill tree's swing nodes (Arpg/ArpgCharacter.h).
+    // ARPG: the Strike skill tree's swing nodes (Arpg/ArpgCharacter.h), and champions' melee
+    // affixes (Arpg/ArpgPacks.h).
     Arpg::OnSwingHit(this, pVictim, meleeDamageInfo.totalDamage, (meleeDamageInfo.HitInfo & HITINFO_CRITICALHIT) != 0);
+    Arpg::OnPackMelee(this, pVictim, meleeDamageInfo.totalDamage);
 
     uint32 totalAbsorb = 0;
     uint32 totalResist = 0;
@@ -7177,6 +7179,9 @@ uint32 Unit::SpellDamageBonusTaken(Unit* caster, SpellSchoolMask schoolMask, Spe
     if (caster)
         TakenTotal = caster->SpellBonusWithCoeffs(spellInfo, effectIndex, TakenTotal, TakenAdvertisedBenefit, 0, false);
 
+    // ARPG: a Stone Skin champion takes less (Arpg/ArpgPacks.h).
+    TakenTotalMod *= Arpg::PackDamageTakenMod(this);
+
     float tmpDamage = (int32(pdamage) + TakenTotal * int32(stack)) * TakenTotalMod;
 
     return tmpDamage > 0 ? uint32(tmpDamage) : 0;
@@ -7721,6 +7726,9 @@ uint32 Unit::MeleeDamageBonusTaken(Unit* caster, uint32 pdamage, WeaponAttackTyp
 
     if (!flat)
         TakenFlat = 0.0f;
+
+    // ARPG: a Stone Skin champion takes less (Arpg/ArpgPacks.h).
+    TakenTotalMod *= Arpg::PackDamageTakenMod(this);
 
     float tmpDamage = (int32(pdamage) + (TakenFlat + TakenAdvertisedBenefit) * int32(stack)) * TakenTotalMod;
 

@@ -873,10 +873,12 @@ enum Opcodes
     SMSG_ARPG_TREE                                  = 0x33F,
     // ARPG: the player's specialised skills and their trees (Arpg/ArpgSkills.h)
     SMSG_ARPG_SKILLS                                = 0x340,
+    // ARPG: the champions and rares near an ARPG player (Arpg/ArpgPacks.h)
+    SMSG_ARPG_CHAMPIONS                             = 0x341,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x341
+#define NUM_MSG_TYPES 0x342
 
 /// Player state
 enum SessionStatus
