@@ -366,7 +366,18 @@ namespace Arpg
         return atEnemy;
     }
 
-    Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended)
+    std::list<Unit*> EnemiesNear(WorldObject* center, float radius)
+    {
+        return EnemiesAround(center, radius);
+    }
+
+    bool MayCatchUnit(WorldObject* actor, Unit* unit, Unit const* intended)
+    {
+        return MayCatch(actor, unit, intended);
+    }
+
+    Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended,
+                           Unit const* exclude)
     {
         float const dirX = std::cos(aim);
         float const dirY = std::sin(aim);
@@ -378,7 +389,7 @@ namespace Arpg
         // Gather a little past the range: a large target's edge can reach into the line's end.
         for (Unit* unit : EnemiesAround(caster, maxRange + 10.0f))
         {
-            if (!MayCatch(caster, unit, intended))
+            if (unit == exclude || !MayCatch(caster, unit, intended))
                 continue;
             float const reach = unit->GetCombatReach();
             float const offX = unit->GetPositionX() - originX;

@@ -26,6 +26,7 @@
 #include "Log/Log.h"
 #include "World/World.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgUniques.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -432,6 +433,7 @@ Spell::Spell(WorldObject* caster, SpellEntry const* info, uint32 triggeredFlags,
     m_arpgAim = 0.0f;
     m_arpgAimDist = 0.0f;
     m_arpgAimSet = false;
+    m_arpgSecondaryPct = 0;
     m_TriggerSpells.clear();
     m_preCastSpells.clear();
     m_IsTriggeredSpell = triggeredFlags & TRIGGERED_OLD_TRIGGERED;
@@ -1266,10 +1268,13 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         SpellNonMeleeDamage spellDamageInfo(caster, unitTarget, m_spellInfo->Id, GetFirstSchoolInMask(m_spellSchoolMask), this);
 
         spellDamageInfo.damage = m_damage;
+        // ARPG: a unique's added hit deals its share, and never crits on its own.
+        if (m_arpgSecondaryPct)
+            spellDamageInfo.damage = spellDamageInfo.damage * m_arpgSecondaryPct / 100;
         spellDamageInfo.HitInfo = target->HitInfo;
         if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
         {
-            if (target->isCrit) // GOs cant crit
+            if (target->isCrit && !m_arpgSecondaryPct) // GOs cant crit
             {
                 spellDamageInfo.HitInfo |= SPELL_HIT_TYPE_CRIT;
                 spellDamageInfo.damage = affectiveCaster->CalculateCritAmount(unitTarget, spellDamageInfo.damage, m_spellInfo);
@@ -1300,6 +1305,10 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
             Unit::DealSpellDamage(affectiveCaster, &spellDamageInfo, true, m_resetLeash);
         else
             Unit::DealSpellDamage(affectiveCaster, &spellDamageInfo, true, m_resetLeash);
+
+        // ARPG: a unique's on-hit mechanic (fragments) off this hit.
+        if (!reflectTarget && affectiveCaster)
+            Arpg::OnSpellDamage(this, affectiveCaster, unitTarget, spellDamageInfo.damage + spellDamageInfo.absorb);
 
         // Bloodthirst
         if (m_spellInfo->SpellFamilyName == SPELLFAMILY_WARRIOR && m_spellInfo->SpellFamilyFlags & uint64(0x0000000002000000))
@@ -3031,6 +3040,9 @@ void Spell::Prepare()
 
     // Prepare data for triggers
     prepareDataForTriggerSystem();
+    // ARPG: a unique's added hit sets off no procs of its own.
+    if (m_arpgSecondaryPct)
+        m_canTrigger = false;
 
     // calculate cast time (calculated after first CheckCast check to prevent charge counting for first CheckCast fail)
     if (!m_ignoreCastTime)
@@ -3063,7 +3075,8 @@ void Spell::Prepare()
     // ARPG: an ARPG player's single-target hostile spell is a skillshot, aimed along
     // the bearing from the caster to its target as the cast begins, or along the bearing the ARPG
     // cast packet aimed with nobody on the line yet (fired into the empty air).
-    if (m_clientCast && !m_IsTriggeredSpell && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
+    // A unique's added projectile is a skillshot too (Arpg::OnLineLaunch).
+    if (((m_clientCast && !m_IsTriggeredSpell) || m_arpgSecondaryPct) && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
     {
         Unit* target = m_targets.getUnitTarget();
         if ((target && target != m_trueCaster) || m_arpgAimSet)
@@ -3223,7 +3236,8 @@ SpellCastResult Spell::cast(bool skipCheck)
         float const reach = m_arpgAimDist > 0.0f
             ? std::min(range.second, std::max(m_arpgAimDist, Arpg::MISS_MIN) + Arpg::MISS_OVERSHOOT)
             : range.second;
-        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, reach, aimed);
+        Unit* exclude = m_arpgExclude ? m_trueCaster->GetMap()->GetUnit(m_arpgExclude) : nullptr;
+        Unit* struck = Arpg::SelectLineTarget(m_trueCaster, m_arpgAim, range.first, reach, aimed, exclude);
         // The unit the player aimed at stays locked on while it lives and is in range and sight,
         // even if it stepped off the line during the cast; something on the line still takes the
         // shot first.
@@ -3248,11 +3262,14 @@ SpellCastResult Spell::cast(bool skipCheck)
             m_trueCaster->UpdateAllowedPositionZ(x, y, z);
             m_targets = SpellCastTargets();
             m_targets.setDestination(x, y, z);
+            // A unique's added projectiles leave with this one (Arpg/ArpgUniques.h).
+            Arpg::OnLineLaunch(this, nullptr);
 
             // The stock success path's bookkeeping, without the effects, targets and procs: no
             // spell script runs (OnCast), as scripts may expect the unit the spell never found.
             spellModController.SetSuccess();
-            SendSpellCooldown();
+            if (!m_arpgSecondaryPct)
+                SendSpellCooldown();
             if (m_notifyAI && m_caster && m_caster->AI())
                 m_caster->AI()->OnSpellCooldownAdded(m_spellInfo);
             TakePower();
@@ -3270,6 +3287,7 @@ SpellCastResult Spell::cast(bool skipCheck)
         }
         if (struck != m_targets.getUnitTarget())
             m_targets.setUnitTarget(struck);
+        Arpg::OnLineLaunch(this, struck);
     }
 
     if (m_trueCaster->IsCreature() && m_targets.getUnitTarget() && m_targets.getUnitTarget() != m_caster)
@@ -5134,7 +5152,7 @@ SpellCastResult Spell::CheckCast(bool strict)
 
     // ARPG: a skillshot fired into the empty air has no unit to check; Spell::cast
     // picks whoever is on its line when it is released, or sends it out to its range.
-    bool const arpgUnaimed = m_clientCast && m_arpgAimSet && !m_IsTriggeredSpell && !m_targets.getUnitTarget() &&
+    bool const arpgUnaimed = ((m_clientCast && !m_IsTriggeredSpell) || m_arpgSecondaryPct) && m_arpgAimSet && !m_targets.getUnitTarget() &&
         Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo);
 
     // check targets

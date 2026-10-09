@@ -7,7 +7,7 @@
  * or a cast, which only the ARPG client sends, therefore counts as the hello too.
  *
  *   uint8 kind, then by kind:
- *     ACTION_HELLO        uint8 version
+ *     ACTION_HELLO        uint8 version; answered with the uniques' tooltip lines
  *     ACTION_SWING_START  uint64 intended (the unit under the cursor, 0 for none)
  *     ACTION_SWING_STOP   -
  *     ACTION_CAST         uint32 spell id, uint8 aim (CastAim), float x, float y, float z,
@@ -24,6 +24,7 @@
 
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgUniques.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -60,6 +61,8 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 return;
             }
             Arpg::OnHello(player);
+            // The uniques' tooltip lines, with every hello: the client may have missed a first.
+            Arpg::SendUniques(player);
             break;
         }
         case Arpg::ACTION_SWING_START:

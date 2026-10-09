@@ -867,10 +867,12 @@ enum Opcodes
     CMSG_ARPG_ACTION                                = 0x33C,
     // ARPG: the ground loot a corpse holds for an ARPG player (Arpg/ArpgLoot.h)
     SMSG_ARPG_LOOT                                  = 0x33D,
+    // ARPG: the uniques' tooltip lines, sent after the hello (Arpg/ArpgUniques.h)
+    SMSG_ARPG_ITEM_MECHANICS                        = 0x33E,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x33E
+#define NUM_MSG_TYPES 0x33F
 
 /// Player state
 enum SessionStatus

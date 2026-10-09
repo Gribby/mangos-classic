@@ -13,6 +13,15 @@ tab-target combat into Diablo-style targetless combat for players on that client
 - A player becomes ARPG only after the client sends its hello; `Arpg::Active()` gates every hook
   and is false for charmed players. Playerbots and stock clients keep stock combat.
 
+## Uniques
+
+Named items whose ARPG wearer's spells work differently: `Arpg/ArpgUniques.{h,cpp}` (the table is
+`Arpg::Uniques()`, one line per item). Kit A (extra projectiles: free casts of the same spell,
+`Spell::SetArpgSecondary`, hooked in `Spell::cast`'s skillshot block) and kit D (fragments: direct
+damage behind the target, hooked after the spell's damage in `Spell::DoAllEffectOnTarget`) are
+built. `SMSG_ARPG_ITEM_MECHANICS` (0x33E: `u8` count, then `u32` item and a C string per row)
+answers every hello. Design: the client's `docs/ARPG-UNIQUES.md`.
+
 ## Wire
 
 `CMSG_ARPG_ACTION` = 0x33C (`NUM_MSG_TYPES` 0x33D), protocol version 2. Body: `u8 kind`, then

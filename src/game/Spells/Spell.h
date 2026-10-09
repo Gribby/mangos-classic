@@ -575,6 +575,14 @@ class Spell
         // ARPG: the bearing an ARPG cast was aimed along, for its skillshot line (Arpg::CastAt)
         // and how far out the player aimed (0 for no point: the cursor underfoot)
         void SetArpgAim(float aim, float dist) { m_arpgAim = aim; m_arpgAimDist = dist; m_arpgAimSet = true; }
+        float GetArpgAim() const { return m_arpgAim; }
+        float GetArpgAimDist() const { return m_arpgAimDist; }
+        // ARPG: an added hit from a unique's mechanic (Arpg/ArpgUniques.h): a free skillshot of the
+        // same spell dealing `pct` percent, never critical, that never picks `exclude` and never
+        // sets off a mechanic of its own.
+        void SetArpgSecondary(uint32 pct, ObjectGuid exclude) { m_arpgSecondaryPct = pct; m_arpgExclude = exclude; }
+        bool IsArpgSecondary() const { return m_arpgSecondaryPct != 0; }
+        SpellSchoolMask GetSchoolMask() const { return m_spellSchoolMask; }
 
         // scriptable conditionals
         bool m_ignoreRoot; //
@@ -949,6 +957,8 @@ class Spell
         float m_arpgAim;
         float m_arpgAimDist;
         bool m_arpgAimSet;
+        uint32 m_arpgSecondaryPct;
+        ObjectGuid m_arpgExclude;
 
         uint32 m_affectedTargetCount;
         float m_jumpRadius;

@@ -25,6 +25,8 @@
 #include "Common.h"
 #include "Entities/ObjectGuid.h"
 
+#include <list>
+
 class Player;
 class Unit;
 class WorldObject;
@@ -94,7 +96,15 @@ namespace Arpg
     // The first fair enemy (or `intended`) along the line from `caster` at `aim` (radians, world
     // orientation) between `minRange` and `maxRange` yards, the line LINE_HALF_WIDTH wide plus each
     // target's combat reach, in line of sight; nullptr when the line is clear.
-    Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended);
+    // `exclude`, if set, is never picked (an extra projectile passes the unit the main one took).
+    Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended,
+                           Unit const* exclude = nullptr);
+
+    // Live attackable units around `center` within `radius` yards, in line of sight, no totems.
+    std::list<Unit*> EnemiesNear(WorldObject* center, float radius);
+
+    // Whether `unit` may catch `actor`'s swing or skillshot (see SelectLineTarget).
+    bool MayCatchUnit(WorldObject* actor, Unit* unit, Unit const* intended);
 
     // Half the width of a skillshot's path, in yards.
     constexpr float LINE_HALF_WIDTH = 1.75f;
