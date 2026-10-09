@@ -98,7 +98,7 @@ namespace
 
     struct ArmSpec
     {
-        Spec small;     // each of its small nodes
+        Spec step;      // each of its small nodes
         Spec notable;
         Spec end;       // a keystone, or a second notable
         bool endIsKeystone;
@@ -241,7 +241,7 @@ namespace
                 for (int k = 0; k < ARM_SMALLS; ++k)
                 {
                     float const wobble = (k % 2 ? 4.0f : -4.0f) * (i == 1 ? 1.0f : float(i - 1));
-                    uint16 const s = add(WEB_SMALL, ri, R_ARM0 + k * R_ARM_STEP, reg.angle + off + wobble, arm.small);
+                    uint16 const s = add(WEB_SMALL, ri, R_ARM0 + k * R_ARM_STEP, reg.angle + off + wobble, arm.step);
                     link(prev, s);
                     prev = s;
                     if (k == 1)

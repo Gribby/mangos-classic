@@ -443,11 +443,12 @@ namespace Arpg
                 pct += 30;
             if (t.Has(KEY_RIGHTEOUS_FURY))
             {
-                size_t near = 0;
+                // (Not `near`: the Windows headers make that a macro.)
+                size_t foes = 0;
                 for (Unit* unit : EnemiesNear(const_cast<Unit*>(attacker), FURY_RANGE))
-                    if (unit->IsAlive() && MayCatchUnit(const_cast<Unit*>(attacker), unit, nullptr) && ++near >= FURY_COUNT)
+                    if (unit->IsAlive() && MayCatchUnit(const_cast<Unit*>(attacker), unit, nullptr) && ++foes >= FURY_COUNT)
                         break;
-                if (near >= FURY_COUNT)
+                if (foes >= FURY_COUNT)
                     pct += 20;
             }
         }
