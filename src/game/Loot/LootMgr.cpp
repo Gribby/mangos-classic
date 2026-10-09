@@ -18,6 +18,7 @@
 
 #include "Loot/LootMgr.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgCombat.h"
 #include "Log/Log.h"
 #include "Util/ProgressBar.h"
 #include "World/World.h"
@@ -1587,6 +1588,10 @@ void Loot::SetGroupLootRight(Player* player)
     {
         m_lootMethod = grp->GetLootMethod();
         m_threshold = grp->GetLootThreshold();
+        // ARPG: no group loot rules (rolls, need before greed, master loot, round robin) for an
+        // ARPG group: whoever gets to a drop first takes it, and nothing waits for a roll.
+        if (Arpg::Active(player))
+            m_lootMethod = FREE_FOR_ALL;
 
         // we need to fill m_ownerSet with player who have access to the loot
         Group::MemberSlotList const& memberList = grp->GetMemberSlots();

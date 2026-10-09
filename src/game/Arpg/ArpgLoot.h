@@ -10,10 +10,9 @@
  * it has no list for (it walked back, relogged, or a group member made the kill out of its sight)
  * asks for one (ACTION_LOOT_QUERY).
  *
- * Known gap: under group, need-before-greed or master loot, an item at or over the loot threshold
- * is held for a roll that only the loot window starts, so it never shows on the ground; such a
- * corpse is opened with the loot window as in stock. Free-for-all, round robin and solo loot show
- * everything.
+ * An ARPG group has no loot rules: its corpse loot is free for all (Loot::SetGroupLootRight), so
+ * nothing is held for a roll and every item shows on the ground for every member who may take it.
+ * Nor does an ARPG player's loot bind on pickup (Arpg::BindsOnPickup).
  *
  *   SMSG_ARPG_LOOT: uint64 corpse, uint32 gold, uint8 item count, then per item:
  *                   uint8 loot slot, uint32 item id, uint32 display id, uint8 quality, uint8 count

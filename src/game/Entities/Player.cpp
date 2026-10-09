@@ -9984,8 +9984,8 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
             return nullptr;
 
         ItemPrototype const* itemProto = pItem->GetProto();
-        if (itemProto->Bonding == BIND_WHEN_PICKED_UP
-                || itemProto->Bonding == BIND_QUEST_ITEM
+        // ARPG: an ARPG player's loot never binds as it is picked up (Arpg::BindsOnPickup).
+        if (((itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM) && Arpg::BindsOnPickup(this))
                 || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos)))
             pItem->SetBinding(true);
 
@@ -10026,8 +10026,8 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
         return pItem;
     }
     ItemPrototype const* itemProto = pItem2->GetProto();
-    if (itemProto->Bonding == BIND_WHEN_PICKED_UP
-        || itemProto->Bonding == BIND_QUEST_ITEM
+    // ARPG: an ARPG player's loot never binds as it is picked up (Arpg::BindsOnPickup).
+    if (((itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM) && Arpg::BindsOnPickup(this))
         || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos)))
         pItem2->SetBinding(true);
 

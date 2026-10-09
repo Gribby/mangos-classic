@@ -154,6 +154,11 @@ namespace Arpg
         return sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE) && player->IsArpgClient() && !player->HasCharmer();
     }
 
+    bool BindsOnPickup(Player const* player)
+    {
+        return !Active(player);
+    }
+
     void OnHello(Player* player)
     {
         if (player->IsArpgClient())
