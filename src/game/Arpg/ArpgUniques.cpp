@@ -133,7 +133,7 @@ namespace
     {
         if (spellInfo->speed <= 0.0f)
             return 0;
-        return uint32(from->GetDistance(to) / spellInfo->speed * IN_MILLISECONDS);
+        return uint32(from->GetDistance(to) / spellInfo->speed * float(IN_MILLISECONDS));
     }
 
     // A cosmetic SMSG_SPELL_GO of `spellInfo` from `from` at `to`: the client draws the spell's

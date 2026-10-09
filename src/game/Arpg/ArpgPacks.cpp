@@ -578,18 +578,18 @@ namespace Arpg
                 if (!sent.count(guid))
                     fresh.emplace_back(guid, c);
         }
-        std::vector<std::pair<ObjectGuid, Champion>> near;
+        std::vector<std::pair<ObjectGuid, Champion>> inRange;
         for (auto const& entry : fresh)
             if (Creature* creature = player->GetMap()->GetCreature(entry.first))
                 if (creature->IsWithinDistInMap(player, SEND_RANGE))
-                    near.push_back(entry);
-        if (near.empty())
+                    inRange.push_back(entry);
+        if (inRange.empty())
             return;
-        if (near.size() > 64)
-            near.resize(64);
-        WorldPacket data(SMSG_ARPG_CHAMPIONS, 1 + near.size() * 48);
-        data << uint8(near.size());
-        for (auto const& [guid, c] : near)
+        if (inRange.size() > 64)
+            inRange.resize(64);
+        WorldPacket data(SMSG_ARPG_CHAMPIONS, 1 + inRange.size() * 48);
+        data << uint8(inRange.size());
+        for (auto const& [guid, c] : inRange)
         {
             data << guid;
             data << uint8(c.tier);
@@ -601,7 +601,7 @@ namespace Arpg
         player->GetSession()->SendPacket(data);
         std::lock_guard<std::mutex> guard(sPacksLock);
         std::unordered_set<ObjectGuid>& sent = sChampionsSent[player->GetObjectGuid()];
-        for (auto const& entry : near)
+        for (auto const& entry : inRange)
             sent.insert(entry.first);
     }
 
