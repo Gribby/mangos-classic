@@ -53,6 +53,14 @@ namespace Arpg
 
     // Send `player` `corpseGuid`'s ground loot list, if it is a corpse near them.
     void QueryLoot(Player* player, ObjectGuid corpseGuid);
+
+    // ACTION_DEV_LOOT's quality byte for a random mix.
+    constexpr uint8 DEV_LOOT_MIXED = 0xFF;
+
+    // Testing aid (Arpg.DevTools): kill a fresh creature (Arpg.DevTools.Creature) at `player`'s
+    // feet and put `count` random items of `quality` (or a mix) near item level `level` (0 the
+    // player's) and some gold on its corpse, for the ground loot to show. Runs on the world thread.
+    void DropDevLoot(Player* player, uint8 quality, uint8 count, uint8 level);
 }
 
 #endif

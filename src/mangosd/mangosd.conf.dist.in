@@ -1806,6 +1806,19 @@ Dummy.Debug2 = 0
 #        Default: 0  (disable)
 #                 1  (enable)
 #
+#    Arpg.DevTools
+#        Testing aids for ARPG players: the client's Drop Test Loot (its options window, ARPG View
+#        page) drops a corpse at the player's feet holding the asked-for items. Any player on
+#        the ARPG client can use it, so keep it off on a server others play on.
+#        Default: 0  (disable)
+#                 1  (enable)
+#
+#    Arpg.DevTools.Creature
+#        The creature entry that test loot lies on (killed as it spawns). Any creature will do.
+#        Default: 721 (Rabbit)
+#
 ###################################################################################################
 
 Arpg.Enable = 0
+Arpg.DevTools = 0
+Arpg.DevTools.Creature = 721

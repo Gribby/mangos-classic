@@ -15,6 +15,8 @@
  *     ACTION_AIM          float x, float y, float z, uint64 intended (re-aims the running cast)
  *     ACTION_LOOT         uint64 corpse, uint8 loot slot (0xFF the gold): pick it up off the ground
  *     ACTION_LOOT_QUERY   uint64 corpse: send its ground loot list
+ *     ACTION_DEV_LOOT     uint8 quality (0xFF mixed), uint8 count, uint8 level (0 the player's):
+ *                         with Arpg.DevTools on, drop test loot at the player's feet
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -141,6 +143,19 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 if (Player* looter = session->GetPlayer())
                     if (looter->IsInWorld())
                         Arpg::QueryLoot(looter, corpse);
+            });
+            break;
+        }
+        case Arpg::ACTION_DEV_LOOT:
+        {
+            uint8 quality, count, level;
+            recvPacket >> quality >> count >> level;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([quality, count, level](WorldSession* session)
+            {
+                if (Player* looter = session->GetPlayer())
+                    if (looter->IsInWorld())
+                        Arpg::DropDevLoot(looter, quality, count, level);
             });
             break;
         }

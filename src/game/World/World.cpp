@@ -841,6 +841,8 @@ void World::LoadConfigSettings(bool reload)
 
     // ARPG combat for players on the benilla ARPG client (Arpg/ArpgCombat.h)
     setConfig(CONFIG_BOOL_ARPG_ENABLE, "Arpg.Enable", false);
+    setConfig(CONFIG_BOOL_ARPG_DEV_TOOLS, "Arpg.DevTools", false);
+    setConfig(CONFIG_UINT32_ARPG_DEV_CREATURE, "Arpg.DevTools.Creature", 721);
 
     sLog.outString();
 }

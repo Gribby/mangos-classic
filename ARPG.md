@@ -7,6 +7,9 @@ tab-target combat into Diablo-style targetless combat for players on that client
 ## Gating
 
 - `Arpg.Enable = 1` in `mangosd.conf` (default 0).
+- `Arpg.DevTools = 1` (default 0) lets ARPG players ask for test loot (`ACTION_DEV_LOOT`, kind 7:
+  `u8` quality or 0xFF mixed, `u8` count, `u8` item level or 0): `Arpg::DropDevLoot` kills a fresh
+  `Arpg.DevTools.Creature` (default 721) ahead of them and puts the loot on its corpse.
 - A player becomes ARPG only after the client sends its hello; `Arpg::Active()` gates every hook
   and is false for charmed players. Playerbots and stock clients keep stock combat.
 

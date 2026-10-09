@@ -376,6 +376,8 @@ class Loot
         void Release(Player* player);
         void GetLootItemsListFor(Player* player, LootItemList& lootList);
         void SetGoldAmount(uint32 _gold);
+        // Fork-only (ARPG dev tools, Arpg::DropDevLoot): add copper to any loot.
+        void AddArpgDevGold(uint32 copper) { m_gold += copper; }
         void SendGold(Player* player);
         bool IsItemAlreadyIn(uint32 itemId) const;
         void PrintLootList(ChatHandler& chat, WorldSession* session) const;

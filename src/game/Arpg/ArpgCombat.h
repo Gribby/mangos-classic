@@ -43,6 +43,7 @@ namespace Arpg
         ACTION_AIM         = 4,                             // float x, y, z, uint64 intended
         ACTION_LOOT        = 5,                             // uint64 corpse, uint8 loot slot (0xFF the gold)
         ACTION_LOOT_QUERY  = 6,                             // uint64 corpse
+        ACTION_DEV_LOOT    = 7,                             // uint8 quality (0xFF mixed), uint8 count, uint8 level
     };
 
     // What the client's cast aims at, by the spell's own target word.
