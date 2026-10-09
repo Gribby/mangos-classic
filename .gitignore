@@ -97,3 +97,6 @@ cmake_install.cmake
 # Module files
 #
 src/modules/
+
+# ARPG: this machine's paths for the run and update scripts
+arpg-local.bat
