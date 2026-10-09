@@ -582,6 +582,7 @@ class Spell
         // sets off a mechanic of its own.
         void SetArpgSecondary(uint32 pct, ObjectGuid exclude) { m_arpgSecondaryPct = pct; m_arpgExclude = exclude; }
         bool IsArpgSecondary() const { return m_arpgSecondaryPct != 0; }
+        bool IsArpgLine() const { return m_arpgLine; }
         SpellSchoolMask GetSchoolMask() const { return m_spellSchoolMask; }
 
         // scriptable conditionals

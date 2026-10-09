@@ -53,6 +53,7 @@
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgUniques.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1419,6 +1420,10 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     }
 
     bool isPet = victim->IsPet();
+
+    // ARPG: the kill's uniques (a DoT that spreads from the corpse, a fallen foe that rises), while
+    // its auras still stand.
+    Arpg::OnKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
 
     /* ******************************** Prepare loot if can ************************************ */
     // only lootable if it has loot or can drop gold, must be done before threat list is cleared

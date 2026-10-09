@@ -1345,6 +1345,10 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
             Unit::ProcDamageAndSpell(ProcSystemArguments(affectiveCaster, procAttacker & PROC_FLAG_ON_TRAP_ACTIVATION ? m_targets.getUnitTarget() : unit, affectiveCaster ? procAttacker : uint32(PROC_FLAG_NONE), procVictim, procEx, 0, 0, m_attackType, m_spellInfo, this));
     }
 
+    // ARPG: a unique's on-land mechanic (an aura that spreads to the enemies near its target).
+    if (missInfo == SPELL_MISS_NONE && !reflectTarget && affectiveCaster)
+        Arpg::OnSpellLanded(this, affectiveCaster, unitTarget);
+
     OnAfterHit();
 
     if (unit->IsCreature())
@@ -3075,8 +3079,9 @@ void Spell::Prepare()
     // ARPG: an ARPG player's single-target hostile spell is a skillshot, aimed along
     // the bearing from the caster to its target as the cast begins, or along the bearing the ARPG
     // cast packet aimed with nobody on the line yet (fired into the empty air).
-    // A unique's added projectile is a skillshot too (Arpg::OnLineLaunch).
-    if (((m_clientCast && !m_IsTriggeredSpell) || m_arpgSecondaryPct) && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
+    // A unique's added projectile is a skillshot too (Arpg::OnLineLaunch); an added cast at a unit
+    // (a spread aura) is not.
+    if (((m_clientCast && !m_IsTriggeredSpell) || (m_arpgSecondaryPct && m_arpgAimSet)) && Arpg::Active(m_trueCaster) && Arpg::IsLineSpell(m_spellInfo))
     {
         Unit* target = m_targets.getUnitTarget();
         if ((target && target != m_trueCaster) || m_arpgAimSet)

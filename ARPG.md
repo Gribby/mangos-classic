@@ -16,11 +16,11 @@ tab-target combat into Diablo-style targetless combat for players on that client
 ## Uniques
 
 Named items whose ARPG wearer's spells work differently: `Arpg/ArpgUniques.{h,cpp}` (the table is
-`Arpg::Uniques()`, one line per item). Built kits: A, extra projectiles (free casts of the same
+`Arpg::Uniques()`, one line per item). Built kits (all but Ravager, Bonereaver's Edge and Striker's Mark): A, extra projectiles (free casts of the same
 spell, `Spell::SetArpgSecondary`, hooked in `Spell::cast`'s skillshot block); C chain, D
-fragments, E burst and G arc (direct damage hooked after the spell's damage in
+fragments, E burst, G arc, B pierce, H shockwave, K step (direct damage hooked after the spell's damage in
 `Spell::DoAllEffectOnTarget`; chain jumps and fragments fly, drawn by a cosmetic
-`SMSG_SPELL_GO` and landed by a delayed event). `SMSG_ARPG_ITEM_MECHANICS` (0x33E: `u8` count,
+`SMSG_SPELL_GO` and landed by a delayed event); I echo in `OnLineLaunch`; F spread on landing (`Spell::DoAllEffectOnTarget`, before `OnAfterHit`) and on death, J raise, both from `Arpg::OnKill` in the creature kill path. `SMSG_ARPG_ITEM_MECHANICS` (0x33E: `u8` count,
 then `u32` item and a C string per row) answers every hello. Design: the client's `docs/ARPG-UNIQUES.md`.
 
 ## Wire

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 
 namespace
 {
@@ -24,8 +25,75 @@ namespace
     constexpr float FRAGMENT_HALF_CONE = float(M_PI) / 4.0f;
     // A melee ability's arc (kit G): the swing's own 120 degrees.
     constexpr float ARC_WIDTH = 2.0f * float(M_PI) / 3.0f;
-    // A burst (kit E) takes at most this many enemies.
+    // A burst (kit E), a pierce through all (B), a spread on death (F): at most this many enemies.
     constexpr size_t BURST_MAX = 10;
+    // An echo (kit I) repeats this long after the cast it echoes, in ms.
+    constexpr uint32 ECHO_DELAY = 500;
+    // A step (kit K) moves the player this long after the kill, in ms, out of the spell's hit.
+    constexpr uint32 STEP_DELAY = 100;
+
+    // Each player's count of echoing casts (kit I), by guid.
+    std::unordered_map<ObjectGuid, uint32> sEchoCounts;
+
+    // The fair enemies along the line from `caster` at `bearing` between `fromDist` and `toDist`
+    // yards (the skillshot's width plus each one's reach), nearest first, not `exclude`.
+    std::vector<Unit*> UnitsAlongLine(Unit* caster, float bearing, float fromDist, float toDist, Unit const* exclude)
+    {
+        float const dirX = std::cos(bearing);
+        float const dirY = std::sin(bearing);
+        std::vector<std::pair<float, Unit*>> found;
+        for (Unit* unit : Arpg::EnemiesNear(caster, toDist + 10.0f))
+        {
+            if (unit == exclude || !unit->IsAlive() || !Arpg::MayCatchUnit(caster, unit, nullptr))
+                continue;
+            float const reach = unit->GetCombatReach();
+            float const offX = unit->GetPositionX() - caster->GetPositionX();
+            float const offY = unit->GetPositionY() - caster->GetPositionY();
+            float const along = offX * dirX + offY * dirY;
+            float const across = std::fabs(offX * dirY - offY * dirX);
+            if (along + reach <= fromDist || along - reach > toDist || across > Arpg::LINE_HALF_WIDTH + reach)
+                continue;
+            if (!caster->IsWithinLOSInMap(unit))
+                continue;
+            found.emplace_back(along, unit);
+        }
+        std::sort(found.begin(), found.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+        std::vector<Unit*> units;
+        for (auto const& [along, unit] : found)
+            units.push_back(unit);
+        return units;
+    }
+
+    // The `count` fair enemies nearest `center` within `radius` yards, in its sight, not `center`.
+    std::vector<Unit*> NearestTo(Unit* caster, Unit* center, float radius, size_t count)
+    {
+        std::vector<std::pair<float, Unit*>> found;
+        for (Unit* unit : Arpg::EnemiesNear(center, radius + 5.0f))
+        {
+            if (unit == center || !unit->IsAlive() || !Arpg::MayCatchUnit(caster, unit, nullptr))
+                continue;
+            float const dist = center->GetDistance(unit);
+            if (dist <= radius && center->IsWithinLOSInMap(unit))
+                found.emplace_back(dist, unit);
+        }
+        std::sort(found.begin(), found.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+        if (found.size() > count)
+            found.resize(count);
+        std::vector<Unit*> units;
+        for (auto const& [dist, unit] : found)
+            units.push_back(unit);
+        return units;
+    }
+
+    // A free copy of `spellInfo` from `player` at `target`, setting off no mechanic of its own.
+    void CastCopyAt(Player* player, SpellEntry const* spellInfo, Unit* target)
+    {
+        Spell* copy = new Spell(player, spellInfo, TRIGGERED_OLD_TRIGGERED);
+        copy->SetArpgSecondary(100, ObjectGuid());
+        SpellCastTargets targets;
+        targets.setUnitTarget(target);
+        copy->SpellStart(&targets);
+    }
 
     // Whether a unique row's spell (rank 1 id) covers `spellInfo`: any rank of it, or a spell whose
     // name is the row spell's name followed by nothing or a space, which takes in the spells a
@@ -175,6 +243,28 @@ namespace Arpg
             { 1318,  KIT_ARC,               78,   0, 0.0f,  50, "Heroic Strike hits every enemy in front of you. The extra enemies take 50% damage." },
             // Felstriker, Warchief Rend Blackhand (Upper Blackrock Spire): Eviscerate.
             { 12590, KIT_ARC,               2098, 0, 0.0f,  60, "Eviscerate strikes every enemy in front of you for 60% damage." },
+            // Witching Stave, Shadowfang Keep: Shadow Bolt.
+            { 1484,  KIT_PIERCE,            686,  1, 0.0f,  70, "Shadow Bolt pierces 1 enemy, dealing 70% damage to it." },
+            // Bow of Searing Arrows, world drop: Auto Shot.
+            { 2825,  KIT_PIERCE,            75,   0, 0.0f,  60, "Your Auto Shot arrows pierce every enemy in their path for 60% damage." },
+            // Hammer of the Grand Crusader, Balnazzar (Stratholme): Hammer of Wrath.
+            { 18717, KIT_PIERCE,            24275, 0, 0.0f, 70, "Hammer of Wrath pierces every enemy in its path for 70% damage." },
+            // Venomstrike, Lord Serpentis (Wailing Caverns): Serpent Sting.
+            { 6469,  KIT_SPREAD,            1978, 2, 8.0f,  100, "Serpent Sting spreads to 2 enemies within 8 yards when it lands." },
+            // Living Root, Verdan the Everliving (Wailing Caverns): Entangling Roots.
+            { 6631,  KIT_SPREAD,            339,  2, 6.0f,  100, "Entangling Roots also roots 2 more enemies within 6 yards of the target." },
+            // Hypnotic Blade, Arcanist Doan (Scarlet Monastery): Polymorph.
+            { 7714,  KIT_SPREAD,            118,  1, 8.0f,  100, "Polymorph also turns 1 more enemy within 8 yards into a sheep." },
+            // Lok'amir il Romathis, Nefarian (Blackwing Lair): Shadow Word: Pain.
+            { 19360, KIT_SPREAD,            589,  0, 8.0f,  100, "Shadow Word: Pain spreads to every enemy within 8 yards when its target dies." },
+            // Meteor Shard, Archmage Arugal (Shadowfang Keep): Sinister Strike.
+            { 6220,  KIT_SHOCKWAVE,         1752, 0, 12.0f, 50, "Sinister Strike sends a burning shard 12 yards ahead for 50% damage." },
+            // Azuresong Mageblade, Golemagg (Molten Core): Frostbolt.
+            { 17103, KIT_ECHO,              116,  3, 0.0f,  60, "Every 3rd Frostbolt is echoed for free at 60% damage." },
+            // Book of the Dead, Balnazzar (Stratholme): any kill raises a Skeleton (6412) for 20 sec.
+            { 13353, KIT_RAISE,             6412, 0, 20.0f, 20, "Enemies you kill have a 20% chance to rise as a skeleton that fights for you for 20 sec." },
+            // Perdition's Blade, Ragnaros (Molten Core): Sinister Strike.
+            { 18816, KIT_STEP,              1752, 0, 10.0f, 0,  "A kill with Sinister Strike steps you behind the nearest enemy within 10 yards." },
         };
         return table;
     }
@@ -195,6 +285,17 @@ namespace Arpg
                     best = &row;
         }
         return best;
+    }
+
+    // The `kit` row worn by `player` whatever the spell (kit J), if any.
+    UniqueMechanic const* WornAny(Player const* player, UniqueKit kit)
+    {
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            if (Item const* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                for (UniqueMechanic const& row : Uniques())
+                    if (row.item == item->GetEntry() && row.kit == kit)
+                        return &row;
+        return nullptr;
     }
 
     void SendUniques(Player* player)
@@ -220,22 +321,46 @@ namespace Arpg
             return;
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
-        UniqueMechanic const* row = WornMechanic(player, KIT_EXTRA_PROJECTILES, spellInfo);
-        if (!row)
-            return;
+        float const aim = spell->GetArpgAim();
+        float const aimDist = spell->GetArpgAimDist();
 
-        // Alternate sides of the aim, stepping out: +1, -1, +2, -2 lines.
-        float const step = row->value * float(M_PI) / 180.0f;
-        ObjectGuid const exclude = struck ? struck->GetObjectGuid() : ObjectGuid();
-        for (uint8 i = 1; i <= row->n; ++i)
+        // Extra projectiles (A), alternating sides of the aim, stepping out: +1, -1, +2, -2 lines.
+        if (UniqueMechanic const* row = WornMechanic(player, KIT_EXTRA_PROJECTILES, spellInfo))
         {
-            float const side = (i % 2) ? 1.0f : -1.0f;
-            float const bearing = spell->GetArpgAim() + side * float((i + 1) / 2) * step;
-            Spell* extra = new Spell(player, spellInfo, TRIGGERED_OLD_TRIGGERED);
-            extra->SetArpgSecondary(row->pct, exclude);
-            extra->SetArpgAim(bearing, spell->GetArpgAimDist());
-            SpellCastTargets targets;
-            extra->SpellStart(&targets);
+            float const step = row->value * float(M_PI) / 180.0f;
+            ObjectGuid const exclude = struck ? struck->GetObjectGuid() : ObjectGuid();
+            for (uint8 i = 1; i <= row->n; ++i)
+            {
+                float const side = (i % 2) ? 1.0f : -1.0f;
+                float const bearing = aim + side * float((i + 1) / 2) * step;
+                Spell* extra = new Spell(player, spellInfo, TRIGGERED_OLD_TRIGGERED);
+                extra->SetArpgSecondary(row->pct, exclude);
+                extra->SetArpgAim(bearing, aimDist);
+                SpellCastTargets targets;
+                extra->SpellStart(&targets);
+            }
+        }
+
+        // Echo (I): every `n`th cast flies again along the same aim a moment later.
+        if (UniqueMechanic const* row = WornMechanic(player, KIT_ECHO, spellInfo))
+        {
+            uint32& count = sEchoCounts[player->GetObjectGuid()];
+            if (++count >= std::max<uint8>(row->n, 1))
+            {
+                count = 0;
+                uint32 const pct = row->pct;
+                player->m_events.AddEvent(new UnitLambdaEvent(*player, [spellInfo, aim, aimDist, pct](Unit& owner)
+                {
+                    Player* caster = static_cast<Player*>(&owner);
+                    if (!caster->IsInWorld() || !caster->IsAlive())
+                        return;
+                    Spell* echo = new Spell(caster, spellInfo, TRIGGERED_OLD_TRIGGERED);
+                    echo->SetArpgSecondary(pct, ObjectGuid());
+                    echo->SetArpgAim(aim, aimDist);
+                    SpellCastTargets targets;
+                    echo->SpellStart(&targets);
+                }), player->m_events.CalculateTime(ECHO_DELAY));
+            }
         }
     }
 
@@ -325,5 +450,123 @@ namespace Arpg
                 DealShare(caster, unit, spellInfo, mask, share);
             }
         }
+
+        // Pierce (B): on along the line past the target, out to the spell's range.
+        if (UniqueMechanic const* row = WornMechanic(player, KIT_PIERCE, spellInfo))
+        {
+            float const bearing = spell->IsArpgLine() ? spell->GetArpgAim() : caster->GetAngle(victim);
+            float maxRange = GetSpellMaxRange(sSpellRangeStore.LookupEntry(spellInfo->rangeIndex));
+            player->ApplySpellMod(spellInfo->Id, SPELLMOD_RANGE, maxRange, false);
+            float const offX = victim->GetPositionX() - caster->GetPositionX();
+            float const offY = victim->GetPositionY() - caster->GetPositionY();
+            float const past = offX * std::cos(bearing) + offY * std::sin(bearing);
+            std::vector<Unit*> onward = UnitsAlongLine(caster, bearing, past, maxRange, victim);
+            size_t const cap = row->n ? row->n : BURST_MAX;
+            if (onward.size() > cap)
+                onward.resize(cap);
+            uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
+            ObjectGuid from = victim->GetObjectGuid();
+            for (Unit* unit : onward)
+            {
+                RelayHit(player, from, unit->GetObjectGuid(), spellInfo, mask, share, 0, 0.0f, GuidVector{});
+                from = unit->GetObjectGuid();
+            }
+        }
+
+        // Shockwave (H): along the caster's facing, past the target too.
+        if (UniqueMechanic const* row = WornMechanic(player, KIT_SHOCKWAVE, spellInfo))
+        {
+            uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
+            for (Unit* unit : UnitsAlongLine(caster, caster->GetOrientation(), 0.0f, row->value, victim))
+                DealShare(caster, unit, spellInfo, mask, share);
+        }
+
+        // Step (K): a kill moves the player behind the nearest enemy, just after the hit.
+        if (!victim->IsAlive())
+        {
+            if (UniqueMechanic const* row = WornMechanic(player, KIT_STEP, spellInfo))
+            {
+                std::vector<Unit*> next = NearestTo(caster, caster, row->value, 1);
+                if (!next.empty())
+                {
+                    ObjectGuid const nextGuid = next.front()->GetObjectGuid();
+                    player->m_events.AddEvent(new UnitLambdaEvent(*player, [nextGuid](Unit& owner)
+                    {
+                        Unit* enemy = owner.IsInWorld() ? owner.GetMap()->GetUnit(nextGuid) : nullptr;
+                        if (!enemy || !enemy->IsAlive() || !owner.IsAlive() || owner.IsRooted())
+                            return;
+                        float const o = enemy->GetOrientation();
+                        float const back = enemy->GetCombatReach() + 1.0f;
+                        float x = enemy->GetPositionX() - std::cos(o) * back;
+                        float y = enemy->GetPositionY() - std::sin(o) * back;
+                        float z = enemy->GetPositionZ();
+                        owner.UpdateAllowedPositionZ(x, y, z);
+                        if (!owner.IsWithinLOS(x, y, z + 1.0f))
+                            return;
+                        owner.NearTeleportTo(x, y, z, o);
+                    }), player->m_events.CalculateTime(STEP_DELAY));
+                }
+            }
+        }
+    }
+
+    void OnSpellLanded(Spell* spell, Unit* caster, Unit* target)
+    {
+        if (!spell || spell->IsArpgSecondary() || !target || target == caster || !Active(caster))
+            return;
+        Player* player = static_cast<Player*>(caster);
+        SpellEntry const* spellInfo = spell->m_spellInfo;
+        // Spread on landing (F, `n` > 0).
+        UniqueMechanic const* row = WornMechanic(player, KIT_SPREAD, spellInfo);
+        if (!row || !row->n || !caster->CanAttack(target))
+            return;
+        for (Unit* unit : NearestTo(caster, target, row->value, row->n))
+            CastCopyAt(player, spellInfo, unit);
+    }
+
+    void OnKill(Player* killer, Unit* victim)
+    {
+        if (!victim)
+            return;
+
+        // Spread on death (F, `n` 0): each ARPG player's aura on the corpse that a worn unique
+        // spreads, copied onto every enemy around it.
+        std::vector<std::pair<ObjectGuid, SpellEntry const*>> spreads;
+        for (auto const& [id, holder] : victim->GetSpellAuraHolderMap())
+        {
+            Unit* auraCaster = holder->GetCaster();
+            if (!Active(auraCaster) || !auraCaster->IsInMap(victim))
+                continue;
+            UniqueMechanic const* row = WornMechanic(static_cast<Player*>(auraCaster), KIT_SPREAD, holder->GetSpellProto());
+            if (row && !row->n)
+                spreads.emplace_back(auraCaster->GetObjectGuid(), holder->GetSpellProto());
+        }
+        for (auto const& [guid, spellInfo] : spreads)
+        {
+            Player* caster = victim->GetMap()->GetPlayer(guid);
+            UniqueMechanic const* row = caster ? WornMechanic(caster, KIT_SPREAD, spellInfo) : nullptr;
+            if (!row)
+                continue;
+            for (Unit* unit : NearestTo(caster, victim, row->value, BURST_MAX))
+                CastCopyAt(caster, spellInfo, unit);
+        }
+
+        // Raise (J): the fallen foe may rise to fight for the killer a while.
+        if (!Active(killer) || victim->GetTypeId() != TYPEID_UNIT)
+            return;
+        UniqueMechanic const* raise = WornAny(killer, KIT_RAISE);
+        if (!raise || !roll_chance_f(raise->value))
+            return;
+        Creature* risen = killer->SummonCreature(raise->spell, victim->GetPositionX(), victim->GetPositionY(),
+                          victim->GetPositionZ(), victim->GetOrientation(), TEMPSPAWN_TIMED_OR_DEAD_DESPAWN,
+                          raise->pct * IN_MILLISECONDS);
+        if (!risen)
+            return;
+        risen->SelectLevel(killer->GetLevel());
+        risen->setFaction(killer->GetFaction());
+        risen->SetOwnerGuid(killer->GetObjectGuid());
+        std::vector<Unit*> foes = NearestTo(killer, risen, 20.0f, 1);
+        if (!foes.empty() && risen->AI())
+            risen->AI()->AttackStart(foes.front());
     }
 }
