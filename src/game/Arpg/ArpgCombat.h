@@ -50,6 +50,10 @@ namespace Arpg
         ACTION_TREE_RESPEC = 9,                             // -
         ACTION_TREE_QUERY  = 10,                            // -
         ACTION_TREE_REFUND = 11,                            // uint16 node
+        ACTION_SKILL_SLOT   = 12,                           // uint8 slot, uint8 skill (0 clears)
+        ACTION_SKILL_SPEND  = 13,                           // uint16 node
+        ACTION_SKILL_REFUND = 14,                           // uint16 node
+        ACTION_SKILL_RESPEC = 15,                           // uint8 skill
     };
 
     // What the client's cast aims at, by the spell's own target word.

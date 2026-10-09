@@ -321,7 +321,7 @@ namespace Arpg
     {
         auto strikes = [attacker, victim](Unit* unit)
         {
-            return unit->IsAlive() && attacker->CanReachWithMeleeAttack(unit) &&
+            return unit->IsAlive() && attacker->CanReachWithMeleeAttack(unit, ExtraMeleeReach(attacker)) &&
                    attacker->HasInArc(unit, MELEE_ARC) && attacker->CanAttackInCombat(unit, false, false) &&
                    MayCatch(attacker, unit, victim);
         };

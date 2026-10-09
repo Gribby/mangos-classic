@@ -87,7 +87,52 @@ namespace Arpg
         KEY_LIGHTFORGED,       // your heals become holy bolts and no longer heal you; +30% Holy damage
         KEY_MARTYR,            // 25% of damage taken strikes every enemy within 10 yd; healing taken halved
         KEY_UNYIELDING,        // can't be stunned or slowed; 20% slower
+        // Skill tree hooks (ArpgSkills.h); those with ranks read KeyRank
+        KEY_WIDE_SWING,        // swings strike every enemy in front, at 20/35/50%
+        KEY_LONG_ARM,          // +1 yd melee reach per rank
+        KEY_WHIRLING_STRIKES,  // every 4th swing strikes all around
+        KEY_QUICKENED,         // +4% attack speed per rank
+        KEY_MOMENTUM,          // +1% swing damage per rank per hit in a row, 5 hits at most
+        KEY_CRUSADERS_PACE,    // kills give +30% movement speed for 3 sec
+        KEY_HEAVY_HAND,        // +5% Physical damage per rank with a two-hander
+        KEY_STAGGER,           // 10% chance per rank a swing dazes
+        KEY_SHOCKWAVE_STRIKE,  // a swing crit sends a 10 yd shockwave at 40%
+        KEY_HOLY_EDGE,         // +6% Seal damage per rank
+        KEY_TWIN_SEALS,        // two different Seals at once
+        KEY_COMMANDING_SEAL,   // +10% Seal of Command damage per rank
+        KEY_RELENTLESS,        // +1 Seal of Command proc a minute per rank
+        KEY_ZEAL,              // +10% attack speed per rank while Seal of the Crusader is on
+        KEY_MANA_STRIKE,       // Seal hits give 1% of max mana per rank
+        KEY_LIGHT_OF_THE_CRUSADER, // Seal hits heal 5% of their damage
+        KEY_ECHOING_VERDICT,   // Judgement's chain loses 10% less per rank
+        KEY_FINAL_VERDICT,     // a Judgement kill readies Judgement
+        KEY_RADIANCE,          // +8% Judgement damage per rank
+        KEY_SENTENCE,          // Judgement deals double damage to stunned enemies
+        KEY_RIGHTEOUS_MIND,    // Judgement restores 5% of max mana per rank
+        KEY_WALKING_CONSECRATION, // Consecration follows you
+        KEY_BURNING_GROUND,    // +8% Consecration damage per rank
+        KEY_SEARING_LIGHT,     // +5% Holy damage per rank to enemies in your Consecration
+        KEY_SANCTIFIED,        // Judgement on a consecrated enemy bursts at 50%
+        KEY_HALLOWED_GROUND,   // 1% health a second per rank inside your Consecration
+        KEY_STEADFAST,         // no stuns inside your Consecration
+        KEY_SACRED_SEAL,       // Seals strike twice on consecrated enemies
+        KEY_RICOCHET,          // Hammer of Justice bounces to 1 more enemy per rank
+        KEY_BLESSED_HAMMER,    // Hammer of Justice also hurls three blessed hammers
+        KEY_HOLY_HAMMER,       // Hammer of Justice deals Holy damage, 30% of attack power + 15% per rank
+        KEY_SENTENCE_PASSED,   // +15% damage to stunned enemies
         MAX_KEYSTONE
+    };
+
+    // A spell modifier a skill node gives: `op` (SpellModOp) of `type` (SpellModType) by `value`
+    // over the paladin spells whose family flags fit `mask`.
+    struct SkillSpellMod
+    {
+        uint8 op;
+        uint8 type;
+        int32 value;
+        uint64 mask;
+
+        bool operator==(SkillSpellMod const& o) const { return op == o.op && type == o.type && value == o.value && mask == o.mask; }
     };
 
     // What a player's taken nodes add up to.
@@ -103,9 +148,12 @@ namespace Arpg
         int32 meleeAreaPct = 0;
         int32 spellAreaPct = 0;
         int32 blockPct = 0;
-        uint32 keys = 0;             // bit per Keystone
+        uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
-        bool Has(Keystone key) const { return keys & (uint32(1) << key); }
+        std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers
+
+        bool Has(Keystone key) const { return key < MAX_KEYSTONE && rank[key] != 0; }
+        uint8 Rank(Keystone key) const { return key < MAX_KEYSTONE ? rank[key] : 0; }
     };
 
     // The final bosses whose first kill gives a point, by creature entry.
@@ -147,11 +195,17 @@ namespace Arpg
     // What the player's web adds up to; nullptr for a player without an ARPG web.
     std::shared_ptr<WebTotals const> TotalsOf(Unit const* unit);
 
-    // The uniques-kit rows the player's learned skill nodes give (none until the skill trees).
+    // The uniques-kit rows the player's skill nodes give (ArpgSkills.h).
     std::vector<UniqueMechanic const*> LearnedModifiers(Player const* player);
 
     // Whether the player has taken a node carrying `key`.
     bool HasKeystone(Unit const* unit, Keystone key);
+
+    // The rank of `key` the player has taken (0 for none).
+    uint8 KeyRank(Unit const* unit, Keystone key);
+
+    // Recompute the player's totals (web and skills) and apply them.
+    void RefreshTotals(Player* player);
 }
 
 #endif

@@ -43,9 +43,23 @@ Crusade, Unyielding), `Unit::DealDamage` (Martyr), the melee block outcome (Shie
 `Player::UpdateBlockPercentage`, the spell radius in `Spell` target fill and persistent area
 auras (Strength, Intellect), the kill path (life on kill, Crusade, boss points), the heal path
 (Lightforged, Blessed Recovery), and `Arpg::UpdateSwing` (the once-a-second refresh: speed, the
-Spirit cooldown modifier, Zealot's drain, level-ups). The first tree's capstones (Avenger,
-Martyr's Ward, Dawnbringer, Purifying Light) keep their hooks for the skill trees. Design: the
-client's `docs/ARPG-CHARACTER.md`.
+Spirit cooldown modifier, Zealot's drain, level-ups). Avenger is now the Judgement tree's; Martyr's Ward,
+Dawnbringer and Purifying Light keep their hooks for later skill trees. Design: the client's
+`docs/ARPG-CHARACTER.md`.
+
+## Skills
+
+`Arpg/ArpgSkills.{h,cpp}`: five specialisation slots (open at 1/10/20/30/40), two skill points a
+level from 2 to 51, 20 at most in a skill, and the paladin's Strike, Seals, Judgement,
+Consecration and Hammer of Justice trees. Saved in `character_arpg_skill` and
+`character_arpg_skill_node`. Kinds 12 slot (`u8` slot, `u8` skill), 13 take (`u16` node), 14 give
+back (`u16` node), 15 respec a skill (`u8` skill); kind 10 answers with the skills too.
+`SMSG_ARPG_SKILLS` (0x340; `NUM_MSG_TYPES` 0x341). Nodes are spell modifiers, kit rows
+(`LearnedModifiers`) or keystone ranks; hooks in `Unit::AttackerStateUpdate` (swing nodes),
+`Unit::RemoveNoStackAurasDueToAuraHolder` (Twin Seals), the PPM proc chance (Relentless), the
+Judgement script (Righteous Mind), `Arpg::SelectMeleeVictim` (Long Arm), and the uniques' spell
+damage and landing hooks. An ARPG character also gets its class trainers' spells free at their
+level (`TeachClassSpells`, spells without ranks' first pass).
 
 ## Wire
 

@@ -21,6 +21,10 @@
  *     ACTION_TREE_RESPEC  -: give the whole web back
  *     ACTION_TREE_QUERY   -: send the web
  *     ACTION_TREE_REFUND  uint16 node: give one node back
+ *     ACTION_SKILL_SLOT   uint8 slot, uint8 skill: specialise a skill in a slot (Arpg/ArpgSkills.h)
+ *     ACTION_SKILL_SPEND  uint16 node: take a rank in a skill tree
+ *     ACTION_SKILL_REFUND uint16 node: give a rank back
+ *     ACTION_SKILL_RESPEC uint8 skill: give back every point in a skill
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -30,6 +34,7 @@
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgSkills.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -215,9 +220,58 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             {
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
+                    {
                         Arpg::SendTree(arpg);
+                        Arpg::SendSkills(arpg);
+                    }
             });
             break;
+        case Arpg::ACTION_SKILL_SLOT:
+        {
+            uint8 slot, skill;
+            recvPacket >> slot >> skill;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([slot, skill](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::SlotSkill(arpg, slot, skill);
+            });
+            break;
+        }
+        case Arpg::ACTION_SKILL_SPEND:
+        case Arpg::ACTION_SKILL_REFUND:
+        {
+            uint16 node;
+            recvPacket >> node;
+            Arpg::OnHello(player);
+            bool const spend = kind == Arpg::ACTION_SKILL_SPEND;
+            GetMessager().AddMessage([node, spend](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                    {
+                        if (spend)
+                            Arpg::SpendSkillNode(arpg, node);
+                        else
+                            Arpg::RefundSkillNode(arpg, node);
+                    }
+            });
+            break;
+        }
+        case Arpg::ACTION_SKILL_RESPEC:
+        {
+            uint8 skill;
+            recvPacket >> skill;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([skill](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::RespecSkill(arpg, skill);
+            });
+            break;
+        }
         default:
             recvPacket.rpos(recvPacket.wpos());
             break;

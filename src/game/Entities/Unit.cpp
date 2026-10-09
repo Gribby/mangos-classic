@@ -2682,6 +2682,8 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool ext
     SendAttackStateUpdate(&meleeDamageInfo);
     DealMeleeDamage(&meleeDamageInfo, true);
     ProcDamageAndSpell(ProcSystemArguments(this, meleeDamageInfo.target, meleeDamageInfo.procAttacker, meleeDamageInfo.procVictim, meleeDamageInfo.procEx, meleeDamageInfo.totalDamage, meleeDamageInfo.absorb, meleeDamageInfo.attackType));
+    // ARPG: the Strike skill tree's swing nodes (Arpg/ArpgCharacter.h).
+    Arpg::OnSwingHit(this, pVictim, meleeDamageInfo.totalDamage, (meleeDamageInfo.HitInfo & HITINFO_CRITICALHIT) != 0);
 
     uint32 totalAbsorb = 0;
     uint32 totalResist = 0;
@@ -5039,6 +5041,10 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
             unique = true;
             personal = true;
         }
+
+        // ARPG: the Twin Seals capstone keeps a second, different Seal on (Arpg/ArpgCharacter.h).
+        if ((unique || !stackable) && Arpg::KeepsSecondSeal(this, spellProto, existingSpellProto))
+            continue;
 
         if (unique || !stackable)
         {

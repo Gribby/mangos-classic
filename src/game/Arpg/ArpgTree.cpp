@@ -5,9 +5,11 @@
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgSkills.h"
 
 #include "Database/DatabaseEnv.h"
 #include "Entities/Player.h"
+#include "Globals/ObjectMgr.h"
 #include "Groups/Group.h"
 #include "Log/Log.h"
 #include "Server/DBCStores.h"
@@ -337,7 +339,11 @@ namespace
                     out.all.insert(spell);
                 }
             if (ranks.size() == 1 && !first->HasAttribute(SPELL_ATTR_PASSIVE))
-                out.free.emplace_back(first->Id, 10 + talent->Row * 5);
+            {
+                // A paladin without area damage can't play an ARPG: Consecration comes at 6.
+                bool const early = classId == CLASS_PALADIN && std::strcmp(first->SpellName[0], "Consecration") == 0;
+                out.free.emplace_back(first->Id, early ? 6 : 10 + talent->Row * 5);
+            }
         }
         return out;
     }
@@ -422,7 +428,7 @@ namespace
             if (!node)
                 continue;
             if (node->key != KEY_NONE)
-                t.keys |= uint32(1) << node->key;
+                t.rank[node->key] = 1;
             for (Fx const& fx : node->fx)
             {
                 switch (fx.kind)
@@ -450,9 +456,12 @@ namespace
         ClassWeb const* web = WebOf(player->getClass());
         if (!web)
             return;
+        std::set<uint16> const taken = WebFor(player).nodes;
+        WebTotals totals = Sum(*web, taken);
+        AddSkillTotals(player, totals);
         Edit(player, [&](PlayerWeb& w)
         {
-            w.totals = std::make_shared<WebTotals const>(Sum(*web, w.nodes));
+            w.totals = std::make_shared<WebTotals const>(std::move(totals));
         });
         ApplyCharacter(player);
     }
@@ -489,6 +498,65 @@ namespace
         return keep;
     }
 
+    // Every spell a class trainer teaches, by the trainers' own lists, dropping repeats.
+    std::vector<TrainerSpell const*> const& ClassTrainerSpells(uint8 classId)
+    {
+        static std::mutex lock;
+        static std::map<uint8, std::vector<TrainerSpell const*>> cache;
+        std::lock_guard<std::mutex> guard(lock);
+        auto it = cache.find(classId);
+        if (it != cache.end())
+            return it->second;
+        std::vector<TrainerSpell const*>& out = cache[classId];
+        std::set<uint32> seen;
+        auto take = [&](TrainerSpellData const* data)
+        {
+            if (!data)
+                return;
+            for (auto const& [id, spell] : data->spellList)
+                if (spell.learnedSpell && !spell.conditionId && seen.insert(spell.learnedSpell).second)
+                    out.push_back(&spell);
+        };
+        for (uint32 i = 1; i < sCreatureStorage.GetMaxEntry(); ++i)
+        {
+            CreatureInfo const* info = sCreatureStorage.LookupEntry<CreatureInfo>(i);
+            if (!info || info->TrainerType != TRAINER_TYPE_CLASS || info->TrainerClass != classId ||
+                    !(info->NpcFlags & UNIT_NPC_FLAG_TRAINER))
+                continue;
+            take(sObjectMgr.GetNpcTrainerSpells(info->Entry));
+            if (info->TrainerTemplateId)
+                take(sObjectMgr.GetNpcTrainerTemplateSpells(info->TrainerTemplateId));
+        }
+        std::sort(out.begin(), out.end(), [](TrainerSpell const* a, TrainerSpell const* b) { return a->reqLevel < b->reqLevel; });
+        return out;
+    }
+
+    // Spells without ranks, first pass: the class's trainer spells come free at their level, so
+    // each spell is the rank for the character's level (the server's spellbook shows a chain's
+    // highest rank only, and the client keeps the bar on it).
+    void TeachClassSpells(Player* player)
+    {
+        std::vector<TrainerSpell const*> const& spells = ClassTrainerSpells(player->getClass());
+        for (int pass = 0; pass < 8; ++pass)
+        {
+            bool learned = false;
+            for (TrainerSpell const* spell : spells)
+            {
+                uint32 reqLevel = 0;
+                if (!player->IsSpellFitByClassAndRace(spell->learnedSpell, &reqLevel))
+                    continue;
+                if (spell->isProvidedReqLevel)
+                    reqLevel = spell->reqLevel;
+                if (player->GetTrainerSpellState(spell, reqLevel) != TRAINER_SPELL_GREEN)
+                    continue;
+                player->learnSpell(spell->learnedSpell, false);
+                learned = true;
+            }
+            if (!learned)
+                break;
+        }
+    }
+
     // Drop the talent spells the character shouldn't have, and give it the free ones.
     void SettleTalentSpells(Player* player)
     {
@@ -500,6 +568,7 @@ namespace
         for (auto const& [spell, level] : TalentsOf(player->getClass()).free)
             if (player->GetLevel() >= level && !player->HasSpell(spell))
                 player->learnSpell(spell, false);
+        TeachClassSpells(player);
         Edit(player, [&](PlayerWeb& e) { e.level = player->GetLevel(); });
     }
 
@@ -606,13 +675,17 @@ namespace Arpg
         }
         if (web)
             w.totals = std::make_shared<WebTotals const>(Sum(*web, w.nodes));
-        std::lock_guard<std::mutex> guard(sWebsLock);
-        sWebs[player->GetObjectGuid()] = std::move(w);
+        {
+            std::lock_guard<std::mutex> guard(sWebsLock);
+            sWebs[player->GetObjectGuid()] = std::move(w);
+        }
+        LoadSkills(player);
     }
 
     void UnloadTree(Player* player)
     {
         ForgetCharacter(player);
+        UnloadSkills(player);
         std::lock_guard<std::mutex> guard(sWebsLock);
         sWebs.erase(player->GetObjectGuid());
     }
@@ -650,6 +723,7 @@ namespace Arpg
                     TeachNode(player, *node, true);
         Refresh(player);
         SendTree(player);
+        SendSkills(player);
     }
 
     void UpdateTree(Player* player)
@@ -658,7 +732,20 @@ namespace Arpg
         if (!w.arpg || w.level == player->GetLevel())
             return;
         SettleTalentSpells(player);
+        Refresh(player);
         SendTree(player);
+        SendSkills(player);
+    }
+
+    void RefreshTotals(Player* player)
+    {
+        Refresh(player);
+    }
+
+    uint8 KeyRank(Unit const* unit, Keystone key)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
+        return totals ? totals->Rank(key) : 0;
     }
 
     void SpendNode(Player* player, uint16 id)
@@ -809,9 +896,9 @@ namespace Arpg
         return it == sWebs.end() || !it->second.arpg ? nullptr : it->second.totals;
     }
 
-    std::vector<UniqueMechanic const*> LearnedModifiers(Player const* /*player*/)
+    std::vector<UniqueMechanic const*> LearnedModifiers(Player const* player)
     {
-        return {};
+        return SkillModifiers(player);
     }
 
     bool HasKeystone(Unit const* unit, Keystone key)

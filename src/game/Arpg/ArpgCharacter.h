@@ -20,6 +20,8 @@
  *   - cooldown recovery: a percent cooldown spell modifier over the class's spells, which the
  *     client is sent like any talent's, so its cooldowns agree
  *   - life on kill: a heal when the player kills a creature
+ *   - the skill trees' nodes: spell modifiers sent to the client like a talent's, and the hooks
+ *     below, each reading its Keystone's rank
  */
 
 #ifndef MANGOS_ARPG_CHARACTER_H
@@ -78,6 +80,31 @@ namespace Arpg
 
     // `killer` is credited with `victim`'s death: life on kill, Crusade, a final boss's point.
     void OnCharacterKill(Player* killer, Unit* victim);
+
+    // --- The skill trees' hooks (ArpgSkills.h) ---
+
+    // Extra melee reach, in yards (Long Arm).
+    float ExtraMeleeReach(Unit const* attacker);
+
+    // `attacker`'s weapon swing hit `victim` for `damage` (Wide Swing, Whirling Strikes, Momentum,
+    // Stagger, Shockwave).
+    void OnSwingHit(Unit* attacker, Unit* victim, uint32 damage, bool crit);
+
+    // `spell` of `caster` hurt `victim` for `dealt` (Mana Strike, Light of the Crusader, Sacred
+    // Seal, Final Verdict, Sanctified). Added hits never come here.
+    void OnSkillSpellDamage(Spell* spell, Unit* caster, Unit* victim, uint32 dealt);
+
+    // `spell` of `caster` landed on `target` (Hammer of Justice's Holy Hammer, Ricochet, Blessed Hammer).
+    void OnSkillSpellLanded(Spell* spell, Unit* caster, Unit* target);
+
+    // `caster` judged (Righteous Mind).
+    void OnJudgement(Unit* caster);
+
+    // Extra procs a minute for `caster`'s proc aura `spellInfo` (Relentless).
+    float ExtraPpm(Unit const* caster, SpellEntry const* spellInfo);
+
+    // Whether `unit` keeps its Seal `existing` while gaining the Seal `adding` (Twin Seals).
+    bool KeepsSecondSeal(Unit const* unit, SpellEntry const* adding, SpellEntry const* existing);
 }
 
 #endif

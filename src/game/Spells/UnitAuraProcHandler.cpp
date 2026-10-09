@@ -28,6 +28,7 @@
 #include "Entities/Totem.h"
 #include "Entities/Creature.h"
 #include "Util/Util.h"
+#include "Arpg/ArpgCharacter.h"
 
 pAuraProcHandler AuraProcHandler[TOTAL_AURAS] =
 {
@@ -598,7 +599,8 @@ Unit::SpellProcEventTriggerCheck Unit::IsTriggeredAtSpellProcEvent(ProcExecution
     if (!data.isVictim && spellProcEvent && spellProcEvent->ppmRate != 0)
     {
         uint32 WeaponSpeed = GetAttackTime(data.attType);
-        chance = GetPPMProcChance(WeaponSpeed, spellProcEvent->ppmRate);
+        // ARPG: the Relentless node adds procs a minute (Arpg/ArpgCharacter.h).
+        chance = GetPPMProcChance(WeaponSpeed, spellProcEvent->ppmRate + Arpg::ExtraPpm(this, spellProto));
     }
     // Apply chance modifier aura
     if (Player* modOwner = GetSpellModOwner())

@@ -4,11 +4,13 @@
 
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgUniques.h"
 
 #include "Entities/Creature.h"
+#include "Entities/DynamicObject.h"
 #include "Entities/Item.h"
 #include "Entities/Player.h"
 #include "Spells/Spell.h"
@@ -18,6 +20,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <set>
 #include <deque>
 #include <mutex>
 #include <unordered_map>
@@ -49,13 +53,37 @@ namespace
     constexpr float FURY_RANGE = 8.0f;
     constexpr size_t FURY_COUNT = 3;
 
+    // The skill trees' numbers.
+    constexpr float SWING_ARC = 2.0f * float(M_PI) / 3.0f;
+    constexpr uint32 WIDE_SWING_PCT[3] = { 20, 35, 50 };
+    constexpr uint32 WHIRL_EVERY = 4, WHIRL_PCT = 75;
+    constexpr uint32 MOMENTUM_WINDOW = 3000, MOMENTUM_MAX = 5;
+    constexpr uint32 PACE_MS = 3000;
+    constexpr float PACE_SPEED = 1.3f;
+    constexpr float SHOCKWAVE_REACH = 10.0f;
+    constexpr uint32 SHOCKWAVE_PCT = 40;
+    constexpr uint32 DAZED = 1604, CLEAVE = 845, WHIRLWIND = 1680, WAR_STOMP = 20549;
+    constexpr uint32 CONSECRATION = 26573, JUDGEMENT = 20271;
+    constexpr float SANCTIFIED_RANGE = 8.0f;
+    constexpr uint32 SANCTIFIED_PCT = 50;
+    constexpr float RICOCHET_RANGE = 10.0f;
+    constexpr float BLESSED_RANGE = 15.0f;
+    constexpr size_t BLESSED_COUNT = 3;
+    constexpr float WALK_FOLLOW = 2.5f;
+
     // What has been applied to a player, and the keystones' running state.
     struct Runtime
     {
         int32 stat[5] = {};
         int32 armourPct = 0;
-        bool zealot = false;
-        bool unyielding = false;
+        float haste = 0.0f;          // the attack speed percent applied (Zealot, Quickened, Zeal)
+        bool stunImmune = false;     // Unyielding, or Steadfast inside Consecration
+        bool snareImmune = false;    // Unyielding
+        std::vector<std::pair<SkillSpellMod, SpellModifier*>> skillMods;
+        uint32 swings = 0;           // Whirling Strikes: swings that hit
+        uint32 momentum = 0;         // Momentum: hits in a row
+        uint32 lastHit = 0;
+        uint32 paceUntil = 0;        // Crusader's Pace: the time its speed ends
         SpellModifier* cooldownMod = nullptr;
         int32 cooldownPct = 0;
         float speed = 1.0f;
@@ -169,6 +197,125 @@ namespace
         return false;
     }
 
+    bool AuraNamed(Unit const* unit, char const* prefix, ObjectGuid caster)
+    {
+        size_t const n = std::strlen(prefix);
+        for (auto const& [id, holder] : unit->GetSpellAuraHolderMap())
+        {
+            char const* name = holder->GetSpellProto()->SpellName[0];
+            if (name && std::strncmp(name, prefix, n) == 0 && (!caster || holder->GetCasterGuid() == caster))
+                return true;
+        }
+        return false;
+    }
+
+    // Whether `victim` stands in `by`'s Consecration (it carries the ground's aura).
+    bool Consecrated(Unit const* victim, Unit const* by)
+    {
+        return victim && by && AuraNamed(victim, "Consecration", by->GetObjectGuid());
+    }
+
+    // The player's own Consecration on the ground, any rank.
+    DynamicObject* OwnConsecration(Player* player)
+    {
+        for (uint32 id = CONSECRATION; id; id = sSpellMgr.GetNextSpellInChain(id))
+            if (DynamicObject* dyn = player->GetDynObject(id))
+                return dyn;
+        return nullptr;
+    }
+
+    bool Inside(Player* player, DynamicObject* dyn)
+    {
+        return dyn && player->GetDistance(dyn, false, DIST_CALC_NONE) <= dyn->GetRadius();
+    }
+
+    // The attack speed percent the player should have.
+    float HasteFor(Player const* player, WebTotals const& t)
+    {
+        float haste = 0.0f;
+        if (t.Has(KEY_ZEALOT))
+            haste += ZEALOT_HASTE;
+        haste += 4.0f * t.Rank(KEY_QUICKENED);
+        if (t.Has(KEY_ZEAL) && AuraNamed(player, "Seal of the Crusader", player->GetObjectGuid()))
+            haste += 10.0f * t.Rank(KEY_ZEAL);
+        return haste;
+    }
+
+    void SetHaste(Player* player, Runtime& r, float haste)
+    {
+        if (std::abs(haste - r.haste) < 0.01f)
+            return;
+        for (WeaponAttackType att : { BASE_ATTACK, OFF_ATTACK })
+        {
+            if (r.haste > 0.0f)
+                player->ApplyAttackTimePercentMod(att, r.haste, false);
+            if (haste > 0.0f)
+                player->ApplyAttackTimePercentMod(att, haste, true);
+        }
+        r.haste = haste;
+    }
+
+    void SetImmunity(Player* player, Runtime& r, bool stun, bool snare)
+    {
+        if (stun != r.stunImmune)
+        {
+            player->ApplySpellImmune(nullptr, IMMUNITY_MECHANIC, MECHANIC_STUN, stun);
+            if (stun)
+                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_STUN);
+            r.stunImmune = stun;
+        }
+        if (snare != r.snareImmune)
+        {
+            player->ApplySpellImmune(nullptr, IMMUNITY_MECHANIC, MECHANIC_SNARE, snare);
+            player->ApplySpellImmune(nullptr, IMMUNITY_STATE, SPELL_AURA_MOD_DECREASE_SPEED, snare);
+            if (snare)
+                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_DECREASE_SPEED);
+            r.snareImmune = snare;
+        }
+    }
+
+    // The skill nodes' spell modifiers, applied as the totals list them.
+    void SetSkillMods(Player* player, Runtime& r, std::vector<SkillSpellMod> const& want)
+    {
+        bool same = want.size() == r.skillMods.size();
+        for (size_t i = 0; same && i < want.size(); ++i)
+            same = want[i] == r.skillMods[i].first;
+        if (same)
+            return;
+        for (auto& [spec, mod] : r.skillMods)
+            if (mod)
+                player->AddSpellMod(mod, false); // deletes it
+        r.skillMods.clear();
+        uint32 const owner = FamilySpell(player);
+        for (SkillSpellMod const& spec : want)
+        {
+            SpellModifier* mod = nullptr;
+            if (owner)
+            {
+                mod = new SpellModifier(SpellModOp(spec.op), SpellModType(spec.type), spec.value, owner, spec.mask);
+                player->AddSpellMod(mod, true);
+            }
+            r.skillMods.emplace_back(spec, mod);
+        }
+    }
+
+    // Walking Consecration: the ground moves under the player, keeping what is left of its time.
+    void WalkConsecration(Player* player, DynamicObject* dyn)
+    {
+        if (!dyn || player->GetDistance(dyn, false, DIST_CALC_NONE) <= WALK_FOLLOW)
+            return;
+        uint32 const left = dyn->GetDuration();
+        uint32 const spellId = dyn->GetSpellId();
+        SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
+        if (!spellInfo || left < 1000)
+            return;
+        player->RemoveDynObject(spellId);
+        player->CastSpell(player, spellInfo, TRIGGERED_OLD_TRIGGERED | TRIGGERED_IGNORE_COSTS | TRIGGERED_IGNORE_COOLDOWNS);
+        if (DynamicObject* fresh = player->GetDynObject(spellId))
+            if (fresh->GetDuration() > left)
+                fresh->Delay(int32(fresh->GetDuration() - left));
+    }
+
     // The once-a-second refresh: speed, cooldown recovery, Zealot's drain, a level gained.
     void Refresh(Player* player, Runtime& r, uint32 now)
     {
@@ -183,6 +330,20 @@ namespace
             player->UpdateSpeed(MOVE_RUN, true);
         }
         SetCooldownMod(player, r, CooldownPct(player, t, r, now));
+        SetHaste(player, r, HasteFor(player, t));
+
+        // Consecration's skill nodes.
+        DynamicObject* ground = (t.Has(KEY_WALKING_CONSECRATION) || t.Has(KEY_HALLOWED_GROUND) || t.Has(KEY_STEADFAST))
+                                ? OwnConsecration(player) : nullptr;
+        if (t.Has(KEY_WALKING_CONSECRATION) && player->IsAlive())
+        {
+            WalkConsecration(player, ground);
+            ground = OwnConsecration(player);
+        }
+        bool const inside = Inside(player, ground);
+        if (inside && t.Has(KEY_HALLOWED_GROUND) && player->IsAlive())
+            player->ModifyHealth(int32(player->GetMaxHealth() * t.Rank(KEY_HALLOWED_GROUND) / 100));
+        SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (inside && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
 
         if (t.Has(KEY_ZEALOT) && player->IsAlive() && SealOn(player))
         {
@@ -224,26 +385,9 @@ namespace Arpg
         }
         player->UpdateBlockPercentage();
 
-        bool const zealot = t.Has(KEY_ZEALOT);
-        if (zealot != r.zealot)
-        {
-            player->ApplyAttackTimePercentMod(BASE_ATTACK, ZEALOT_HASTE, zealot);
-            player->ApplyAttackTimePercentMod(OFF_ATTACK, ZEALOT_HASTE, zealot);
-            r.zealot = zealot;
-        }
-        bool const unyielding = t.Has(KEY_UNYIELDING);
-        if (unyielding != r.unyielding)
-        {
-            player->ApplySpellImmune(nullptr, IMMUNITY_MECHANIC, MECHANIC_STUN, unyielding);
-            player->ApplySpellImmune(nullptr, IMMUNITY_MECHANIC, MECHANIC_SNARE, unyielding);
-            player->ApplySpellImmune(nullptr, IMMUNITY_STATE, SPELL_AURA_MOD_DECREASE_SPEED, unyielding);
-            if (unyielding)
-            {
-                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_STUN);
-                player->RemoveSpellsCausingAura(SPELL_AURA_MOD_DECREASE_SPEED);
-            }
-            r.unyielding = unyielding;
-        }
+        SetHaste(player, r, HasteFor(player, t));
+        SetSkillMods(player, r, t.mods);
+        SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (r.stunImmune && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
         // Speed and cooldowns at once, not at the next refresh.
         r.lastRefresh = 0;
     }
@@ -277,7 +421,7 @@ namespace Arpg
         Refresh(player, r, now);
     }
 
-    float DamageDoneMod(Unit const* attacker, Unit const* /*victim*/, SpellEntry const* spellInfo)
+    float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo)
     {
         std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
         if (!totals)
@@ -307,8 +451,39 @@ namespace Arpg
                     pct += 20;
             }
         }
+        uint32 const now = WorldTimer::getMSTime();
         if (t.Has(KEY_CRUSADE))
-            pct += CRUSADE_PER_KILL * int32(CrusadeStacks(R(attacker), WorldTimer::getMSTime()));
+            pct += CRUSADE_PER_KILL * int32(CrusadeStacks(R(attacker), now));
+
+        // The skill trees.
+        SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
+        if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
+        {
+            Runtime const& r = R(attacker);
+            if (WorldTimer::getMSTimeDiff(r.lastHit, now) <= MOMENTUM_WINDOW)
+                pct += int32(r.momentum * t.Rank(KEY_MOMENTUM));
+        }
+        if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
+            pct += 5 * t.Rank(KEY_HEAVY_HAND);
+        if (skill == SKILL_SEALS)
+        {
+            pct += 6 * t.Rank(KEY_HOLY_EDGE);
+            if (spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) == 0)
+                pct += 10 * t.Rank(KEY_COMMANDING_SEAL);
+        }
+        if (skill == SKILL_JUDGEMENT)
+            pct += 8 * t.Rank(KEY_RADIANCE);
+        if (skill == SKILL_CONSECRATION)
+            pct += 8 * t.Rank(KEY_BURNING_GROUND);
+        if (victim && victim->IsStunned())
+        {
+            if (skill == SKILL_JUDGEMENT && t.Has(KEY_SENTENCE))
+                pct += 100;
+            if (t.Has(KEY_SENTENCE_PASSED))
+                pct += 15;
+        }
+        if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_SEARING_LIGHT) && Consecrated(victim, attacker))
+            pct += 5 * t.Rank(KEY_SEARING_LIGHT);
         return std::max(0.0f, 1.0f + pct / 100.0f);
     }
 
@@ -352,6 +527,8 @@ namespace Arpg
             speed *= CRUSADE_SLOW;
         if (t.Has(KEY_UNYIELDING))
             speed *= UNYIELDING_SLOW;
+        if (t.Has(KEY_CRUSADERS_PACE) && WorldTimer::getMSTime() < R(unit).paceUntil)
+            speed *= PACE_SPEED;
         return speed;
     }
 
@@ -431,5 +608,137 @@ namespace Arpg
             while (r.kills.size() > CRUSADE_MAX)
                 r.kills.pop_front();
         }
+        if (t.Has(KEY_CRUSADERS_PACE))
+        {
+            R(killer).paceUntil = WorldTimer::getMSTime() + PACE_MS;
+            killer->UpdateSpeed(MOVE_RUN, true);
+            R(killer).speed = MoveSpeedMod(killer);
+        }
+    }
+
+    float ExtraMeleeReach(Unit const* attacker)
+    {
+        return float(KeyRank(attacker, KEY_LONG_ARM));
+    }
+
+    void OnSwingHit(Unit* attacker, Unit* victim, uint32 damage, bool crit)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
+        if (!totals || !victim)
+            return;
+        WebTotals const& t = *totals;
+        Player* player = static_cast<Player*>(attacker);
+        Runtime& r = R(attacker);
+        uint32 const now = WorldTimer::getMSTime();
+
+        if (t.Has(KEY_MOMENTUM) && damage)
+        {
+            r.momentum = WorldTimer::getMSTimeDiff(r.lastHit, now) <= MOMENTUM_WINDOW ? std::min(r.momentum + 1, MOMENTUM_MAX) : 1;
+            r.lastHit = now;
+        }
+        if (!damage)
+            return;
+        float const reach = ExtraMeleeReach(attacker);
+        bool const whirl = t.Has(KEY_WHIRLING_STRIKES) && ++r.swings % WHIRL_EVERY == 0;
+        uint8 const wide = t.Rank(KEY_WIDE_SWING);
+        if (whirl || wide)
+        {
+            uint32 const pct = whirl ? WHIRL_PCT : WIDE_SWING_PCT[std::min<uint8>(wide, 3) - 1];
+            SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(whirl ? WHIRLWIND : CLEAVE);
+            if (shown)
+                for (Unit* unit : EnemiesNear(attacker, 8.0f + reach))
+                    if (unit != victim && unit->IsAlive() && MayCatchUnit(attacker, unit, nullptr) &&
+                            attacker->CanReachWithMeleeAttack(unit, reach) && (whirl || attacker->HasInArc(unit, SWING_ARC)))
+                        StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, std::max<uint32>(1, damage * pct / 100));
+        }
+        if (t.Has(KEY_STAGGER) && victim->IsAlive() && roll_chance_i(10 * t.Rank(KEY_STAGGER)))
+            attacker->CastSpell(victim, DAZED, TRIGGERED_OLD_TRIGGERED);
+        if (crit && t.Has(KEY_SHOCKWAVE_STRIKE))
+            if (SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(WAR_STOMP))
+                for (Unit* unit : FoesAlongLine(player, attacker->GetOrientation(), 0.0f, SHOCKWAVE_REACH, victim))
+                    StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, std::max<uint32>(1, damage * SHOCKWAVE_PCT / 100));
+    }
+
+    void OnSkillSpellDamage(Spell* spell, Unit* caster, Unit* victim, uint32 dealt)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(caster);
+        if (!totals || !spell || !victim)
+            return;
+        WebTotals const& t = *totals;
+        Player* player = static_cast<Player*>(caster);
+        SpellEntry const* spellInfo = spell->m_spellInfo;
+        SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
+
+        if (skill == SKILL_SEALS)
+        {
+            if (t.Has(KEY_MANA_STRIKE))
+                player->ModifyPower(POWER_MANA, int32(player->GetMaxPower(POWER_MANA) * t.Rank(KEY_MANA_STRIKE) / 100));
+            if (t.Has(KEY_LIGHT_OF_THE_CRUSADER) && player->IsAlive())
+                player->ModifyHealth(int32(std::max<uint32>(1, dealt * 5 / 100)));
+            if (t.Has(KEY_SACRED_SEAL) && victim->IsAlive() && Consecrated(victim, caster))
+                StrikeFoe(caster, victim, spellInfo, spell->GetSchoolMask(), dealt);
+        }
+        if (skill == SKILL_JUDGEMENT)
+        {
+            if (t.Has(KEY_FINAL_VERDICT) && !victim->IsAlive())
+                if (SpellEntry const* judgement = sSpellTemplate.LookupEntry<SpellEntry>(JUDGEMENT))
+                    player->RemoveSpellCooldown(*judgement, true);
+            if (t.Has(KEY_SANCTIFIED) && Consecrated(victim, caster))
+                for (Unit* unit : NearestFoes(caster, victim, SANCTIFIED_RANGE, 10))
+                    StrikeFoe(caster, unit, spellInfo, spell->GetSchoolMask(), std::max<uint32>(1, dealt * SANCTIFIED_PCT / 100));
+        }
+    }
+
+    void OnSkillSpellLanded(Spell* spell, Unit* caster, Unit* target)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(caster);
+        if (!totals || !spell || !target || !caster->CanAttack(target))
+            return;
+        WebTotals const& t = *totals;
+        Player* player = static_cast<Player*>(caster);
+        SpellEntry const* spellInfo = spell->m_spellInfo;
+        if (SkillOfSpell(player->getClass(), spellInfo) != SKILL_HAMMER)
+            return;
+        float const ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
+        if (t.Has(KEY_HOLY_HAMMER) && target->IsAlive())
+            StrikeFoe(caster, target, spellInfo, SPELL_SCHOOL_MASK_HOLY,
+                      std::max<uint32>(1, uint32(ap * (0.15f + 0.15f * t.Rank(KEY_HOLY_HAMMER)))));
+        if (t.Has(KEY_RICOCHET))
+            BounceCast(player, target, spellInfo, t.Rank(KEY_RICOCHET), RICOCHET_RANGE);
+        if (t.Has(KEY_BLESSED_HAMMER))
+            for (Unit* unit : NearestFoes(caster, caster, BLESSED_RANGE, BLESSED_COUNT))
+                SendBolt(player, unit, spellInfo, SPELL_SCHOOL_MASK_HOLY, std::max<uint32>(1, uint32(ap * 0.5f)));
+    }
+
+    void OnJudgement(Unit* caster)
+    {
+        if (uint8 rank = KeyRank(caster, KEY_RIGHTEOUS_MIND))
+            caster->ModifyPower(POWER_MANA, int32(caster->GetMaxPower(POWER_MANA) * 5 * rank / 100));
+    }
+
+    float ExtraPpm(Unit const* caster, SpellEntry const* spellInfo)
+    {
+        if (!spellInfo || !spellInfo->SpellName[0] || std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) != 0)
+            return 0.0f;
+        return float(KeyRank(caster, KEY_RELENTLESS));
+    }
+
+    bool KeepsSecondSeal(Unit const* unit, SpellEntry const* adding, SpellEntry const* existing)
+    {
+        if (!adding || !existing || !IsSealSpell(adding) || !IsSealSpell(existing) || !HasKeystone(unit, KEY_TWIN_SEALS))
+            return false;
+        uint32 const chain = sSpellMgr.GetFirstSpellInChain(adding->Id);
+        if (sSpellMgr.GetFirstSpellInChain(existing->Id) == chain)
+            return false;
+        // Keep it if it is the only other Seal on.
+        std::set<uint32> others;
+        for (auto const& [id, holder] : unit->GetSpellAuraHolderMap())
+        {
+            SpellEntry const* proto = holder->GetSpellProto();
+            if (holder->GetCasterGuid() == unit->GetObjectGuid() && IsSealSpell(proto) &&
+                    sSpellMgr.GetFirstSpellInChain(proto->Id) != chain)
+                others.insert(sSpellMgr.GetFirstSpellInChain(proto->Id));
+        }
+        return others.size() < 2;
     }
 }

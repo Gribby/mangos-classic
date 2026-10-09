@@ -39,7 +39,8 @@
  * to the one they reach draws the missile, and the hit lands when it arrives.
  * A row's spell covers every rank of it and any spell named after it ("Judgement of
  * Righteousness" under Judgement, each missile under Arcane Missiles).
- * If two worn items change the same spell with the same kit, the one with the larger `n` applies.
+ * If two sources (worn items, skill nodes) change the same spell with the same kit, the one with
+ * the larger `n` applies, then the one with the larger `pct`.
  *
  *   SMSG_ARPG_ITEM_MECHANICS: uint8 count, then per row: uint32 item id, cstring tooltip line.
  *   Sent in answer to every hello, so the client can show the lines.
@@ -49,6 +50,7 @@
 #define MANGOS_ARPG_UNIQUES_H
 
 #include "Common.h"
+#include "Entities/ObjectGuid.h"
 
 #include <vector>
 
@@ -128,6 +130,13 @@ namespace Arpg
     void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount);
     // A holy bolt (Holy Shock's missile) from `player` at `to`, landing for `amount`.
     void SendHolyBolt(Player* player, Unit* to, uint32 amount);
+    // A bolt drawn as `visual` from `player` at `to`, landing for `amount` of `schoolMask`.
+    void SendBolt(Player* player, Unit* to, SpellEntry const* visual, uint32 schoolMask, uint32 amount);
+    // The fair enemies along the line from `caster` at `bearing`, `fromDist` to `toDist` yards out.
+    std::vector<Unit*> FoesAlongLine(Unit* caster, float bearing, float fromDist, float toDist, Unit const* exclude);
+    // A free copy of `spellInfo` bounces from `from` to the nearest enemy not in `hit` within
+    // `range` yards, `hops` times, each hop drawn as the spell's missile.
+    void BounceCast(Player* player, Unit* from, SpellEntry const* spellInfo, uint8 hops, float range, GuidVector hit = {});
 }
 
 #endif

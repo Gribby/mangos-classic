@@ -20,6 +20,7 @@
 #include "Spells/SpellAuras.h"
 #include "Spells/SpellMgr.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgCharacter.h"
 
 struct SealOfTheCrusader : public AuraScript
 {
@@ -117,6 +118,9 @@ struct spell_judgement : public SpellScript
         }
 
         caster->CastSpell(unitTarget, spellId2, TRIGGERED_IGNORE_GCD | TRIGGERED_IGNORE_CURRENT_CASTED_SPELL | TRIGGERED_IGNORE_HIT_CALCULATION);
+        // ARPG: the Righteous Mind node's mana (Arpg/ArpgCharacter.h).
+        if (spellId2 > 1)
+            Arpg::OnJudgement(caster);
     }
 };
 

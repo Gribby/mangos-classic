@@ -5,6 +5,7 @@
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgCharacter.h"
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
@@ -34,6 +35,8 @@ namespace
     constexpr size_t BURST_MAX = 10;
     // An echo (kit I) repeats this long after the cast it echoes, in ms.
     constexpr uint32 ECHO_DELAY = 500;
+    // A bounced cast (the Ricochet node) reaches its next enemy this long after the last, in ms.
+    constexpr uint32 BOUNCE_DELAY = 200;
     // A step (kit K) moves the player this long after the kill, in ms, out of the spell's hit.
     constexpr uint32 STEP_DELAY = 100;
 
@@ -325,12 +328,13 @@ namespace Arpg
                 continue;
             for (UniqueMechanic const& row : Uniques())
                 if (row.item == item->GetEntry() && row.kit == kit && SpellMatches(row.spell, spellInfo) &&
-                        (!best || row.n > best->n))
+                        (!best || row.n > best->n || (row.n == best->n && row.pct > best->pct)))
                     best = &row;
         }
-        // The skill tree's modifier nodes, by the same rule: the larger count applies.
+        // The skill trees' nodes, by the same rule: the larger count applies, then the larger share.
         for (UniqueMechanic const* row : LearnedModifiers(player))
-            if (row->kit == kit && SpellMatches(row->spell, spellInfo) && (!best || row->n > best->n))
+            if (row->kit == kit && SpellMatches(row->spell, spellInfo) &&
+                    (!best || row->n > best->n || (row->n == best->n && row->pct > best->pct)))
                 best = row;
         return best;
     }
@@ -416,6 +420,8 @@ namespace Arpg
     {
         if (!spell || spell->IsArpgSecondary() || !victim || !dealt || !Active(caster))
             return;
+        // The skill trees' on-hit nodes (Seals, Judgement), before the kit's.
+        OnSkillSpellDamage(spell, caster, victim, dealt);
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SpellSchoolMask const mask = spell->GetSchoolMask();
@@ -564,6 +570,8 @@ namespace Arpg
             return;
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
+        // The skill trees' on-land nodes (Hammer of Justice).
+        OnSkillSpellLanded(spell, caster, target);
         // Spread on landing (F, `n` > 0).
         UniqueMechanic const* row = WornMechanic(player, KIT_SPREAD, spellInfo);
         if (!row || !row->n || !caster->CanAttack(target))
@@ -692,5 +700,44 @@ namespace Arpg
             return;
         RelayHit(player, player->GetObjectGuid(), to->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
                  std::max<uint32>(1, amount), 0, 0.0f, GuidVector{});
+    }
+
+    std::vector<Unit*> FoesAlongLine(Unit* caster, float bearing, float fromDist, float toDist, Unit const* exclude)
+    {
+        return UnitsAlongLine(caster, bearing, fromDist, toDist, exclude);
+    }
+
+    void SendBolt(Player* player, Unit* to, SpellEntry const* visual, uint32 schoolMask, uint32 amount)
+    {
+        if (!visual || !to)
+            return;
+        RelayHit(player, player->GetObjectGuid(), to->GetObjectGuid(), visual, SpellSchoolMask(schoolMask),
+                 std::max<uint32>(1, amount), 0, 0.0f, GuidVector{});
+    }
+
+    void BounceCast(Player* player, Unit* from, SpellEntry const* spellInfo, uint8 hops, float range, GuidVector hit)
+    {
+        if (!hops || !from)
+            return;
+        if (hit.empty())
+            hit.push_back(from->GetObjectGuid());
+        Unit* next = NextInChain(player, from, range, hit);
+        if (!next)
+            return;
+        hit.push_back(next->GetObjectGuid());
+        SendRelayVisual(from, next, spellInfo);
+        ObjectGuid const nextGuid = next->GetObjectGuid();
+        auto land = [nextGuid, spellInfo, hops, range, hit](Unit& owner)
+        {
+            Player* caster = static_cast<Player*>(&owner);
+            if (!caster->IsInWorld())
+                return;
+            Unit* target = caster->GetMap()->GetUnit(nextGuid);
+            if (!target || !target->IsAlive())
+                return;
+            CastCopyAt(caster, spellInfo, target);
+            BounceCast(caster, target, spellInfo, hops - 1, range, hit);
+        };
+        player->m_events.AddEvent(new UnitLambdaEvent(*player, land), player->m_events.CalculateTime(BOUNCE_DELAY));
     }
 }
