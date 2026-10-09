@@ -1,12 +1,14 @@
 /*
- * ARPG skill trees: see ArpgTree.h.
+ * ARPG passive web: see ArpgTree.h.
  */
 
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
 
 #include "Database/DatabaseEnv.h"
 #include "Entities/Player.h"
+#include "Groups/Group.h"
 #include "Log/Log.h"
 #include "Server/DBCStores.h"
 #include "Server/Opcodes.h"
@@ -14,425 +16,807 @@
 #include "Server/WorldSession.h"
 #include "Spells/SpellMgr.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <set>
+#include <string>
 #include <unordered_map>
 
 namespace
 {
     using namespace Arpg;
 
-    struct TreeNode
+    // --- The web's data ---
+
+    enum FxKind : uint8
+    {
+        FX_STAT,          // arg: the attribute (Stats)
+        FX_ALL_STATS,
+        FX_ARMOUR,        // % armour
+        FX_TAG,           // arg: the Tag; % damage (healing, for Heal)
+        FX_HEALING,       // % healing done
+        FX_MOVE,          // % movement speed
+        FX_COOLDOWN,      // % cooldown recovery
+        FX_LIFE_ON_KILL,  // health per kill
+        FX_MELEE_AREA,    // % melee area
+        FX_SPELL_AREA,    // % spell area
+        FX_BLOCK,         // % block chance
+    };
+
+    struct Fx
+    {
+        FxKind kind;
+        uint8 arg;
+        int32 value;
+    };
+
+    struct WebNode
     {
         uint16 id;
-        uint8 classId;
-        uint8 branch;
-        uint8 tier;        // 1 to 3, 4 the keystone
-        uint8 column;      // 0 to 2
-        TreeNodeKind kind;
-        uint8 maxRank;
-        char const* name;
-        char const* talent;  // passive and skill: the vanilla talent, by name
-        // modifier: the kit row, its count per rank
-        UniqueKit kit;
-        char const* spell;   // modifier: the spell it changes; keystone: its icon's spell
-        uint8 n[3];
-        float value;
-        uint32 pct;
+        WebNodeKind kind;
+        uint8 region;
+        int16 x, y;
+        std::string name;
+        std::string text;
+        uint32 icon;              // the spell whose icon it shows; 0 for none (a talent's own)
+        std::vector<Fx> fx;
+        char const* talent;       // a vanilla talent it teaches, by name, at `rank`
+        uint8 rank;
         Keystone key;
+    };
+
+    struct Region
+    {
+        std::string name;
+        int16 x, y;
+    };
+
+    struct ClassWeb
+    {
+        std::vector<Region> regions;
+        std::vector<WebNode> nodes;          // index = id - 1
+        std::vector<std::pair<uint16, uint16>> links;
+        std::vector<std::vector<uint16>> next; // index = id - 1: the nodes it joins
+    };
+
+    // The spec a node is built from.
+    struct Spec
+    {
+        char const* name;
         char const* text;
-    };
-
-    char const* const PALADIN_BRANCHES[3] = { "Crusader", "Bulwark", "Lightbringer" };
-
-    // The paladin tree (docs/ARPG-SKILL-TREES.md). Columns 0-2, tiers 1-3, keystone in tier 4.
-    std::vector<TreeNode> const& Nodes()
-    {
-        static std::vector<TreeNode> const nodes =
-        {
-            // Crusader: two-handed melee.
-            { 1,  CLASS_PALADIN, 0, 1, 0, NODE_PASSIVE,  3, "Two-Handed Specialization", "Two-Handed Weapon Specialization", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases the damage you deal with two-handed melee weapons by 2% per rank." },
-            { 2,  CLASS_PALADIN, 0, 1, 1, NODE_PASSIVE,  5, "Benediction", "Benediction", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Reduces the mana cost of your Judgement and Seal spells by 3% per rank." },
-            { 3,  CLASS_PALADIN, 0, 1, 2, NODE_MODIFIER, 1, "Sweeping Seal", nullptr, KIT_ARC, "Seal of Righteousness", { 0 }, 0.0f, 40, KEY_NONE,
-              "Seal of Righteousness strikes every enemy in front of you. The extra enemies take 40% damage." },
-            { 4,  CLASS_PALADIN, 0, 2, 0, NODE_PASSIVE,  5, "Conviction", "Conviction", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases your chance to get a critical strike with melee weapons by 1% per rank." },
-            { 5,  CLASS_PALADIN, 0, 2, 1, NODE_MODIFIER, 2, "Chain of Judgement", nullptr, KIT_CHAIN, "Judgement", { 1, 2 }, 10.0f, 50, KEY_NONE,
-              "Judgement chains to 1 more enemy within 10 yards per rank, for 50% damage." },
-            { 6,  CLASS_PALADIN, 0, 2, 2, NODE_SKILL,    1, "Seal of Command", "Seal of Command", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Teaches Seal of Command." },
-            { 7,  CLASS_PALADIN, 0, 3, 0, NODE_PASSIVE,  5, "Vengeance", "Vengeance", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "After a critical strike, your physical and Holy damage rises by 3% per rank for 8 sec." },
-            { 8,  CLASS_PALADIN, 0, 3, 2, NODE_MODIFIER, 1, "Commanding Sweep", nullptr, KIT_ARC, "Seal of Command", { 0 }, 0.0f, 60, KEY_NONE,
-              "Seal of Command strikes every enemy in front of you for 60% damage." },
-            { 9,  CLASS_PALADIN, 0, 4, 1, NODE_KEYSTONE, 1, "Avenger", nullptr, KIT_ARC, "Judgement", {}, 0, 0, KEY_AVENGER,
-              "Judgement no longer consumes your Seal, but its cooldown is doubled." },
-
-            // Bulwark: shield and control.
-            { 21, CLASS_PALADIN, 1, 1, 0, NODE_PASSIVE,  5, "Toughness", "Toughness", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases the armour from your items by 2% per rank." },
-            { 22, CLASS_PALADIN, 1, 1, 1, NODE_PASSIVE,  5, "Redoubt", "Redoubt", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "After a critical strike against you, your chance to block rises for your next 5 blocks." },
-            { 23, CLASS_PALADIN, 1, 1, 2, NODE_MODIFIER, 2, "Shockwave Hammer", nullptr, KIT_SPREAD, "Hammer of Justice", { 1, 2 }, 8.0f, 100, KEY_NONE,
-              "Hammer of Justice also stuns 1 more enemy within 8 yards per rank." },
-            { 24, CLASS_PALADIN, 1, 2, 0, NODE_PASSIVE,  2, "Improved Retribution Aura", "Improved Retribution Aura", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases the damage of your Retribution Aura by 25% per rank." },
-            { 25, CLASS_PALADIN, 1, 2, 1, NODE_PASSIVE,  5, "Reckoning", "Reckoning", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "A chance per rank after being critically hit to gain an extra attack." },
-            { 26, CLASS_PALADIN, 1, 2, 2, NODE_SKILL,    1, "Holy Shield", "Holy Shield", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Teaches Holy Shield." },
-            { 27, CLASS_PALADIN, 1, 3, 0, NODE_SKILL,    1, "Blessing of Sanctuary", "Blessing of Sanctuary", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Teaches Blessing of Sanctuary." },
-            { 28, CLASS_PALADIN, 1, 3, 2, NODE_MODIFIER, 1, "Radiant Shield", nullptr, KIT_BURST, "Holy Shield", { 0 }, 5.0f, 50, KEY_NONE,
-              "Holy Shield's damage bursts onto every enemy within 5 yards of the one it hits, for 50%." },
-            { 29, CLASS_PALADIN, 1, 4, 1, NODE_KEYSTONE, 1, "Martyr's Ward", nullptr, KIT_ARC, "Retribution Aura", {}, 0, 0, KEY_MARTYRS_WARD,
-              "While you are in combat, your Retribution Aura also strikes every enemy within 10 yards once a second, for double its damage." },
-
-            // Lightbringer: holy caster.
-            { 41, CLASS_PALADIN, 2, 1, 0, NODE_PASSIVE,  5, "Divine Intellect", "Divine Intellect", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases your Intellect by 2% per rank." },
-            { 42, CLASS_PALADIN, 2, 1, 1, NODE_PASSIVE,  3, "Healing Light", "Healing Light", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases the healing of Holy Light and Flash of Light by 4% per rank." },
-            { 43, CLASS_PALADIN, 2, 1, 2, NODE_SKILL,    1, "Consecration", "Consecration", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Teaches Consecration." },
-            { 44, CLASS_PALADIN, 2, 2, 0, NODE_PASSIVE,  5, "Illumination", "Illumination", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Your healing critical strikes have a 20% chance per rank to refund their mana." },
-            { 45, CLASS_PALADIN, 2, 2, 1, NODE_SKILL,    1, "Holy Shock", "Holy Shock", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Teaches Holy Shock." },
-            { 46, CLASS_PALADIN, 2, 2, 2, NODE_MODIFIER, 2, "Arcing Shock", nullptr, KIT_CHAIN, "Holy Shock", { 1, 2 }, 10.0f, 60, KEY_NONE,
-              "Holy Shock chains to 1 more enemy within 10 yards per rank, for 60% damage." },
-            { 47, CLASS_PALADIN, 2, 3, 0, NODE_PASSIVE,  5, "Holy Power", "Holy Power", KIT_ARC, nullptr, {}, 0, 0, KEY_NONE,
-              "Increases the critical strike chance of your Holy spells by 1% per rank." },
-            { 48, CLASS_PALADIN, 2, 3, 2, NODE_MODIFIER, 1, "Purifying Light", nullptr, KIT_ARC, "Exorcism", {}, 0, 0, KEY_PURIFYING_LIGHT,
-              "Exorcism and Holy Wrath strike every enemy, not only undead and demons." },
-            { 49, CLASS_PALADIN, 2, 4, 1, NODE_KEYSTONE, 1, "Dawnbringer", nullptr, KIT_ARC, "Holy Light", {}, 0, 0, KEY_DAWNBRINGER,
-              "Your heals on yourself also send a bolt of holy damage at the nearest enemy, for 50% of the amount healed." },
-        };
-        return nodes;
-    }
-
-    TreeNode const* FindNode(uint16 id)
-    {
-        for (TreeNode const& node : Nodes())
-            if (node.id == id)
-                return &node;
-        return nullptr;
-    }
-
-    // The first spell named `name`, or 0.
-    uint32 SpellByName(char const* name)
-    {
-        if (!name)
-            return 0;
-        for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
-            if (SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id))
-                if (spell->SpellName[0] && std::strcmp(spell->SpellName[0], name) == 0)
-                    return id;
-        return 0;
-    }
-
-    // What the data gives each node, resolved once: a talent's rank spells, a modifier's rows
-    // (one per rank), and the icon's spell.
-    struct Resolved
-    {
-        std::vector<uint32> ranks;
-        std::vector<UniqueMechanic> rows;
+        std::vector<Fx> fx;
         uint32 icon = 0;
+        char const* talent = nullptr;
+        uint8 rank = 0;
+        Keystone key = KEY_NONE;
     };
 
-    std::unordered_map<uint16, Resolved> const& Resolve()
+    struct ArmSpec
     {
-        static std::unordered_map<uint16, Resolved> const resolved = []()
+        Spec small;     // each of its small nodes
+        Spec notable;
+        Spec end;       // a keystone, or a second notable
+        bool endIsKeystone;
+    };
+
+    struct RegionSpec
+    {
+        char const* name;
+        float angle;    // degrees, screen y down: -90 is up
+        Spec entry;
+        ArmSpec arms[3];
+        Spec sides[2];  // between arms 0 and 1, and 1 and 2
+    };
+
+    struct BridgeSpec
+    {
+        uint8 fromRegion, fromArm, toRegion, toArm;
+        float angle;
+        Spec notable;
+    };
+
+    // Layout radii, in web units (the client scales them).
+    constexpr float R_ENTRY1 = 80, R_ENTRY2 = 135, R_RING = 150, R_ARM0 = 190, R_ARM_STEP = 42, R_SIDE = 316,
+                    R_NOTABLE = 405, R_END = 525, R_LABEL = 640, R_BRIDGE_SMALL = 275, R_BRIDGE = 300;
+    constexpr int ARM_SMALLS = 5;
+
+    Fx Stat(Stats stat, int32 v) { return { FX_STAT, uint8(stat), v }; }
+    Fx TagFx(Tag tag, int32 v) { return { FX_TAG, uint8(tag), v }; }
+    Fx Of(FxKind kind, int32 v) { return { kind, 0, v }; }
+
+    ClassWeb BuildPaladin()
+    {
+        RegionSpec const regions[3] =
         {
-            std::unordered_map<uint16, Resolved> out;
-            for (TreeNode const& node : Nodes())
+            { "Crusader", -150.0f,
+              { "Crusader", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Might", "+5 Strength", { Stat(STAT_STRENGTH, 5) } },
+                    { "Two-Handed Mastery", "+12% Melee damage while you wield a two-handed weapon.", {}, 20111, nullptr, 0, KEY_TWO_HANDED_MASTERY },
+                    { "Zealot", "+25% attack speed. While a Seal is on you, it drains 1% of your mana each second.", {}, 20375, nullptr, 0, KEY_ZEALOT },
+                    true },
+                  { { "Edge", "+3% Melee damage", { TagFx(TAG_MELEE, 3) } },
+                    { "Conviction", "+5% chance to critically strike with melee weapons.", {}, 0, "Conviction", 5 },
+                    { "Vengeance", "After a critical strike, +15% Physical and Holy damage for 8 sec.", {}, 0, "Vengeance", 5 },
+                    false },
+                  { { "Fervour", "+4% Seal damage", { TagFx(TAG_SEAL, 4) } },
+                    { "Righteous Fervour", "+15% Seal damage. Your Seals and Judgement cost 15% less mana.", { TagFx(TAG_SEAL, 15) }, 0, "Benediction", 5 },
+                    { "Crusade", "Each kill in the last 5 sec gives +4% damage, up to 10 kills. Out of combat you move 20% slower.", {}, 20162, nullptr, 0, KEY_CRUSADE },
+                    true },
+              },
+              { { "Reach", "+5% melee area", { Of(FX_MELEE_AREA, 5) } },
+                { "Bloodthirst", "+5 life on kill", { Of(FX_LIFE_ON_KILL, 5) } } } },
+            { "Lightbringer", -30.0f,
+              { "Lightbringer", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Wisdom", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                    { "Illumination", "Your healing critical strikes refund their mana cost.", {}, 0, "Illumination", 5 },
+                    { "Lightforged", "Your heals become Holy bolts at the nearest enemy, for their full amount, and no longer heal you. +30% Holy damage.", {}, 635, nullptr, 0, KEY_LIGHTFORGED },
+                    true },
+                  { { "Radiant", "+4% Holy damage", { TagFx(TAG_HOLY, 4) } },
+                    { "Holy Power", "+5% chance to critically strike with Holy spells.", {}, 0, "Holy Power", 5 },
+                    { "Divine Favour", "Every 20 sec, your next Holy spell is a critical strike.", {}, 20216, nullptr, 0, KEY_DIVINE_FAVOUR },
+                    false },
+                  { { "Devotion", "+5 Spirit", { Stat(STAT_SPIRIT, 5) } },
+                    { "Healing Light", "+12% Holy Light and Flash of Light healing, and +10% all healing.", { Of(FX_HEALING, 10) }, 0, "Healing Light", 3 },
+                    { "Blessed Recovery", "Healing yourself gives +10% cooldown recovery for 4 sec.", {}, 633, nullptr, 0, KEY_BLESSED_RECOVERY },
+                    false },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Tempo", "+4% cooldown recovery", { Of(FX_COOLDOWN, 4) } } } },
+            { "Templar", 90.0f,
+              { "Templar", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Fortitude", "+6 Stamina", { Stat(STAT_STAMINA, 6) } },
+                    { "Shield Wall", "+10% chance to block. Your blocks heal you for 1% of your health.", { Of(FX_BLOCK, 10) }, 20925, nullptr, 0, KEY_SHIELD_WALL },
+                    { "Martyr", "25% of the damage you take strikes every enemy within 10 yards as Holy damage. Healing you take is halved.", {}, 7294, nullptr, 0, KEY_MARTYR },
+                    true },
+                  { { "Plate", "+4% armour", { Of(FX_ARMOUR, 4) } },
+                    { "Redoubt", "After a critical strike against you, +30% chance to block for 10 sec or 5 blocks.", {}, 0, "Redoubt", 5 },
+                    { "Reckoning", "When a damaging attack hits you, a 20% chance that your next swing strikes an extra time.", {}, 0, "Reckoning", 2 },
+                    false },
+                  { { "Zeal", "+4% Area damage", { TagFx(TAG_AREA, 4) } },
+                    { "Righteous Fury", "+20% Holy damage while three or more enemies are within 8 yards.", {}, 25780, nullptr, 0, KEY_RIGHTEOUS_FURY },
+                    { "Unyielding", "You can't be stunned or slowed. You move 20% slower.", {}, 498, nullptr, 0, KEY_UNYIELDING },
+                    true },
+              },
+              { { "Endurance", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } },
+                { "Stride", "+3% movement speed", { Of(FX_MOVE, 3) } } } },
+        };
+        BridgeSpec const bridges[3] =
+        {
+            { 0, 2, 1, 0, -90.0f, { "Holy Weapons", "+3% Holy damage per 10 Strength.", {}, 20154, nullptr, 0, KEY_HOLY_WEAPONS } },
+            { 1, 2, 2, 0, 30.0f, { "Aegis", "+8 Stamina, +8 Intellect and +8 Spirit.", { Stat(STAT_STAMINA, 8), Stat(STAT_INTELLECT, 8), Stat(STAT_SPIRIT, 8) }, 465 } },
+            { 2, 2, 0, 0, 150.0f, { "Shield and Hammer", "+10% Melee damage while you wield a one-handed weapon and a shield.", {}, 20196, nullptr, 0, KEY_SHIELD_AND_HAMMER } },
+        };
+        Spec const ring = { "Swiftness", "+3% movement speed", { Of(FX_MOVE, 3) } };
+        Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+
+        ClassWeb web;
+        auto add = [&web](WebNodeKind kind, uint8 region, float r, float deg, Spec const& spec) -> uint16
+        {
+            float const a = deg * float(M_PI) / 180.0f;
+            WebNode node;
+            node.id = uint16(web.nodes.size() + 1);
+            node.kind = kind;
+            node.region = region;
+            node.x = int16(std::lround(std::cos(a) * r));
+            node.y = int16(std::lround(std::sin(a) * r));
+            node.name = spec.name;
+            node.text = spec.text;
+            node.icon = spec.icon;
+            node.fx = spec.fx;
+            node.talent = spec.talent;
+            node.rank = spec.rank;
+            node.key = spec.key;
+            web.nodes.push_back(node);
+            return node.id;
+        };
+        auto link = [&web](uint16 a, uint16 b) { web.links.emplace_back(a, b); };
+
+        uint16 const start = add(WEB_START, 3, 0.0f, 0.0f, { "Paladin", "Your starting point. Every path leads out from here.", {} });
+        uint16 entry[3] = {};
+        uint16 tips[3][3] = {};
+        for (uint8 ri = 0; ri < 3; ++ri)
+        {
+            RegionSpec const& reg = regions[ri];
+            float const ra = reg.angle * float(M_PI) / 180.0f;
+            web.regions.push_back({ reg.name, int16(std::lround(std::cos(ra) * R_LABEL)), int16(std::lround(std::sin(ra) * R_LABEL)) });
+            uint16 const e1 = add(WEB_SMALL, ri, R_ENTRY1, reg.angle, reg.entry);
+            uint16 const e2 = add(WEB_SMALL, ri, R_ENTRY2, reg.angle, reg.entry);
+            link(start, e1);
+            link(e1, e2);
+            entry[ri] = e2;
+            uint16 mids[3] = {};
+            for (int i = 0; i < 3; ++i)
             {
-                Resolved& r = out[node.id];
-                if (node.talent)
+                ArmSpec const& arm = reg.arms[i];
+                float const off = float(i - 1) * 30.0f;
+                uint16 prev = e2;
+                for (int k = 0; k < ARM_SMALLS; ++k)
                 {
-                    uint32 const classMask = 1 << (node.classId - 1);
-                    for (uint32 i = 0; i < sTalentStore.GetNumRows() && r.ranks.empty(); ++i)
-                    {
-                        TalentEntry const* talent = sTalentStore.LookupEntry(i);
-                        TalentTabEntry const* tab = talent ? sTalentTabStore.LookupEntry(talent->TalentTab) : nullptr;
-                        if (!tab || !(tab->ClassMask & classMask) || !talent->RankID[0])
-                            continue;
-                        SpellEntry const* first = sSpellTemplate.LookupEntry<SpellEntry>(talent->RankID[0]);
-                        if (!first || !first->SpellName[0] || std::strcmp(first->SpellName[0], node.talent) != 0)
-                            continue;
-                        for (uint32 spell : talent->RankID)
-                            if (spell)
-                                r.ranks.push_back(spell);
-                    }
-                    if (r.ranks.empty())
-                        sLog.outError("ARPG tree: node %u names talent \"%s\", which this class does not have", node.id, node.talent);
-                    else
-                        r.icon = r.ranks.front();
+                    float const wobble = (k % 2 ? 4.0f : -4.0f) * (i == 1 ? 1.0f : float(i - 1));
+                    uint16 const s = add(WEB_SMALL, ri, R_ARM0 + k * R_ARM_STEP, reg.angle + off + wobble, arm.small);
+                    link(prev, s);
+                    prev = s;
+                    if (k == 1)
+                        tips[ri][i] = s;
+                    if (k == 3)
+                        mids[i] = s;
                 }
-                if (node.spell)
-                {
-                    uint32 const spell = SpellByName(node.spell);
-                    if (!spell)
-                        sLog.outError("ARPG tree: node %u names spell \"%s\", which does not exist", node.id, node.spell);
-                    if (!r.icon)
-                        r.icon = spell;
-                    if (node.kind == NODE_MODIFIER && node.key == KEY_NONE && spell)
-                        for (uint8 rank = 0; rank < node.maxRank; ++rank)
-                            r.rows.push_back({ 0, node.kit, spell, node.n[rank], node.value, node.pct, node.text });
-                }
+                uint16 const notable = add(WEB_NOTABLE, ri, R_NOTABLE, reg.angle + off, arm.notable);
+                link(prev, notable);
+                uint16 const end = add(arm.endIsKeystone ? WEB_KEYSTONE : WEB_NOTABLE, ri, R_END, reg.angle + off, arm.end);
+                link(notable, end);
             }
-            return out;
-        }();
-        return resolved;
+            link(tips[ri][0], tips[ri][1]);
+            link(tips[ri][1], tips[ri][2]);
+            for (int g = 0; g < 2; ++g)
+            {
+                uint16 const side = add(WEB_SMALL, ri, R_SIDE, reg.angle + (g ? 15.0f : -15.0f), reg.sides[g]);
+                link(mids[g], side);
+                link(side, mids[g + 1]);
+            }
+        }
+        // Between the regions, near the start and out at the bridges.
+        for (BridgeSpec const& b : bridges)
+        {
+            uint16 const r = add(WEB_SMALL, 3, R_RING, b.angle, ring);
+            link(entry[b.fromRegion], r);
+            link(r, entry[b.toRegion]);
+        }
+        for (BridgeSpec const& b : bridges)
+        {
+            uint16 const a = add(WEB_SMALL, 3, R_BRIDGE_SMALL, b.angle - 14.0f, bridgeSmall);
+            uint16 const mid = add(WEB_NOTABLE, 3, R_BRIDGE, b.angle, b.notable);
+            uint16 const c = add(WEB_SMALL, 3, R_BRIDGE_SMALL, b.angle + 14.0f, bridgeSmall);
+            link(tips[b.fromRegion][b.fromArm], a);
+            link(a, mid);
+            link(mid, c);
+            link(c, tips[b.toRegion][b.toArm]);
+        }
+        web.regions.push_back({ "", 0, 0 }); // region 3: the start and the bridges, unlabelled
+
+        web.next.resize(web.nodes.size());
+        for (auto const& [a, b] : web.links)
+        {
+            web.next[a - 1].push_back(b);
+            web.next[b - 1].push_back(a);
+        }
+        return web;
     }
 
-    // Each player's learned nodes and ranks, by guid. World and session threads both read it.
-    std::mutex sTreesLock;
-    std::unordered_map<ObjectGuid, std::map<uint16, uint8>> sTrees;
-
-    std::map<uint16, uint8> TreeOf(Player const* player)
+    ClassWeb const* WebOf(uint8 classId)
     {
-        std::lock_guard<std::mutex> guard(sTreesLock);
-        auto it = sTrees.find(player->GetObjectGuid());
-        return it == sTrees.end() ? std::map<uint16, uint8>() : it->second;
+        static ClassWeb const paladin = BuildPaladin();
+        return classId == CLASS_PALADIN ? &paladin : nullptr;
     }
 
-    void EnsureTable()
+    WebNode const* FindNode(ClassWeb const& web, uint16 id)
+    {
+        return id >= 1 && id <= web.nodes.size() ? &web.nodes[id - 1] : nullptr;
+    }
+
+    // --- Talents ---
+
+    // A class's talent spells by talent name (rank 1's spell name): their rank spells, in order.
+    struct ClassTalents
+    {
+        std::map<std::string, std::vector<uint32>> byName;
+        std::set<uint32> all;                         // every rank spell of every talent
+        std::vector<std::pair<uint32, uint32>> free;  // talent-granted active spells and their level
+    };
+
+    ClassTalents const& TalentsOf(uint8 classId)
+    {
+        static std::mutex lock;
+        static std::map<uint8, ClassTalents> cache;
+        std::lock_guard<std::mutex> guard(lock);
+        auto it = cache.find(classId);
+        if (it != cache.end())
+            return it->second;
+        ClassTalents& out = cache[classId];
+        uint32 const classMask = 1 << (classId - 1);
+        for (uint32 i = 0; i < sTalentStore.GetNumRows(); ++i)
+        {
+            TalentEntry const* talent = sTalentStore.LookupEntry(i);
+            TalentTabEntry const* tab = talent ? sTalentTabStore.LookupEntry(talent->TalentTab) : nullptr;
+            if (!tab || !(tab->ClassMask & classMask) || !talent->RankID[0])
+                continue;
+            SpellEntry const* first = sSpellTemplate.LookupEntry<SpellEntry>(talent->RankID[0]);
+            if (!first || !first->SpellName[0])
+                continue;
+            std::vector<uint32>& ranks = out.byName[first->SpellName[0]];
+            for (uint32 spell : talent->RankID)
+                if (spell)
+                {
+                    ranks.push_back(spell);
+                    out.all.insert(spell);
+                }
+            if (ranks.size() == 1 && !first->HasAttribute(SPELL_ATTR_PASSIVE))
+                out.free.emplace_back(first->Id, 10 + talent->Row * 5);
+        }
+        return out;
+    }
+
+    // The rank spell a notable teaches, or 0.
+    uint32 TalentSpell(uint8 classId, WebNode const& node)
+    {
+        if (!node.talent || !node.rank)
+            return 0;
+        ClassTalents const& talents = TalentsOf(classId);
+        auto it = talents.byName.find(node.talent);
+        if (it == talents.byName.end() || it->second.empty())
+            return 0;
+        return it->second[std::min<size_t>(node.rank, it->second.size()) - 1];
+    }
+
+    // The icon a node shows: its own, or its talent's.
+    uint32 IconOf(uint8 classId, WebNode const& node)
+    {
+        if (node.icon)
+            return node.icon;
+        if (!node.talent)
+            return 0;
+        ClassTalents const& talents = TalentsOf(classId);
+        auto it = talents.byName.find(node.talent);
+        return it == talents.byName.end() || it->second.empty() ? 0 : it->second.front();
+    }
+
+    // --- Each player's web ---
+
+    struct PlayerWeb
+    {
+        uint8 classId = 0;
+        bool arpg = false;                     // the start is saved: an ARPG character
+        std::set<uint16> nodes;                // taken, the start among them once arpg
+        std::set<uint32> bosses;
+        uint32 level = 0;                      // the level its free spells were last settled at
+        std::shared_ptr<WebTotals const> totals;
+    };
+
+    std::mutex sWebsLock;
+    std::unordered_map<ObjectGuid, PlayerWeb> sWebs;
+
+    PlayerWeb WebFor(Player const* player)
+    {
+        std::lock_guard<std::mutex> guard(sWebsLock);
+        auto it = sWebs.find(player->GetObjectGuid());
+        return it == sWebs.end() ? PlayerWeb() : it->second;
+    }
+
+    template <class F> void Edit(Player const* player, F f)
+    {
+        std::lock_guard<std::mutex> guard(sWebsLock);
+        f(sWebs[player->GetObjectGuid()]);
+    }
+
+    void EnsureTables()
     {
         static bool const created = []()
         {
             CharacterDatabase.DirectExecute(
-                "CREATE TABLE IF NOT EXISTS character_arpg_tree ("
-                "guid INT UNSIGNED NOT NULL, node SMALLINT UNSIGNED NOT NULL, `rank` TINYINT UNSIGNED NOT NULL, "
-                "PRIMARY KEY (guid, node)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG skill tree (Arpg/ArpgTree.h)'");
+                "CREATE TABLE IF NOT EXISTS character_arpg_web ("
+                "guid INT UNSIGNED NOT NULL, node SMALLINT UNSIGNED NOT NULL, "
+                "PRIMARY KEY (guid, node)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG passive web (Arpg/ArpgTree.h)'");
+            CharacterDatabase.DirectExecute(
+                "CREATE TABLE IF NOT EXISTS character_arpg_bosses ("
+                "guid INT UNSIGNED NOT NULL, entry INT UNSIGNED NOT NULL, "
+                "PRIMARY KEY (guid, entry)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG final bosses killed (Arpg/ArpgTree.h)'");
+            // The first tree's table, which the web replaced.
+            CharacterDatabase.DirectExecute("DROP TABLE IF EXISTS character_arpg_tree");
             return true;
         }();
         (void)created;
     }
 
-    uint32 PointsSpent(std::map<uint16, uint8> const& tree, int branch = -1)
+    WebTotals Sum(ClassWeb const& web, std::set<uint16> const& nodes)
     {
-        uint32 spent = 0;
-        for (auto const& [id, rank] : tree)
-            if (TreeNode const* node = FindNode(id))
-                if (branch < 0 || node->branch == branch)
-                    spent += rank;
-        return spent;
+        WebTotals t;
+        for (uint16 id : nodes)
+        {
+            WebNode const* node = FindNode(web, id);
+            if (!node)
+                continue;
+            if (node->key != KEY_NONE)
+                t.keys |= uint32(1) << node->key;
+            for (Fx const& fx : node->fx)
+            {
+                switch (fx.kind)
+                {
+                    case FX_STAT:         if (fx.arg < 5) t.stat[fx.arg] += fx.value; break;
+                    case FX_ALL_STATS:    for (int32& s : t.stat) s += fx.value; break;
+                    case FX_ARMOUR:       t.armourPct += fx.value; break;
+                    case FX_TAG:          if (fx.arg < MAX_TAG) t.tag[fx.arg] += fx.value; break;
+                    case FX_HEALING:      t.healingPct += fx.value; break;
+                    case FX_MOVE:         t.movePct += fx.value; break;
+                    case FX_COOLDOWN:     t.cooldownPct += fx.value; break;
+                    case FX_LIFE_ON_KILL: t.lifeOnKill += fx.value; break;
+                    case FX_MELEE_AREA:   t.meleeAreaPct += fx.value; break;
+                    case FX_SPELL_AREA:   t.spellAreaPct += fx.value; break;
+                    case FX_BLOCK:        t.blockPct += fx.value; break;
+                }
+            }
+        }
+        return t;
     }
 
-    // Teach the spells `rank` of `node` gives, dropping lower ranks of a talent.
-    void TeachRank(Player* player, TreeNode const& node, uint8 rank)
+    // Recompute the player's totals from its nodes, and apply them.
+    void Refresh(Player* player)
     {
-        Resolved const& r = Resolve().at(node.id);
-        if (r.ranks.empty() || !rank)
+        ClassWeb const* web = WebOf(player->getClass());
+        if (!web)
             return;
-        uint32 const index = std::min<uint32>(rank, r.ranks.size()) - 1;
-        if (node.kind == NODE_SKILL)
+        Edit(player, [&](PlayerWeb& w)
         {
-            if (!player->HasSpell(r.ranks.front()))
-                player->learnSpell(r.ranks.front(), false);
+            w.totals = std::make_shared<WebTotals const>(Sum(*web, w.nodes));
+        });
+        ApplyCharacter(player);
+    }
+
+    // Teach or unteach the talent spell a notable gives.
+    void TeachNode(Player* player, WebNode const& node, bool learn)
+    {
+        uint32 const spell = TalentSpell(player->getClass(), node);
+        if (!spell)
+        {
+            if (node.talent)
+                sLog.outError("ARPG web: node %u names talent \"%s\", which this class does not have", node.id, node.talent);
             return;
         }
-        for (uint32 i = 0; i < index; ++i)
-            if (player->HasSpell(r.ranks[i]))
-                player->removeSpell(r.ranks[i], false, false);
-        if (!player->HasSpell(r.ranks[index]))
-            player->learnSpell(r.ranks[index], false);
+        if (learn && !player->HasSpell(spell))
+            player->learnSpell(spell, false);
+        else if (!learn && player->HasSpell(spell))
+            player->removeSpell(spell, false, false);
     }
 
-    void Save(Player* player, uint16 node, uint8 rank)
+    // The talent spells an ARPG character keeps: the web's and the free ones it is old enough for.
+    std::set<uint32> KeptTalentSpells(Player const* player, PlayerWeb const& w)
     {
-        CharacterDatabase.PExecute("REPLACE INTO character_arpg_tree (guid, node, `rank`) VALUES (%u, %u, %u)",
-                                   player->GetGUIDLow(), uint32(node), uint32(rank));
+        std::set<uint32> keep;
+        ClassWeb const* web = WebOf(player->getClass());
+        if (web)
+            for (uint16 id : w.nodes)
+                if (WebNode const* node = FindNode(*web, id))
+                    if (uint32 spell = TalentSpell(player->getClass(), *node))
+                        keep.insert(spell);
+        for (auto const& [spell, level] : TalentsOf(player->getClass()).free)
+            if (player->GetLevel() >= level)
+                keep.insert(spell);
+        return keep;
+    }
+
+    // Drop the talent spells the character shouldn't have, and give it the free ones.
+    void SettleTalentSpells(Player* player)
+    {
+        PlayerWeb const w = WebFor(player);
+        std::set<uint32> const keep = KeptTalentSpells(player, w);
+        for (uint32 spell : TalentsOf(player->getClass()).all)
+            if (!keep.count(spell) && player->HasSpell(spell))
+                player->removeSpell(spell, false, false);
+        for (auto const& [spell, level] : TalentsOf(player->getClass()).free)
+            if (player->GetLevel() >= level && !player->HasSpell(spell))
+                player->learnSpell(spell, false);
+        Edit(player, [&](PlayerWeb& e) { e.level = player->GetLevel(); });
+    }
+
+    // Whether every taken node but `without` still joins the start.
+    bool StillJoined(ClassWeb const& web, std::set<uint16> const& nodes, uint16 without)
+    {
+        std::set<uint16> seen = { 1 };
+        std::vector<uint16> stack = { 1 };
+        while (!stack.empty())
+        {
+            uint16 const at = stack.back();
+            stack.pop_back();
+            for (uint16 n : web.next[at - 1])
+                if (n != without && nodes.count(n) && seen.insert(n).second)
+                    stack.push_back(n);
+        }
+        for (uint16 n : nodes)
+            if (n != without && !seen.count(n))
+                return false;
+        return true;
+    }
+
+    uint32 Spent(std::set<uint16> const& nodes)
+    {
+        // The start is free.
+        return nodes.empty() ? 0 : uint32(nodes.size() - (nodes.count(1) ? 1 : 0));
     }
 }
 
 namespace Arpg
 {
-    uint32 TreePointsFor(uint32 level)
+    std::vector<uint32> const& Bosses()
     {
-        return level > 1 ? level - 1 : 0;
+        static std::vector<uint32> const bosses =
+        {
+            // Dungeons
+            11520, // Taragaman the Hungerer (Ragefire Chasm)
+            3654,  // Mutanus the Devourer (Wailing Caverns)
+            639,   // Edwin VanCleef (The Deadmines)
+            4275,  // Archmage Arugal (Shadowfang Keep)
+            4829,  // Aku'mai (Blackfathom Deeps)
+            1716,  // Bazil Thredd (The Stockade)
+            7800,  // Mekgineer Thermaplugg (Gnomeregan)
+            4421,  // Charlga Razorflank (Razorfen Kraul)
+            4543,  // Bloodmage Thalnos (Scarlet Monastery Graveyard)
+            6487,  // Arcanist Doan (Scarlet Monastery Library)
+            3975,  // Herod (Scarlet Monastery Armory)
+            3977,  // High Inquisitor Whitemane (Scarlet Monastery Cathedral)
+            7358,  // Amnennar the Coldbringer (Razorfen Downs)
+            2748,  // Archaedas (Uldaman)
+            7267,  // Chief Ukorz Sandscalp (Zul'Farrak)
+            12201, // Princess Theradras (Maraudon)
+            5709,  // Shade of Eranikus (The Temple of Atal'Hakkar)
+            9019,  // Emperor Dagran Thaurissan (Blackrock Depths)
+            9568,  // Overlord Wyrmthalak (Lower Blackrock Spire)
+            10363, // General Drakkisath (Upper Blackrock Spire)
+            11492, // Alzzin the Wildshaper (Dire Maul East)
+            11486, // Prince Tortheldrin (Dire Maul West)
+            11501, // King Gordok (Dire Maul North)
+            1853,  // Darkmaster Gandling (Scholomance)
+            10440, // Baron Rivendare (Stratholme)
+            10813, // Balnazzar (Stratholme)
+            // Raids
+            10184, // Onyxia
+            11502, // Ragnaros
+            11583, // Nefarian
+            14834, // Hakkar
+            15339, // Ossirian the Unscarred
+            15727, // C'Thun
+            15990, // Kel'Thuzad
+        };
+        return bosses;
+    }
+
+    uint32 TreePointsFor(Player const* player)
+    {
+        uint32 const level = player->GetLevel();
+        return (level > 1 ? level - 1 : 0) + uint32(WebFor(player).bosses.size());
     }
 
     void LoadTree(Player* player)
     {
-        EnsureTable();
-        std::map<uint16, uint8> tree;
-        if (auto result = CharacterDatabase.PQuery("SELECT node, `rank` FROM character_arpg_tree WHERE guid = %u", player->GetGUIDLow()))
+        EnsureTables();
+        PlayerWeb w;
+        w.classId = player->getClass();
+        ClassWeb const* web = WebOf(w.classId);
+        if (auto result = CharacterDatabase.PQuery("SELECT node FROM character_arpg_web WHERE guid = %u", player->GetGUIDLow()))
         {
             do
             {
-                Field* fields = result->Fetch();
-                uint16 const node = uint16(fields[0].GetUInt32());
-                uint8 const rank = uint8(fields[1].GetUInt32());
-                if (TreeNode const* known = FindNode(node))
-                    if (known->classId == player->getClass() && rank)
-                        tree[node] = std::min(rank, known->maxRank);
+                uint16 const node = uint16(result->Fetch()[0].GetUInt32());
+                if (node == 1)
+                    w.arpg = true;
+                if (web && FindNode(*web, node))
+                    w.nodes.insert(node);
             }
             while (result->NextRow());
         }
-        std::lock_guard<std::mutex> guard(sTreesLock);
-        sTrees[player->GetObjectGuid()] = std::move(tree);
+        if (auto result = CharacterDatabase.PQuery("SELECT entry FROM character_arpg_bosses WHERE guid = %u", player->GetGUIDLow()))
+        {
+            do
+                w.bosses.insert(result->Fetch()[0].GetUInt32());
+            while (result->NextRow());
+        }
+        if (web)
+            w.totals = std::make_shared<WebTotals const>(Sum(*web, w.nodes));
+        std::lock_guard<std::mutex> guard(sWebsLock);
+        sWebs[player->GetObjectGuid()] = std::move(w);
     }
 
     void UnloadTree(Player* player)
     {
-        std::lock_guard<std::mutex> guard(sTreesLock);
-        sTrees.erase(player->GetObjectGuid());
+        ForgetCharacter(player);
+        std::lock_guard<std::mutex> guard(sWebsLock);
+        sWebs.erase(player->GetObjectGuid());
     }
 
     bool TreeOwnsSpell(Player const* player, uint32 spell)
     {
-        std::map<uint16, uint8> const tree = TreeOf(player);
-        if (tree.empty())
+        PlayerWeb const w = WebFor(player);
+        if (!w.arpg)
             return false;
-        for (auto const& [id, rank] : tree)
-        {
-            auto it = Resolve().find(id);
-            if (it == Resolve().end())
-                continue;
-            for (uint32 known : it->second.ranks)
-                if (known == spell)
-                    return true;
-        }
-        return false;
+        return TalentsOf(player->getClass()).all.count(spell) != 0;
     }
 
     void OnTreeHello(Player* player)
     {
-        // Vanilla talents give way to the tree, once: a fresh ARPG character spent none.
-        if (player->CalculateTalentsPoints() > player->GetFreeTalentPoints())
+        if (!WebOf(player->getClass()))
+            return;
+        bool fresh = false;
+        Edit(player, [&](PlayerWeb& w)
         {
-            player->resetTalents(true);
-            sLog.outString("ARPG tree: %s's vanilla talents were reset for the ARPG tree", player->GetName());
+            fresh = !w.arpg;
+            w.arpg = true;
+            w.nodes.insert(1);
+        });
+        if (fresh)
+        {
+            CharacterDatabase.PExecute("REPLACE INTO character_arpg_web (guid, node) VALUES (%u, 1)", player->GetGUIDLow());
+            sLog.outString("ARPG web: %s's vanilla talents give way to the passive web", player->GetName());
         }
-        for (auto const& [id, rank] : TreeOf(player))
-            if (TreeNode const* node = FindNode(id))
-                TeachRank(player, *node, rank);
+        SettleTalentSpells(player);
+        ClassWeb const* web = WebOf(player->getClass());
+        std::set<uint16> const taken = WebFor(player).nodes;
+        for (uint16 id : taken)
+            if (WebNode const* node = FindNode(*web, id))
+                if (node->talent)
+                    TeachNode(player, *node, true);
+        Refresh(player);
+        SendTree(player);
+    }
+
+    void UpdateTree(Player* player)
+    {
+        PlayerWeb const w = WebFor(player);
+        if (!w.arpg || w.level == player->GetLevel())
+            return;
+        SettleTalentSpells(player);
         SendTree(player);
     }
 
     void SpendNode(Player* player, uint16 id)
     {
-        TreeNode const* node = FindNode(id);
-        std::map<uint16, uint8> tree = TreeOf(player);
+        ClassWeb const* web = WebOf(player->getClass());
+        PlayerWeb const w = WebFor(player);
         auto refuse = [&](char const* why)
         {
-            sLog.outDetail("ARPG tree: %s cannot spend in node %u: %s", player->GetName(), uint32(id), why);
+            sLog.outDetail("ARPG web: %s cannot take node %u: %s", player->GetName(), uint32(id), why);
             SendTree(player);
         };
-        if (!node || node->classId != player->getClass())
+        WebNode const* node = web ? FindNode(*web, id) : nullptr;
+        if (!node || !w.arpg)
             return refuse("not this class's node");
-        uint8 const rank = tree.count(id) ? tree[id] : 0;
-        if (rank >= node->maxRank)
-            return refuse("already at its top rank");
-        if (PointsSpent(tree) >= TreePointsFor(player->GetLevel()))
+        if (w.nodes.count(id))
+            return refuse("already taken");
+        if (Spent(w.nodes) >= TreePointsFor(player))
             return refuse("no points left");
-        if (PointsSpent(tree, node->branch) < TIER_GATE[node->tier])
-            return refuse("tier not open yet");
-        // A talent's next rank (or a taught spell) waits for the level vanilla gives it at.
-        Resolved const& r = Resolve().at(id);
-        if (!r.ranks.empty())
+        bool joined = false;
+        for (uint16 n : web->next[id - 1])
+            joined = joined || w.nodes.count(n);
+        if (!joined)
+            return refuse("joins nothing taken");
+        Edit(player, [&](PlayerWeb& e) { e.nodes.insert(id); });
+        CharacterDatabase.PExecute("REPLACE INTO character_arpg_web (guid, node) VALUES (%u, %u)", player->GetGUIDLow(), uint32(id));
+        if (node->talent)
+            TeachNode(player, *node, true);
+        Refresh(player);
+        SendTree(player);
+    }
+
+    void RefundNode(Player* player, uint16 id)
+    {
+        ClassWeb const* web = WebOf(player->getClass());
+        PlayerWeb const w = WebFor(player);
+        auto refuse = [&](char const* why)
         {
-            uint32 const next = r.ranks[std::min<uint32>(rank, r.ranks.size() - 1)];
-            if (SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(next))
-                if (spell->spellLevel > player->GetLevel())
-                    return refuse("the spell needs a higher level");
-        }
-        {
-            std::lock_guard<std::mutex> guard(sTreesLock);
-            sTrees[player->GetObjectGuid()][id] = rank + 1;
-        }
-        TeachRank(player, *node, rank + 1);
-        Save(player, id, rank + 1);
+            sLog.outDetail("ARPG web: %s cannot give back node %u: %s", player->GetName(), uint32(id), why);
+            SendTree(player);
+        };
+        WebNode const* node = web ? FindNode(*web, id) : nullptr;
+        if (!node || id == 1 || !w.nodes.count(id))
+            return refuse("not taken");
+        if (player->IsInCombat())
+            return refuse("in combat");
+        if (!StillJoined(*web, w.nodes, id))
+            return refuse("other nodes hang from it");
+        Edit(player, [&](PlayerWeb& e) { e.nodes.erase(id); });
+        CharacterDatabase.PExecute("DELETE FROM character_arpg_web WHERE guid = %u AND node = %u", player->GetGUIDLow(), uint32(id));
+        if (node->talent)
+            TeachNode(player, *node, false);
+        Refresh(player);
         SendTree(player);
     }
 
     void Respec(Player* player)
     {
-        if (player->IsInCombat())
+        ClassWeb const* web = WebOf(player->getClass());
+        if (!web || player->IsInCombat())
         {
             SendTree(player);
             return;
         }
-        std::map<uint16, uint8> const tree = TreeOf(player);
-        // Unlearn while the tree still owns the spells, so no talent accounting runs.
-        for (auto const& [id, rank] : tree)
-        {
-            auto it = Resolve().find(id);
-            if (it == Resolve().end())
-                continue;
-            for (uint32 spell : it->second.ranks)
-                if (player->HasSpell(spell))
-                    player->removeSpell(spell, false, false);
-        }
-        {
-            std::lock_guard<std::mutex> guard(sTreesLock);
-            sTrees[player->GetObjectGuid()].clear();
-        }
-        CharacterDatabase.PExecute("DELETE FROM character_arpg_tree WHERE guid = %u", player->GetGUIDLow());
+        std::set<uint16> const taken = WebFor(player).nodes;
+        for (uint16 id : taken)
+            if (WebNode const* node = FindNode(*web, id))
+                if (node->talent)
+                    TeachNode(player, *node, false);
+        Edit(player, [&](PlayerWeb& e) { e.nodes = { 1 }; });
+        CharacterDatabase.PExecute("DELETE FROM character_arpg_web WHERE guid = %u AND node <> 1", player->GetGUIDLow());
+        Refresh(player);
         SendTree(player);
     }
 
     void SendTree(Player* player)
     {
-        std::map<uint16, uint8> const tree = TreeOf(player);
-        std::vector<TreeNode const*> mine;
-        for (TreeNode const& node : Nodes())
-            if (node.classId == player->getClass())
-                mine.push_back(&node);
-        uint8 const branches = mine.empty() ? 0 : 3;
+        ClassWeb const* web = WebOf(player->getClass());
+        PlayerWeb const w = WebFor(player);
+        uint8 const classId = player->getClass();
 
-        WorldPacket data(SMSG_ARPG_TREE, 8 + mine.size() * 96);
-        data << uint8(1);
-        data << uint16(TreePointsFor(player->GetLevel()));
-        data << uint16(PointsSpent(tree));
-        data << uint8(branches);
-        for (uint8 b = 0; b < branches; ++b)
-            data << PALADIN_BRANCHES[b];
-        data << uint8(mine.size());
-        for (TreeNode const* node : mine)
-        {
-            auto it = tree.find(node->id);
-            data << uint16(node->id);
-            data << uint8(node->branch);
-            data << uint8(node->tier);
-            data << uint8(node->column);
-            data << uint8(node->kind);
-            data << uint8(node->maxRank);
-            data << uint8(it == tree.end() ? 0 : it->second);
-            data << uint32(Resolve().at(node->id).icon);
-            data << node->name;
-            data << node->text;
-        }
+        WorldPacket data(SMSG_ARPG_TREE, 16 + (web ? web->nodes.size() * 80 + web->links.size() * 4 : 0));
+        data << uint8(2);
+        data << uint16(TreePointsFor(player));
+        data << uint16(Spent(w.nodes));
+        data << uint8(web ? web->regions.size() : 0);
+        if (web)
+            for (Region const& region : web->regions)
+                data << region.name << int16(region.x) << int16(region.y);
+        data << uint16(web ? web->nodes.size() : 0);
+        if (web)
+            for (WebNode const& node : web->nodes)
+            {
+                data << uint16(node.id);
+                data << uint8(node.kind);
+                data << uint8(node.region);
+                data << int16(node.x);
+                data << int16(node.y);
+                data << uint8((node.id == 1 || w.nodes.count(node.id)) ? 1 : 0);
+                data << uint32(IconOf(classId, node));
+                data << node.name;
+                data << node.text;
+            }
+        data << uint16(web ? web->links.size() : 0);
+        if (web)
+            for (auto const& [a, b] : web->links)
+                data << uint16(a) << uint16(b);
         player->GetSession()->SendPacket(data);
     }
 
-    std::vector<UniqueMechanic const*> LearnedModifiers(Player const* player)
+    void CreditBossKill(Player* killer, Unit* victim)
     {
-        std::vector<UniqueMechanic const*> rows;
-        std::map<uint16, uint8> const tree = TreeOf(player);
-        for (auto const& [id, rank] : tree)
+        if (!killer || !victim || victim->GetTypeId() != TYPEID_UNIT)
+            return;
+        uint32 const entry = victim->GetEntry();
+        std::vector<uint32> const& bosses = Bosses();
+        if (std::find(bosses.begin(), bosses.end(), entry) == bosses.end())
+            return;
+        std::vector<Player*> credited;
+        if (Group* group = killer->GetGroup())
         {
-            auto it = Resolve().find(id);
-            if (it == Resolve().end() || it->second.rows.empty() || !rank)
-                continue;
-            rows.push_back(&it->second.rows[std::min<size_t>(rank, it->second.rows.size()) - 1]);
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+                if (Player* member = ref->getSource())
+                    if (member->IsInMap(victim) && member->IsAtGroupRewardDistance(victim))
+                        credited.push_back(member);
         }
-        return rows;
+        else
+            credited.push_back(killer);
+        for (Player* player : credited)
+        {
+            if (!Active(player))
+                continue;
+            bool added = false;
+            Edit(player, [&](PlayerWeb& w) { added = w.arpg && w.bosses.insert(entry).second; });
+            if (!added)
+                continue;
+            CharacterDatabase.PExecute("REPLACE INTO character_arpg_bosses (guid, entry) VALUES (%u, %u)", player->GetGUIDLow(), entry);
+            sLog.outString("ARPG web: %s's first kill of %s gives a passive point", player->GetName(), victim->GetName());
+            SendTree(player);
+        }
+    }
+
+    std::shared_ptr<WebTotals const> TotalsOf(Unit const* unit)
+    {
+        if (!Active(unit))
+            return nullptr;
+        std::lock_guard<std::mutex> guard(sWebsLock);
+        auto it = sWebs.find(unit->GetObjectGuid());
+        return it == sWebs.end() || !it->second.arpg ? nullptr : it->second.totals;
+    }
+
+    std::vector<UniqueMechanic const*> LearnedModifiers(Player const* /*player*/)
+    {
+        return {};
     }
 
     bool HasKeystone(Unit const* unit, Keystone key)
     {
-        if (!Active(unit))
-            return false;
-        for (auto const& [id, rank] : TreeOf(static_cast<Player const*>(unit)))
-            if (TreeNode const* node = FindNode(id))
-                if (node->key == key && rank)
-                    return true;
-        return false;
+        std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
+        return totals && totals->Has(key);
     }
 }

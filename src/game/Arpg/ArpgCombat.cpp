@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgCharacter.h"
 
 #include "Entities/Unit.h"
 #include "Entities/Creature.h"
@@ -172,9 +173,12 @@ namespace Arpg
 
     void UpdateSwing(Player* player)
     {
-        // The skill tree's pulsing keystones (Martyr's Ward).
+        // The skill tree's pulsing keystones (Martyr's Ward), and the character's (ArpgCharacter.h).
         if (Active(player))
+        {
             UpdateKeystones(player);
+            UpdateCharacter(player);
+        }
 
         if (!Active(player))
             return;

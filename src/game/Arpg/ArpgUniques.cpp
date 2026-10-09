@@ -674,4 +674,23 @@ namespace Arpg
             return;
         }
     }
+
+    std::vector<Unit*> NearestFoes(Unit* caster, Unit* center, float radius, size_t count)
+    {
+        return NearestTo(caster, center, radius, count);
+    }
+
+    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount)
+    {
+        DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount);
+    }
+
+    void SendHolyBolt(Player* player, Unit* to, uint32 amount)
+    {
+        SpellEntry const* bolt = sSpellTemplate.LookupEntry<SpellEntry>(HOLY_SHOCK_DAMAGE);
+        if (!bolt || !to)
+            return;
+        RelayHit(player, player->GetObjectGuid(), to->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
+                 std::max<uint32>(1, amount), 0, 0.0f, GuidVector{});
+    }
 }

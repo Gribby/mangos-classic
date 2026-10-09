@@ -22,6 +22,7 @@
 #include "Entities/Creature.h"
 #include "Globals/SharedDefines.h"
 #include "Spells/SpellAuras.h"
+#include "Arpg/ArpgCharacter.h"
 
 /*#######################################
 ########                         ########
@@ -404,6 +405,8 @@ void Player::UpdateBlockPercentage()
         value = 5.0f;
         // Increase from SPELL_AURA_MOD_BLOCK_PERCENT aura
         value += GetTotalAuraModifier(SPELL_AURA_MOD_BLOCK_PERCENT);
+        // ARPG: the passive web's block chance (Arpg/ArpgCharacter.h).
+        value += Arpg::BlockChanceBonus(this);
         real = value;
         // Set UI display value: modify value from defense skill against same level target
         value += (int32(GetDefenseSkillValue()) - int32(GetSkillMaxForLevel())) * 0.04f;

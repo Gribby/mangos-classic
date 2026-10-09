@@ -49,6 +49,7 @@ namespace Arpg
         ACTION_TREE_SPEND  = 8,                             // uint16 node
         ACTION_TREE_RESPEC = 9,                             // -
         ACTION_TREE_QUERY  = 10,                            // -
+        ACTION_TREE_REFUND = 11,                            // uint16 node
     };
 
     // What the client's cast aims at, by the spell's own target word.

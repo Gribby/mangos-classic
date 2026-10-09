@@ -27,6 +27,7 @@
 #include "World/World.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgCharacter.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -1250,9 +1251,12 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         m_healing = addhealth; // update value so that script handler has access
         OnHit(missInfo); // TODO: After spell damage calc is moved to proper handler - move this before the first if
 
-        int32 gain = affectiveCaster->DealHeal(unitTarget, addhealth, m_spellInfo, target->isCrit);
+        // ARPG: the Lightforged keystone's heals on yourself heal nothing (Arpg/ArpgCharacter.h).
+        int32 gain = Arpg::BlocksHeal(affectiveCaster, unitTarget) ? 0 : affectiveCaster->DealHeal(unitTarget, addhealth, m_spellInfo, target->isCrit);
         // ARPG: the Dawnbringer keystone turns a heal on yourself into a holy bolt.
         Arpg::OnHeal(this, affectiveCaster, unitTarget, addhealth);
+        // ARPG: Lightforged's bolt, Blessed Recovery's cooldowns.
+        Arpg::OnCharacterHeal(this, affectiveCaster, unitTarget, addhealth);
 
         if (affectiveCaster)
             unitTarget->getHostileRefManager().threatAssist(affectiveCaster, float(gain) * 0.5f * sSpellMgr.GetSpellThreatMultiplier(m_spellInfo), m_spellInfo, false, m_IsTriggeredSpell);
@@ -7672,6 +7676,8 @@ void Spell::GetSpellRangeAndRadius(SpellEffectIndex effIndex, float& radius, boo
         if (Player* modOwner = realCaster->GetSpellModOwner())
         {
             modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_RADIUS, radius);
+            // ARPG: Strength or Intellect and the passive web widen an area (Arpg/ArpgCharacter.h).
+            radius *= Arpg::AreaScale(realCaster, m_spellInfo);
             if (!targetB)
                 modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_JUMP_TARGETS, EffectChainTarget);
         }

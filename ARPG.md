@@ -23,16 +23,29 @@ fragments, E burst, G arc, B pierce, H shockwave, K step (direct damage hooked a
 `SMSG_SPELL_GO` and landed by a delayed event); I echo in `OnLineLaunch`; F spread on landing (`Spell::DoAllEffectOnTarget`, before `OnAfterHit`) and on death, J raise, both from `Arpg::OnKill` in the creature kill path. `SMSG_ARPG_ITEM_MECHANICS` (0x33E: `u8` count,
 then `u32` item and a C string per row) answers every hello. Design: the client's `docs/ARPG-UNIQUES.md`.
 
-## Skill tree
+## Passive web, tags and attributes
 
-ARPG players spend in a tree per class instead of talents: `Arpg/ArpgTree.{h,cpp}` (the paladin
-tree; nodes name vanilla talents and spells, resolved from the DBCs at first use). Saved in
-`character_arpg_tree`, which the server creates. Kinds 8 spend, 9 respec, 10 query;
-`SMSG_ARPG_TREE` (0x33F). Hooks: `Player::LoadFromDB` (load before spells), `Player::addSpell` /
-`removeSpell` (tree spells cost no talent points), `HandleLearnTalentOpcode` (ignored for ARPG
-players), the Judgement script (Avenger), `Spell.cpp` heal path (Dawnbringer) and creature-type
-checks (Purifying Light), `Arpg::UpdateSwing` (Martyr's Ward). Design: the client's
-`docs/ARPG-SKILL-TREES.md`.
+ARPG players spend in a passive web per class instead of talents: `Arpg/ArpgTree.{h,cpp}` (the
+paladin web, 88 nodes built in code from its regions and arms; notables name vanilla talents,
+resolved within the class's own tabs). Points: level − 1, plus one per first kill of a dungeon or
+raid final boss (`Arpg::Bosses()`). Saved in `character_arpg_web` and `character_arpg_bosses`,
+which the server creates (it drops the first tree's `character_arpg_tree`). Kinds 8 take,
+9 respec, 10 query, 11 give back; `SMSG_ARPG_TREE` (0x33F, version 2: regions, nodes with
+positions, links). An ARPG character's vanilla talent spells go at its first hello, except the
+web's and the class's talent-granted actives (Consecration, Holy Shock…), given free at the
+talent row's level.
+
+`Arpg/ArpgTags.{h,cpp}`: every spell's tags, read off its data plus a few names.
+`Arpg/ArpgCharacter.{h,cpp}`: the attributes' ARPG effects, the web's totals and keystones.
+Hooks: `Unit::SpellDamageBonusDone` and `MeleeDamageBonusDone` (tag damage), the healing bonus
+done and taken, `Unit::RollSpellCritOutcome` (Divine Favour), `Unit::UpdateSpeed` (Agility,
+Crusade, Unyielding), `Unit::DealDamage` (Martyr), the melee block outcome (Shield Wall),
+`Player::UpdateBlockPercentage`, the spell radius in `Spell` target fill and persistent area
+auras (Strength, Intellect), the kill path (life on kill, Crusade, boss points), the heal path
+(Lightforged, Blessed Recovery), and `Arpg::UpdateSwing` (the once-a-second refresh: speed, the
+Spirit cooldown modifier, Zealot's drain, level-ups). The first tree's capstones (Avenger,
+Martyr's Ward, Dawnbringer, Purifying Light) keep their hooks for the skill trees. Design: the
+client's `docs/ARPG-CHARACTER.md`.
 
 ## Wire
 

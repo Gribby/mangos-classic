@@ -120,6 +120,14 @@ namespace Arpg
     void OnHeal(Spell* spell, Unit* caster, Unit* target, uint32 amount);
     // Martyr's Ward's pulse; called every player update.
     void UpdateKeystones(Player* player);
+
+    // The kit's pieces, for the web's keystones (ArpgCharacter.h):
+    // The `count` fair enemies nearest `center` within `radius` yards, in sight, nearest first.
+    std::vector<Unit*> NearestFoes(Unit* caster, Unit* center, float radius, size_t count);
+    // `amount` of `spellInfo`'s school `schoolMask` to `unit` as `caster`'s, through the spell damage path.
+    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount);
+    // A holy bolt (Holy Shock's missile) from `player` at `to`, landing for `amount`.
+    void SendHolyBolt(Player* player, Unit* to, uint32 amount);
 }
 
 #endif

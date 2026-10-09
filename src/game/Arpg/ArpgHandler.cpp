@@ -17,9 +17,10 @@
  *     ACTION_LOOT_QUERY   uint64 corpse: send its ground loot list
  *     ACTION_DEV_LOOT     uint8 quality (0xFF mixed), uint8 count, uint8 level (0 the player's):
  *                         with Arpg.DevTools on, drop test loot at the player's feet
- *     ACTION_TREE_SPEND   uint16 node: spend a point in the ARPG skill tree (Arpg/ArpgTree.h)
- *     ACTION_TREE_RESPEC  -: refund the tree
- *     ACTION_TREE_QUERY   -: send the tree
+ *     ACTION_TREE_SPEND   uint16 node: take a node of the passive web (Arpg/ArpgTree.h)
+ *     ACTION_TREE_RESPEC  -: give the whole web back
+ *     ACTION_TREE_QUERY   -: send the web
+ *     ACTION_TREE_REFUND  uint16 node: give one node back
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -183,6 +184,19 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
                         Arpg::SpendNode(arpg, node);
+            });
+            break;
+        }
+        case Arpg::ACTION_TREE_REFUND:
+        {
+            uint16 node;
+            recvPacket >> node;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([node](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::RefundNode(arpg, node);
             });
             break;
         }

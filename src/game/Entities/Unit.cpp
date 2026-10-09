@@ -54,6 +54,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgCharacter.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -916,6 +917,9 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
             victim->SetStandState(UNIT_STAND_STATE_STAND);
     }
 
+    // ARPG: the Martyr keystone strikes back with a share of the damage (Arpg/ArpgCharacter.h).
+    Arpg::OnDamageTaken(victim, dealer, damage);
+
     if (dealer)
     {
         // Rage from Damage made (only from direct weapon damage)
@@ -1424,6 +1428,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     // ARPG: the kill's uniques (a DoT that spreads from the corpse, a fallen foe that rises), while
     // its auras still stand.
     Arpg::OnKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
+    // ARPG: life on kill, the Crusade keystone, a final boss's passive point (Arpg/ArpgCharacter.h).
+    Arpg::OnCharacterKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
 
     /* ******************************** Prepare loot if can ************************************ */
     // only lootable if it has loot or can drop gold, must be done before threat list is cleared
@@ -2060,6 +2066,8 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
             calcDamageInfo->TargetState = VICTIMSTATE_NORMAL;
             calcDamageInfo->procEx |= PROC_EX_BLOCK;
             calcDamageInfo->blocked_amount = calcDamageInfo->target->GetShieldBlockValue();
+            // ARPG: the Shield Wall notable heals on a block (Arpg/ArpgCharacter.h).
+            Arpg::OnBlocked(calcDamageInfo->target);
 
             if (calcDamageInfo->blocked_amount >= calcDamageInfo->totalDamage)
             {
@@ -3908,6 +3916,10 @@ bool Unit::RollSpellCritOutcome(Unit* caster, const Unit* victim, SpellSchoolMas
 {
     if (!caster || !caster->CanCrit(spell, schoolMask, GetWeaponAttackType(spell)))
         return false;
+
+    // ARPG: the Divine Favour notable's sure crit (Arpg/ArpgCharacter.h).
+    if (Arpg::ForcesCrit(caster, spell))
+        return true;
 
     if (spell->DmgClass == SPELL_DAMAGE_CLASS_MELEE && victim->IsPlayer() && !victim->IsStandState()) // autocrit on not standing for melee ability
         return true;
@@ -7112,6 +7124,9 @@ uint32 Unit::SpellDamageBonusDone(Unit* victim, SpellSchoolMask schoolMask, Spel
     // apply ap bonus and benefit affected by spellInfo power implicit coeffs and spellInfo level penalties
     DoneTotal = SpellBonusWithCoeffs(spellInfo, effectIndex, DoneTotal, DoneAdvertisedBenefit, 0, true);
 
+    // ARPG: the attacker's tag bonuses and passive web (Arpg/ArpgCharacter.h).
+    DoneTotalMod *= Arpg::DamageDoneMod(this, victim, spellInfo);
+
     float tmpDamage = (int32(pdamage) + DoneTotal * int32(stack)) * DoneTotalMod;
     // apply spellmod to Done damage (flat and pct)
     if (Player* modOwner = GetSpellModOwner())
@@ -7247,6 +7262,9 @@ uint32 Unit::SpellHealingBonusDone(Unit* victim, SpellEntry const* spellInfo, Sp
     // apply ap bonus and benefit affected by spellInfo power implicit coeffs and spellInfo level penalties
     DoneTotal = SpellBonusWithCoeffs(spellInfo, effectIndex, DoneTotal, DoneAdvertisedBenefit, 0, true);
 
+    // ARPG: the healer's healing bonuses (Arpg/ArpgCharacter.h).
+    DoneTotalMod *= Arpg::HealingDoneMod(this, spellInfo);
+
     // use float as more appropriate for negative values and percent applying
     float heal = (healamount + DoneTotal * int32(stack)) * DoneTotalMod;
     // apply spellmod to Done amount
@@ -7296,6 +7314,9 @@ uint32 Unit::SpellHealingBonusTaken(Unit* caster, SpellEntry const* spellInfo, S
 
     // apply benefit affected by spellInfo power implicit coeffs and spellInfo level penalties
     TakenTotal = caster->SpellBonusWithCoeffs(spellInfo, effectIndex, TakenTotal, TakenAdvertisedBenefit, 0, false);
+
+    // ARPG: the Martyr keystone halves healing taken (Arpg/ArpgCharacter.h).
+    TakenTotalMod *= Arpg::HealingTakenMod(this);
 
     // use float as more appropriate for negative values and percent applying
     float heal = (healamount + TakenTotal * int32(stack)) * TakenTotalMod;
@@ -7605,6 +7626,9 @@ uint32 Unit::MeleeDamageBonusDone(Unit* victim, uint32 pdamage, WeaponAttackType
 
     if (!flat)
         DoneTotal = 0.0f;
+
+    // ARPG: the attacker's tag bonuses and passive web (Arpg/ArpgCharacter.h).
+    DoneTotalMod *= Arpg::DamageDoneMod(this, victim, spellInfo);
 
     float tmpDamage = (int32(pdamage) + DoneTotal * int32(stack)) * DoneTotalMod;
 
@@ -8446,6 +8470,10 @@ void Unit::UpdateSpeed(UnitMoveType mtype, bool forced, float ratio)
     // ARPG: an ARPG player always faces the cursor, so it backpedals as fast as it runs.
     if (mtype == MOVE_RUN_BACK && Arpg::Active(this))
         speed = GetSpeedRate(MOVE_RUN) * baseMoveSpeed[MOVE_RUN] / baseMoveSpeed[MOVE_RUN_BACK];
+
+    // ARPG: Agility, the passive web and its keystones move the run speed (Arpg/ArpgCharacter.h).
+    if (mtype == MOVE_RUN)
+        speed *= Arpg::MoveSpeedMod(this);
 
     SetSpeedRate(mtype, speed * ratio, forced);
 

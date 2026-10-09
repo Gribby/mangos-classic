@@ -38,6 +38,7 @@
 #include "Entities/Creature.h"
 #include "Entities/Totem.h"
 #include "AI/BaseAI/CreatureAI.h"
+#include "Arpg/ArpgCharacter.h"
 #include "BattleGround/BattleGroundMgr.h"
 #include "BattleGround/BattleGround.h"
 #include "Tools/Language.h"
@@ -2053,6 +2054,8 @@ void Spell::EffectPersistentAA(SpellEffectIndex eff_idx)
 
     if (Player* modOwner = pCaster->GetSpellModOwner())
         modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_RADIUS, radius);
+    // ARPG: Strength or Intellect and the passive web widen a ground area (Arpg/ArpgCharacter.h).
+    radius *= Arpg::AreaScale(pCaster, m_spellInfo);
 
     DynamicObject* dynObj = new DynamicObject;
     if (!dynObj->Create(pCaster->GetMap()->GenerateLocalLowGuid(HIGHGUID_DYNAMICOBJECT), pCaster, m_spellInfo->Id,
