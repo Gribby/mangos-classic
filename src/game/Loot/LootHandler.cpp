@@ -27,6 +27,8 @@
 #include "Entities/Object.h"
 #include "Groups/Group.h"
 #include "Entities/GameObject.h"
+#include "Entities/Creature.h"
+#include "Arpg/ArpgCombat.h"
 
 void WorldSession::HandleAutostoreLootItemOpcode(WorldPacket& recv_data)
 {
@@ -111,6 +113,18 @@ void WorldSession::HandleLootOpcode(WorldPacket& recv_data)
     {
         _player->SendLootError(lguid, LOOT_ERROR_STUNNED);
         return;
+    }
+
+    // ARPG: an ARPG player's corpse loot lies on the ground (Arpg/ArpgLoot.h): the corpse itself is
+    // never opened. Skinning and pick pocketing, other kinds of loot, open as in stock.
+    if (lguid.IsCreature() && Arpg::Active(_player))
+    {
+        Creature* creature = _player->GetMap()->GetCreature(lguid);
+        if (creature && creature->m_loot && creature->m_loot->GetLootType() == LOOT_CORPSE)
+        {
+            _player->SendLootError(lguid, LOOT_ERROR_DIDNT_KILL);
+            return;
+        }
     }
 
     if (!lguid.IsItem())
