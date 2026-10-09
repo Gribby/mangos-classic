@@ -7,6 +7,8 @@
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Globals/ObjectMgr.h"
+#include "Log/Log.h"
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
@@ -263,9 +265,39 @@ namespace Arpg
             { 17103, KIT_ECHO,              116,  3, 0.0f,  60, "Every 3rd Frostbolt is echoed for free at 60% damage." },
             // Book of the Dead, Balnazzar (Stratholme): any kill raises a Skeleton (6412) for 20 sec.
             { 13353, KIT_RAISE,             6412, 0, 20.0f, 20, "Enemies you kill have a 20% chance to rise as a skeleton that fights for you for 20 sec." },
+            // Paladin. Kresh's Back, Kresh (Wailing Caverns): Hammer of Justice.
+            { 13245, KIT_SPREAD,            853,  2, 8.0f,  100, "Hammer of Justice also stuns 2 more enemies within 8 yards." },
+            // Smite's Mighty Hammer, Mr. Smite (Deadmines): Seal of Righteousness's holy strikes.
+            { 7230,  KIT_ARC,               21084, 0, 0.0f, 50, "Seal of Righteousness strikes every enemy in front of you. The extra enemies take 50% damage." },
+            // Taskmaster Axe, Sneed (Deadmines): Judgement.
+            { 5194,  KIT_CHAIN,             20271, 2, 10.0f, 60, "Judgement chains to 2 more enemies within 10 yards for 60% damage." },
+            // Hand of Righteousness, High Inquisitor Whitemane (Scarlet Monastery): Seal of Righteousness.
+            { 7721,  KIT_BURST,             21084, 0, 5.0f, 35, "Seal of Righteousness strikes burst onto enemies within 5 yards for 35% damage." },
+            // Hand of Edward the Odd, world drop: Holy Shock.
+            { 2243,  KIT_CHAIN,             20473, 2, 10.0f, 60, "Holy Shock chains to 2 more enemies within 10 yards for 60% damage." },
+            // Spinal Reaper, Ragnaros (Molten Core): Seal of Command.
+            { 17104, KIT_ARC,               20375, 0, 0.0f, 60, "Seal of Command strikes every enemy in front of you for 60% damage." },
             // Perdition's Blade, Ragnaros (Molten Core): Sinister Strike.
             { 18816, KIT_STEP,              1752, 0, 10.0f, 0,  "A kill with Sinister Strike steps you behind the nearest enemy within 10 yards." },
         };
+        // Checked once against the loaded data, so a wrong id shows in the log, not in play.
+        static bool const checked = []()
+        {
+            for (UniqueMechanic const& row : table)
+            {
+                if (!ObjectMgr::GetItemPrototype(row.item))
+                    sLog.outError("ARPG uniques: item %u is not in item_template", row.item);
+                if (row.kit == KIT_RAISE)
+                    continue;
+                SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(row.spell);
+                if (!spell)
+                    sLog.outError("ARPG uniques: item %u names spell %u, which does not exist", row.item, row.spell);
+                else
+                    sLog.outDetail("ARPG uniques: item %u, kit %c, spell %u (%s)", row.item, char(row.kit), row.spell, spell->SpellName[0]);
+            }
+            return true;
+        }();
+        (void)checked;
         return table;
     }
 
