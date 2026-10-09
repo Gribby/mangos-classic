@@ -12,7 +12,7 @@
  *
  * An ARPG group has no loot rules: its corpse loot is free for all (Loot::SetGroupLootRight), so
  * nothing is held for a roll and every item shows on the ground for every member who may take it.
- * Nor does an ARPG player's loot bind on pickup (Arpg::BindsOnPickup).
+ * Nor does anything bind to an ARPG player, on pickup, equip or use (Arpg::ItemsBind).
  *
  *   SMSG_ARPG_LOOT: uint64 corpse, uint32 gold, uint8 item count, then per item:
  *                   uint8 loot slot, uint32 item id, uint32 display id, uint8 quality, uint8 count

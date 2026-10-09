@@ -9984,9 +9984,10 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
             return nullptr;
 
         ItemPrototype const* itemProto = pItem->GetProto();
-        // ARPG: an ARPG player's loot never binds as it is picked up (Arpg::BindsOnPickup).
-        if (((itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM) && Arpg::BindsOnPickup(this))
-                || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos)))
+        // ARPG: nothing binds to an ARPG player (Arpg::ItemsBind).
+        if (Arpg::ItemsBind(this) && (itemProto->Bonding == BIND_WHEN_PICKED_UP
+                || itemProto->Bonding == BIND_QUEST_ITEM
+                || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos))))
             pItem->SetBinding(true);
 
         if (bag == INVENTORY_SLOT_BAG_0)
@@ -10026,9 +10027,10 @@ Item* Player::_StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool
         return pItem;
     }
     ItemPrototype const* itemProto = pItem2->GetProto();
-    // ARPG: an ARPG player's loot never binds as it is picked up (Arpg::BindsOnPickup).
-    if (((itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM) && Arpg::BindsOnPickup(this))
-        || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos)))
+    // ARPG: nothing binds to an ARPG player (Arpg::ItemsBind).
+    if (Arpg::ItemsBind(this) && (itemProto->Bonding == BIND_WHEN_PICKED_UP
+        || itemProto->Bonding == BIND_QUEST_ITEM
+        || (itemProto->Bonding == BIND_WHEN_EQUIPPED && IsBagPos(pos))))
         pItem2->SetBinding(true);
 
     pItem2->SetCount(pItem2->GetCount() + count);
@@ -10216,7 +10218,8 @@ void Player::VisualizeItem(uint8 slot, Item* pItem)
 
     // check also  BIND_WHEN_PICKED_UP and BIND_QUEST_ITEM for .additem or .additemset case by GM (not binded at adding to inventory)
     ItemPrototype const* itemProto = pItem->GetProto();
-    if (itemProto->Bonding == BIND_WHEN_EQUIPPED || itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM)
+    // ARPG: nothing binds to an ARPG player (Arpg::ItemsBind), on equip either.
+    if (Arpg::ItemsBind(this) && (itemProto->Bonding == BIND_WHEN_EQUIPPED || itemProto->Bonding == BIND_WHEN_PICKED_UP || itemProto->Bonding == BIND_QUEST_ITEM))
         pItem->SetBinding(true);
 
     DEBUG_LOG("STORAGE: EquipItem slot = %u, item = %u", slot, pItem->GetEntry());

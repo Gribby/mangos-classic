@@ -62,9 +62,9 @@ namespace Arpg
     // The ARPG client said hello: mark the player and refresh its backpedal speed.
     void OnHello(Player* player);
 
-    // Whether an item `player` picks up binds to them as stock (bind on pickup, quest items): not
-    // for an ARPG player, whose loot can be traded and sold on.
-    bool BindsOnPickup(Player const* player);
+    // Whether items bind to `player` as stock (on pickup, equip or use): not for an ARPG player,
+    // whose gear can always be traded and sold on.
+    bool ItemsBind(Player const* player);
 
     // Run the held swing and any pending extra attacks for this tick: called from Player::Update.
     void UpdateSwing(Player* player);
