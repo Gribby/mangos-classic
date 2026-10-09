@@ -1251,6 +1251,8 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         OnHit(missInfo); // TODO: After spell damage calc is moved to proper handler - move this before the first if
 
         int32 gain = affectiveCaster->DealHeal(unitTarget, addhealth, m_spellInfo, target->isCrit);
+        // ARPG: the Dawnbringer keystone turns a heal on yourself into a holy bolt.
+        Arpg::OnHeal(this, affectiveCaster, unitTarget, addhealth);
 
         if (affectiveCaster)
             unitTarget->getHostileRefManager().threatAssist(affectiveCaster, float(gain) * 0.5f * sSpellMgr.GetSpellThreatMultiplier(m_spellInfo), m_spellInfo, false, m_IsTriggeredSpell);
@@ -5024,7 +5026,7 @@ SpellCastResult Spell::CheckCast(bool strict)
             // ignore self casts (including area casts when caster selected as target)
             if (non_caster_target)
             {
-                if (!CheckTargetCreatureType(target, m_spellInfo))
+                if (!CheckTargetCreatureType(target, m_spellInfo) && !Arpg::IgnoresCreatureType(m_trueCaster, m_spellInfo))
                 {
                     if (target->GetTypeId() == TYPEID_PLAYER)
                         return SPELL_FAILED_TARGET_IS_PLAYER;
@@ -7059,7 +7061,7 @@ bool Spell::CheckTarget(Unit* target, SpellEffectIndex eff, bool targetB, bool n
     // Check targets for creature type mask and remove not appropriate (skip explicit self target case, maybe need other explicit targets)
     if (exception != CheckException::EXCEPTION_MAGNET && m_spellInfo->EffectImplicitTargetA[eff] != TARGET_UNIT_CASTER)
     {
-        if (!CheckTargetCreatureType(target, m_spellInfo))
+        if (!CheckTargetCreatureType(target, m_spellInfo) && !Arpg::IgnoresCreatureType(m_trueCaster, m_spellInfo))
             return false;
     }
 

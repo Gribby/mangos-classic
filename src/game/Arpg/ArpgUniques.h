@@ -55,6 +55,7 @@
 class Player;
 class Spell;
 class Unit;
+class WorldObject;
 struct SpellEntry;
 
 namespace Arpg
@@ -109,6 +110,16 @@ namespace Arpg
     // `victim` is dying, `killer` the player credited, if any: the on-kill uniques (a DoT spreading
     // from the corpse, a fallen foe rising). Called while its auras still stand.
     void OnKill(Player* killer, Unit* victim);
+
+    // The skill tree's combat keystones (ArpgTree.h):
+    // Avenger: whether Judgement leaves `caster`'s Seal on.
+    bool KeepsSealOnJudgement(Unit const* caster);
+    // Purifying Light: whether `caster`'s Exorcism or Holy Wrath takes any creature type.
+    bool IgnoresCreatureType(WorldObject const* caster, SpellEntry const* spellInfo);
+    // Dawnbringer: `caster` healed `target` for `amount` with `spell`.
+    void OnHeal(Spell* spell, Unit* caster, Unit* target, uint32 amount);
+    // Martyr's Ward's pulse; called every player update.
+    void UpdateKeystones(Player* player);
 }
 
 #endif

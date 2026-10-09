@@ -17,6 +17,7 @@
  */
 
 #include "Entities/Player.h"
+#include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCombat.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
@@ -652,6 +653,9 @@ Player::Player(WorldSession* session): Unit(), m_taxiTracker(*this), m_mover(thi
 Player::~Player()
 {
     CleanupsBeforeDelete();
+
+    // ARPG: the skill tree held in memory for this character.
+    Arpg::UnloadTree(this);
 
     // it must be unloaded already in PlayerLogout and accessed only for loggined player
     // m_social = nullptr;
@@ -3381,7 +3385,8 @@ bool Player::addSpell(uint32 spell_id, bool active, bool learning, bool dependen
             return false;
     }
 
-    if (talentPos)
+    // ARPG: a spell the ARPG tree taught costs no vanilla talent points (Arpg/ArpgTree.h).
+    if (talentPos && !Arpg::TreeOwnsSpell(this, spell_id))
     {
         // update used talent points count
         m_usedTalentCount += GetTalentSpellCost(talentPos);
@@ -3545,7 +3550,8 @@ void Player::removeSpell(uint32 spell_id, bool disabled, bool learn_low_rank, bo
         RemovePetAura(petSpell);
 
     TalentSpellPos const* talentPos = GetTalentSpellPos(spell_id);
-    if (talentPos)
+    // ARPG: nor does unlearning one refund any.
+    if (talentPos && !Arpg::TreeOwnsSpell(this, spell_id))
     {
         // free talent points
         uint32 talentCosts = GetTalentSpellCost(talentPos);
@@ -14463,6 +14469,8 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder* holder)
     _LoadMailedItems(holder->GetResult(PLAYER_LOGIN_QUERY_LOADMAILEDITEMS));
     UpdateNextMailTimeAndUnreads();
 
+    // ARPG: the skill tree, first, so its spells load outside vanilla's talent accounting.
+    Arpg::LoadTree(this);
     _LoadSpells(holder->GetResult(PLAYER_LOGIN_QUERY_LOADSPELLS));
 
     _LoadAuras(holder->GetResult(PLAYER_LOGIN_QUERY_LOADAURAS), time_diff);

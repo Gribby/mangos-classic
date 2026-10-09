@@ -869,10 +869,12 @@ enum Opcodes
     SMSG_ARPG_LOOT                                  = 0x33D,
     // ARPG: the uniques' tooltip lines, sent after the hello (Arpg/ArpgUniques.h)
     SMSG_ARPG_ITEM_MECHANICS                        = 0x33E,
+    // ARPG: the player's skill tree (Arpg/ArpgTree.h)
+    SMSG_ARPG_TREE                                  = 0x33F,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x33F
+#define NUM_MSG_TYPES 0x340
 
 /// Player state
 enum SessionStatus

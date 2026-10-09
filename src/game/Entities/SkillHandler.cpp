@@ -17,6 +17,7 @@
  */
 
 #include "Common.h"
+#include "Arpg/ArpgCombat.h"
 #include "Server/Opcodes.h"
 #include "Log/Log.h"
 #include "Entities/Player.h"
@@ -27,6 +28,10 @@ void WorldSession::HandleLearnTalentOpcode(WorldPacket& recv_data)
 {
     uint32 talent_id, requested_rank;
     recv_data >> talent_id >> requested_rank;
+
+    // ARPG: an ARPG player spends in the ARPG tree instead (Arpg/ArpgTree.h).
+    if (Arpg::Active(_player))
+        return;
 
     _player->LearnTalent(talent_id, requested_rank);
 

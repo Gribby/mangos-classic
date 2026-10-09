@@ -19,6 +19,7 @@
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
 #include "Spells/SpellMgr.h"
+#include "Arpg/ArpgUniques.h"
 
 struct SealOfTheCrusader : public AuraScript
 {
@@ -106,8 +107,11 @@ struct spell_judgement : public SpellScript
             if (spellId2 <= 1)
                 continue;
 
-            // found, remove seal
-            caster->RemoveAurasDueToSpell((*itr)->GetId());
+            // found, remove seal; ARPG: the Avenger keystone keeps it, for a doubled cooldown
+            if (Arpg::KeepsSealOnJudgement(caster))
+                caster->AddCooldown(*spell->m_spellInfo, nullptr, false, spell->m_spellInfo->RecoveryTime * 2);
+            else
+                caster->RemoveAurasDueToSpell((*itr)->GetId());
 
             break;
         }

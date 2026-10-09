@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgTree.h"
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
@@ -14,6 +15,8 @@
 #include "Server/WorldSession.h"
 #include "Spells/Spell.h"
 #include "Spells/SpellMgr.h"
+#include "Spells/SpellAuras.h"
+#include "Util/Timer.h"
 #include "Server/DBCStores.h"
 
 #include <algorithm>
@@ -33,6 +36,15 @@ namespace
     constexpr uint32 ECHO_DELAY = 500;
     // A step (kit K) moves the player this long after the kill, in ms, out of the spell's hit.
     constexpr uint32 STEP_DELAY = 100;
+
+    // Dawnbringer's bolt reaches this far, in yards, and flies as Holy Shock's damage spell.
+    constexpr float DAWNBRINGER_RANGE = 20.0f;
+    constexpr uint32 HOLY_SHOCK_DAMAGE = 25912;
+    // Martyr's Ward pulses this often, in ms, this far round the player, in yards.
+    constexpr uint32 MARTYRS_WARD_TICK = 1000;
+    constexpr float MARTYRS_WARD_RANGE = 10.0f;
+    // Each player's last Martyr's Ward pulse, by guid.
+    std::unordered_map<ObjectGuid, uint32> sWardTicks;
 
     // Each player's count of echoing casts (kit I), by guid.
     std::unordered_map<ObjectGuid, uint32> sEchoCounts;
@@ -268,11 +280,11 @@ namespace Arpg
             // Paladin. Kresh's Back, Kresh (Wailing Caverns): Hammer of Justice.
             { 13245, KIT_SPREAD,            853,  2, 8.0f,  100, "Hammer of Justice also stuns 2 more enemies within 8 yards." },
             // Smite's Mighty Hammer, Mr. Smite (Deadmines): Seal of Righteousness's holy strikes.
-            { 7230,  KIT_ARC,               21084, 0, 0.0f, 50, "Seal of Righteousness strikes every enemy in front of you. The extra enemies take 50% damage." },
+            { 7230,  KIT_ARC,               20154, 0, 0.0f, 50, "Seal of Righteousness strikes every enemy in front of you. The extra enemies take 50% damage." },
             // Taskmaster Axe, Sneed (Deadmines): Judgement.
             { 5194,  KIT_CHAIN,             20271, 2, 10.0f, 60, "Judgement chains to 2 more enemies within 10 yards for 60% damage." },
             // Hand of Righteousness, High Inquisitor Whitemane (Scarlet Monastery): Seal of Righteousness.
-            { 7721,  KIT_BURST,             21084, 0, 5.0f, 35, "Seal of Righteousness strikes burst onto enemies within 5 yards for 35% damage." },
+            { 7721,  KIT_BURST,             20154, 0, 5.0f, 35, "Seal of Righteousness strikes burst onto enemies within 5 yards for 35% damage." },
             // Hand of Edward the Odd, world drop: Holy Shock.
             { 2243,  KIT_CHAIN,             20473, 2, 10.0f, 60, "Holy Shock chains to 2 more enemies within 10 yards for 60% damage." },
             // Spinal Reaper, Ragnaros (Molten Core): Seal of Command.
@@ -316,6 +328,10 @@ namespace Arpg
                         (!best || row.n > best->n))
                     best = &row;
         }
+        // The skill tree's modifier nodes, by the same rule: the larger count applies.
+        for (UniqueMechanic const* row : LearnedModifiers(player))
+            if (row->kit == kit && SpellMatches(row->spell, spellInfo) && (!best || row->n > best->n))
+                best = row;
         return best;
     }
 
@@ -600,5 +616,62 @@ namespace Arpg
         std::vector<Unit*> foes = NearestTo(killer, risen, 20.0f, 1);
         if (!foes.empty() && risen->AI())
             risen->AI()->AttackStart(foes.front());
+    }
+
+    // --- The skill tree's keystones (ArpgTree.h) that hook into combat ---
+
+    bool KeepsSealOnJudgement(Unit const* caster)
+    {
+        return HasKeystone(caster, KEY_AVENGER);
+    }
+
+    bool IgnoresCreatureType(WorldObject const* caster, SpellEntry const* spellInfo)
+    {
+        if (!caster || !spellInfo || !spellInfo->SpellName[0] || !caster->IsPlayer())
+            return false;
+        char const* name = spellInfo->SpellName[0];
+        bool const purifiable = std::strcmp(name, "Exorcism") == 0 || std::strcmp(name, "Holy Wrath") == 0;
+        return purifiable && HasKeystone(static_cast<Unit const*>(caster), KEY_PURIFYING_LIGHT);
+    }
+
+    void OnHeal(Spell* spell, Unit* caster, Unit* target, uint32 amount)
+    {
+        if (!spell || spell->IsArpgSecondary() || caster != target || !amount || !HasKeystone(caster, KEY_DAWNBRINGER))
+            return;
+        Player* player = static_cast<Player*>(caster);
+        std::vector<Unit*> foes = NearestTo(caster, caster, DAWNBRINGER_RANGE, 1);
+        if (foes.empty())
+            return;
+        // The bolt flies as Holy Shock's does; with no Holy Shock data, as the heal itself.
+        SpellEntry const* bolt = sSpellTemplate.LookupEntry<SpellEntry>(HOLY_SHOCK_DAMAGE);
+        if (!bolt)
+            bolt = spell->m_spellInfo;
+        RelayHit(player, caster->GetObjectGuid(), foes.front()->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
+                 std::max<uint32>(1, amount / 2), 0, 0.0f, GuidVector{});
+    }
+
+    void UpdateKeystones(Player* player)
+    {
+        if (!player->IsInCombat() || !player->IsAlive() || !HasKeystone(player, KEY_MARTYRS_WARD))
+            return;
+        uint32 const now = WorldTimer::getMSTime();
+        uint32& last = sWardTicks[player->GetObjectGuid()];
+        if (WorldTimer::getMSTimeDiff(last, now) < MARTYRS_WARD_TICK)
+            return;
+        last = now;
+        // The player's own Retribution Aura: its damage, doubled, to every enemy around.
+        for (Aura* aura : player->GetAurasByType(SPELL_AURA_DAMAGE_SHIELD))
+        {
+            SpellEntry const* proto = aura->GetSpellProto();
+            if (aura->GetCasterGuid() != player->GetObjectGuid() || !proto->SpellName[0] ||
+                    std::strncmp(proto->SpellName[0], "Retribution Aura", 16) != 0)
+                continue;
+            uint32 const damage = uint32(std::max(0, aura->GetModifier()->m_amount)) * 2;
+            if (!damage)
+                return;
+            for (Unit* unit : NearestTo(player, player, MARTYRS_WARD_RANGE, BURST_MAX))
+                DealShare(player, unit, proto, SPELL_SCHOOL_MASK_HOLY, damage);
+            return;
+        }
     }
 }

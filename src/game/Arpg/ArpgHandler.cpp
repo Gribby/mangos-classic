@@ -17,6 +17,9 @@
  *     ACTION_LOOT_QUERY   uint64 corpse: send its ground loot list
  *     ACTION_DEV_LOOT     uint8 quality (0xFF mixed), uint8 count, uint8 level (0 the player's):
  *                         with Arpg.DevTools on, drop test loot at the player's feet
+ *     ACTION_TREE_SPEND   uint16 node: spend a point in the ARPG skill tree (Arpg/ArpgTree.h)
+ *     ACTION_TREE_RESPEC  -: refund the tree
+ *     ACTION_TREE_QUERY   -: send the tree
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -25,6 +28,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgTree.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -63,6 +67,13 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             Arpg::OnHello(player);
             // The uniques' tooltip lines, with every hello: the client may have missed a first.
             Arpg::SendUniques(player);
+            // The skill tree takes over from the talents, on the world thread (it teaches spells).
+            GetMessager().AddMessage([](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::OnTreeHello(arpg);
+            });
             break;
         }
         case Arpg::ACTION_SWING_START:
@@ -162,6 +173,37 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             });
             break;
         }
+        case Arpg::ACTION_TREE_SPEND:
+        {
+            uint16 node;
+            recvPacket >> node;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([node](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::SpendNode(arpg, node);
+            });
+            break;
+        }
+        case Arpg::ACTION_TREE_RESPEC:
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::Respec(arpg);
+            });
+            break;
+        case Arpg::ACTION_TREE_QUERY:
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::SendTree(arpg);
+            });
+            break;
         default:
             recvPacket.rpos(recvPacket.wpos());
             break;
