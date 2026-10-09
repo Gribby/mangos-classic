@@ -12,8 +12,18 @@
  *   KIT_EXTRA_PROJECTILES (A)  A line skillshot fires `n` more lines, fanned `value` degrees
  *                              apart around the aim, each a free cast of the same spell dealing
  *                              `pct` percent (Spell::SetArpgSecondary).
+ *   KIT_CHAIN (C)              On hit, the hit leaps to the nearest enemy not yet hit within
+ *                              `value` yards, `n` times, each for `pct` percent of the first hit.
  *   KIT_FRAGMENTS (D)          On hit, `n` enemies within `value` yards behind the target, in a
  *                              90 degree cone away from the caster, take `pct` percent of the hit.
+ *   KIT_BURST (E)              On hit, every enemy within `value` yards of the target (up to 10)
+ *                              takes `pct` percent of the hit at once.
+ *   KIT_ARC (G)                A melee ability's hit also strikes every other enemy in the
+ *                              swing's 120 degree arc and reach, for `pct` percent.
+ * Chain jumps and fragments fly: a cosmetic SMSG_SPELL_GO of the spell from the unit they leave
+ * to the one they reach draws the missile, and the hit lands when it arrives.
+ * A row's spell covers every rank of it and any spell named after it ("Judgement of
+ * Righteousness" under Judgement, each missile under Arcane Missiles).
  * If two worn items change the same spell with the same kit, the one with the larger `n` applies.
  *
  *   SMSG_ARPG_ITEM_MECHANICS: uint8 count, then per row: uint32 item id, cstring tooltip line.
@@ -37,7 +47,10 @@ namespace Arpg
     enum UniqueKit : uint8
     {
         KIT_EXTRA_PROJECTILES = 'A',
+        KIT_CHAIN             = 'C',
         KIT_FRAGMENTS         = 'D',
+        KIT_BURST             = 'E',
+        KIT_ARC               = 'G',
     };
 
     struct UniqueMechanic
@@ -45,8 +58,8 @@ namespace Arpg
         uint32 item;
         UniqueKit kit;
         uint32 spell;     // rank 1 of the spell it changes
-        uint8 n;          // projectiles or fragments
-        float value;      // A: degrees between lines; D: reach behind the target, in yards
+        uint8 n;          // projectiles, fragments or chain jumps (0 where unused)
+        float value;      // A: degrees between lines; C: jump range; D: reach behind; E: radius
         uint32 pct;       // each added hit's share of the main hit, in percent
         char const* text; // the tooltip line
     };
