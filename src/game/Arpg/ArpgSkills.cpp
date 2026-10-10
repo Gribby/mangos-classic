@@ -5,6 +5,8 @@
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 
+#include "Chat/Chat.h"
+
 #include "Database/DatabaseEnv.h"
 #include "Entities/Player.h"
 #include "Log/Log.h"
@@ -17,6 +19,7 @@
 #include <algorithm>
 #include <cstring>
 #include <map>
+#include <set>
 #include <mutex>
 #include <tuple>
 #include <unordered_map>
@@ -202,6 +205,109 @@ namespace
         return std::strncmp(have, want, n) == 0 && (have[n] == '\0' || have[n] == ' ');
     }
 
+    // --- Codex pages: each capstone's home boss ---
+
+    struct PageHome
+    {
+        uint16 node;
+        uint32 boss;          // creature entry
+        char const* where;    // for the sealed node's tooltip
+    };
+
+    PageHome const PAGES[] =
+    {
+        { 103, 3975,  "Herod, Scarlet Monastery" },                     // Whirling Strikes
+        { 106, 646,   "Mr. Smite, the Deadmines" },                     // Crusader's Pace
+        { 109, 7228,  "Ironaya, Uldaman" },                             // Shockwave
+        { 203, 6487,  "Arcanist Doan, Scarlet Monastery" },             // Twin Seals
+        { 209, 4542,  "High Inquisitor Fairbanks, Scarlet Monastery" }, // Light of the Crusader
+        { 303, 3976,  "Scarlet Commander Mograine, Scarlet Monastery" },// Final Verdict
+        { 306, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Sentence
+        { 403, 3977,  "High Inquisitor Whitemane, Scarlet Monastery" }, // Walking Consecration
+        { 409, 10813, "Balnazzar, Stratholme" },                        // Sacred Seal
+        { 503, 10440, "Baron Rivendare, Stratholme" },                  // Blessed Hammer
+        { 508, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Sentence Passed
+    };
+
+    PageHome const* PageOf(uint16 node)
+    {
+        for (PageHome const& page : PAGES)
+            if (page.node == node)
+                return &page;
+        return nullptr;
+    }
+
+    // --- Runes ---
+
+    enum RuneEffect : uint8 { RUNE_KIT, RUNE_MODS, RUNE_KEY, RUNE_HOOK };
+
+    struct RuneDef
+    {
+        uint8 id;
+        char const* name;
+        char const* text;
+        uint32 icon;              // spell icon for the window
+        uint8 fits;               // bit per SkillId
+        RuneEffect effect;
+        UniqueKit kit;            // RUNE_KIT: the row, on each fitting skill's kit spells
+        uint8 n;
+        float value;
+        uint32 pct;
+        std::vector<std::tuple<uint8, uint8, int32>> mods; // RUNE_MODS: op, type, amount
+    };
+
+    constexpr uint8 FIT(SkillId id) { return uint8(1u << id); }
+
+    std::vector<RuneDef> const& Runes()
+    {
+        static std::vector<RuneDef> const runes =
+        {
+            { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on Chain of Judgement).", 20186,
+              uint8(FIT(SKILL_JUDGEMENT)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
+            { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on Hammer of Light).", 24275,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_SEALS)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
+            { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
+              uint8(FIT(SKILL_CONSECRATION)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
+            { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) } },
+            { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
+                std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) } },
+            { RUNE_LEECH, "Rune of Leech", "3% of the skill's damage heals you.", 20166,
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 3, {} },
+            { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
+              uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
+            { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
+              uint8(FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) } },
+            { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
+              uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
+        };
+        return runes;
+    }
+
+    RuneDef const* FindRune(uint8 id)
+    {
+        for (RuneDef const& rune : Runes())
+            if (rune.id == id)
+                return &rune;
+        return nullptr;
+    }
+
+    // The spells a rune's kit row lands on, by skill: the kit spells its tree's own rows use.
+    std::vector<uint32> KitSpellsOf(SkillId skill)
+    {
+        switch (skill)
+        {
+            case SKILL_SEALS: return { 20154, 20375 };      // Seal of Righteousness, of Command
+            case SKILL_JUDGEMENT: return { 20271 };
+            case SKILL_CONSECRATION: return { 26573 };
+            case SKILL_HAMMER: return { 853 };
+            default: return {};
+        }
+    }
+
     // The family flags of the class's spells a skill covers, for its spell modifiers.
     uint64 SkillMask(SkillDef const& skill)
     {
@@ -233,6 +339,10 @@ namespace
     {
         uint8 slots[SKILL_SLOTS] = {};
         std::map<uint16, uint8> ranks;
+        std::set<uint16> pages;               // Codex pages read, by capstone node
+        uint32 fragments = 0;                 // Codex fragments held
+        std::map<uint8, uint8> runes;         // runes held, socketed ones included
+        std::map<uint8, uint8> sockets;       // by skill: the rune in its socket
     };
 
     std::mutex sSkillsLock;
@@ -263,6 +373,18 @@ namespace
                 "CREATE TABLE IF NOT EXISTS character_arpg_skill_node ("
                 "guid INT UNSIGNED NOT NULL, node SMALLINT UNSIGNED NOT NULL, `rank` TINYINT UNSIGNED NOT NULL, "
                 "PRIMARY KEY (guid, node)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG skill tree ranks (Arpg/ArpgSkills.h)'");
+            CharacterDatabase.DirectExecute(
+                "CREATE TABLE IF NOT EXISTS character_arpg_codex ("
+                "guid INT UNSIGNED NOT NULL, page SMALLINT UNSIGNED NOT NULL, "
+                "PRIMARY KEY (guid, page)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG Codex pages read (Arpg/ArpgSkills.h)'");
+            CharacterDatabase.DirectExecute(
+                "CREATE TABLE IF NOT EXISTS character_arpg_held ("
+                "guid INT UNSIGNED NOT NULL, thing SMALLINT UNSIGNED NOT NULL, count SMALLINT UNSIGNED NOT NULL, "
+                "PRIMARY KEY (guid, thing)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG Codex fragments (0) and runes held (Arpg/ArpgSkills.h)'");
+            CharacterDatabase.DirectExecute(
+                "CREATE TABLE IF NOT EXISTS character_arpg_socket ("
+                "guid INT UNSIGNED NOT NULL, skill TINYINT UNSIGNED NOT NULL, rune TINYINT UNSIGNED NOT NULL, "
+                "PRIMARY KEY (guid, skill)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG rune sockets (Arpg/ArpgSkills.h)'");
             return true;
         }();
         (void)created;
@@ -295,13 +417,45 @@ namespace
                                        player->GetGUIDLow(), uint32(node));
     }
 
+    void SaveHeld(Player* player, uint16 thing, uint32 count)
+    {
+        if (count)
+            CharacterDatabase.PExecute("REPLACE INTO character_arpg_held (guid, thing, count) VALUES (%u, %u, %u)",
+                                       player->GetGUIDLow(), uint32(thing), std::min<uint32>(count, 65535));
+        else
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_held WHERE guid = %u AND thing = %u",
+                                       player->GetGUIDLow(), uint32(thing));
+    }
+
+    void SaveSocket(Player* player, uint8 skill, uint8 rune)
+    {
+        if (rune)
+            CharacterDatabase.PExecute("REPLACE INTO character_arpg_socket (guid, skill, rune) VALUES (%u, %u, %u)",
+                                       player->GetGUIDLow(), uint32(skill), uint32(rune));
+        else
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_socket WHERE guid = %u AND skill = %u",
+                                       player->GetGUIDLow(), uint32(skill));
+    }
+
+    void SavePage(Player* player, uint16 node)
+    {
+        CharacterDatabase.PExecute("REPLACE INTO character_arpg_codex (guid, page) VALUES (%u, %u)", player->GetGUIDLow(), uint32(node));
+    }
+
+    // A rune socket opens with this many points in the skill.
+    constexpr uint32 SOCKET_POINTS = 10;
+
     void ClearSkill(Player* player, uint8 skill)
     {
+        bool unsocketed = false;
         Edit(player, [&](PlayerSkills& s)
         {
             for (auto it = s.ranks.begin(); it != s.ranks.end();)
                 it = it->first / 100 == skill ? s.ranks.erase(it) : std::next(it);
+            unsocketed = s.sockets.erase(skill) > 0;
         });
+        if (unsocketed)
+            SaveSocket(player, skill, 0);
         CharacterDatabase.PExecute("DELETE FROM character_arpg_skill_node WHERE guid = %u AND node >= %u AND node < %u",
                                    player->GetGUIDLow(), uint32(skill) * 100, uint32(skill) * 100 + 100);
     }
@@ -321,6 +475,54 @@ namespace
             it = rows.emplace(key, UniqueMechanic{ 0, node.kit, node.kitSpell, node.n[i], node.value[i], node.pct[i] + bonusPct, node.text }).first;
         }
         return &it->second;
+    }
+
+    // A rune's kit row on `spell`; rows live as long as the server.
+    UniqueMechanic const* RuneRow(RuneDef const& rune, uint32 spell)
+    {
+        static std::mutex lock;
+        static std::map<std::pair<uint8, uint32>, UniqueMechanic> rows;
+        std::lock_guard<std::mutex> guard(lock);
+        auto key = std::make_pair(rune.id, spell);
+        auto it = rows.find(key);
+        if (it == rows.end())
+            it = rows.emplace(key, UniqueMechanic{ 0, rune.kit, spell, rune.n, rune.value, rune.pct, rune.text }).first;
+        return &it->second;
+    }
+
+    // A rune's kit row on top of a tree node's row of the same kit and spell, so the rune adds to
+    // the node rather than losing to it (only the best row of a kit applies): one more chain jump,
+    // or 15 points more burst, at the wider reach.
+    constexpr uint32 RUNE_STACK_PCT = 15;
+    UniqueMechanic const* StackedRow(RuneDef const& rune, UniqueMechanic const* node)
+    {
+        static std::mutex lock;
+        static std::map<std::pair<uint8, UniqueMechanic const*>, UniqueMechanic> rows;
+        std::lock_guard<std::mutex> guard(lock);
+        auto key = std::make_pair(rune.id, node);
+        auto it = rows.find(key);
+        if (it == rows.end())
+        {
+            UniqueMechanic row = *node;
+            if (rune.n)
+                row.n = uint8(std::min<uint32>(node->n + rune.n, 10));
+            else
+                row.pct = node->pct + RUNE_STACK_PCT;
+            row.value = std::max(node->value, rune.value);
+            it = rows.emplace(key, row).first;
+        }
+        return &it->second;
+    }
+
+    // The runes in effect: socketed in a specialised skill with SOCKET_POINTS in it.
+    std::vector<std::pair<SkillId, RuneDef const*>> ActiveRunes(PlayerSkills const& s)
+    {
+        std::vector<std::pair<SkillId, RuneDef const*>> out;
+        for (auto const& [skill, id] : s.sockets)
+            if (RuneDef const* rune = FindRune(id))
+                if ((rune->fits & FIT(SkillId(skill))) && SlotOf(s, skill) >= 0 && SpentIn(s, skill) >= SOCKET_POINTS)
+                    out.emplace_back(SkillId(skill), rune);
+        return out;
     }
 }
 
@@ -376,6 +578,51 @@ namespace Arpg
             }
             while (result->NextRow());
         }
+        if (auto result = CharacterDatabase.PQuery("SELECT page FROM character_arpg_codex WHERE guid = %u", player->GetGUIDLow()))
+        {
+            do
+                s.pages.insert(uint16(result->Fetch()[0].GetUInt32()));
+            while (result->NextRow());
+        }
+        if (auto result = CharacterDatabase.PQuery("SELECT thing, count FROM character_arpg_held WHERE guid = %u", player->GetGUIDLow()))
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                uint32 const thing = fields[0].GetUInt32();
+                uint32 const count = fields[1].GetUInt32();
+                if (thing == 0)
+                    s.fragments = count;
+                else if (FindRune(uint8(thing)))
+                    s.runes[uint8(thing)] = uint8(std::min<uint32>(count, 255));
+            }
+            while (result->NextRow());
+        }
+        if (auto result = CharacterDatabase.PQuery("SELECT skill, rune FROM character_arpg_socket WHERE guid = %u", player->GetGUIDLow()))
+        {
+            do
+            {
+                Field* fields = result->Fetch();
+                uint8 const skill = uint8(fields[0].GetUInt32());
+                uint8 const rune = uint8(fields[1].GetUInt32());
+                if (FindSkill(classId, skill) && FindRune(rune) && s.runes[rune] > 0)
+                    s.sockets[skill] = rune;
+            }
+            while (result->NextRow());
+        }
+        // A capstone taken before Codex pages sealed them stays: its page counts as read.
+        std::vector<uint16> grandfathered;
+        for (auto const& [id, rank] : s.ranks)
+        {
+            SkillNode const* node = FindNode(classId, id);
+            if (node && node->kind == SKILL_NODE_CAPSTONE && rank && !s.pages.count(id))
+            {
+                s.pages.insert(id);
+                grandfathered.push_back(id);
+            }
+        }
+        for (uint16 id : grandfathered)
+            SavePage(player, id);
         std::lock_guard<std::mutex> guard(sSkillsLock);
         sSkills[player->GetObjectGuid()] = std::move(s);
     }
@@ -397,8 +644,8 @@ namespace Arpg
         if (mine.empty())
             return;
 
-        WorldPacket data(SMSG_ARPG_SKILLS, 64 + mine.size() * 1200);
-        data << uint8(1);
+        WorldPacket data(SMSG_ARPG_SKILLS, 512 + mine.size() * 1600);
+        data << uint8(2);
         data << uint16(SkillPointsFor(player->GetLevel()));
         data << uint16(SpentIn(s));
         data << uint8(std::min<uint32>(player->GetLevel(), 255));
@@ -414,6 +661,9 @@ namespace Arpg
             data << skill->text;
             data << uint8(SpentIn(s, skill->id));
             data << uint8(SKILL_CAP);
+            auto socket = s.sockets.find(skill->id);
+            data << uint8(socket == s.sockets.end() ? 0 : socket->second);
+            data << uint8(SOCKET_POINTS);
             data << uint8(skill->branches.size());
             for (char const* branch : skill->branches)
                 data << branch;
@@ -431,7 +681,24 @@ namespace Arpg
                 data << uint32(node.icon);
                 data << node.name;
                 data << node.text;
+                PageHome const* page = node.kind == SKILL_NODE_CAPSTONE ? PageOf(node.id) : nullptr;
+                data << uint8(page && !s.pages.count(node.id) ? 1 : 0);
+                data << (page ? page->where : "");
             }
+        }
+        data << uint16(std::min<uint32>(s.fragments, 65535));
+        data << uint8(FRAGMENTS_PER_PAGE);
+        std::vector<RuneDef> const& runes = Runes();
+        data << uint8(runes.size());
+        for (RuneDef const& rune : runes)
+        {
+            auto held = s.runes.find(rune.id);
+            data << uint8(rune.id);
+            data << uint32(rune.icon);
+            data << rune.name;
+            data << rune.text;
+            data << uint8(held == s.runes.end() ? 0 : held->second);
+            data << uint8(rune.fits);
         }
         player->GetSession()->SendPacket(data);
     }
@@ -502,6 +769,8 @@ namespace Arpg
         uint8 const rank = it == s.ranks.end() ? 0 : it->second;
         if (rank >= node->max)
             return refuse("at its top rank");
+        if (node->kind == SKILL_NODE_CAPSTONE && PageOf(id) && !s.pages.count(id))
+            return refuse("sealed: its Codex page is unread");
         if (node->parent && !s.ranks.count(node->parent))
             return refuse("the node above it has no rank");
         if (SpentIn(s, skill->id) >= SKILL_CAP)
@@ -572,14 +841,51 @@ namespace Arpg
                 if (uint64 mask = SkillMask(*skill))
                     totals.mods.push_back({ uint8(node->modOp), node->modType, node->modPerRank * rank, mask });
         }
+        for (auto const& [skillId, rune] : ActiveRunes(s))
+        {
+            if (rune->effect == RUNE_MODS)
+                if (SkillDef const* skill = FindSkill(classId, skillId))
+                    if (uint64 mask = SkillMask(*skill))
+                        for (auto const& [op, type, amount] : rune->mods)
+                            totals.mods.push_back({ op, type, amount, mask });
+            // Fury: one rank wider, to Wide Swing's top.
+            if (rune->effect == RUNE_KEY)
+                totals.rank[KEY_WIDE_SWING] = std::min<uint8>(totals.rank[KEY_WIDE_SWING] + 1, 3);
+        }
     }
 
     std::vector<UniqueMechanic const*> SkillModifiers(Player const* player)
     {
         std::vector<UniqueMechanic const*> rows;
         PlayerSkills const s = SkillsFor(player);
+        std::vector<std::pair<SkillId, RuneDef const*>> const runes = ActiveRunes(s);
+        // The tree's rows first, then each kit rune: on top of a node row of its kit and spell,
+        // else a row of its own.
+        auto addRunes = [&]()
+        {
+            for (auto const& [skillId, rune] : runes)
+            {
+                if (rune->effect != RUNE_KIT)
+                    continue;
+                for (uint32 spell : KitSpellsOf(skillId))
+                {
+                    bool stacked = false;
+                    for (UniqueMechanic const*& row : rows)
+                        if (row->kit == rune->kit && row->spell == spell)
+                        {
+                            row = StackedRow(*rune, row);
+                            stacked = true;
+                        }
+                    if (!stacked)
+                        rows.push_back(RuneRow(*rune, spell));
+                }
+            }
+        };
         if (s.ranks.empty())
+        {
+            addRunes();
             return rows;
+        }
         uint8 const classId = player->getClass();
         // Echoing Verdict adds to Chain of Judgement's share.
         auto echo = s.ranks.find(302);
@@ -590,6 +896,158 @@ namespace Arpg
             if (node && node->kit && rank)
                 rows.push_back(KitRow(*node, rank, id == 301 ? echoPct : 0));
         }
+        addRunes();
         return rows;
+    }
+
+    bool HasRune(Player const* player, SkillId skill, uint8 rune)
+    {
+        PlayerSkills const s = SkillsFor(player);
+        for (auto const& [id, def] : ActiveRunes(s))
+            if (id == skill && def->id == rune)
+                return true;
+        return false;
+    }
+
+    std::vector<uint16> PagesFrom(uint32 bossEntry)
+    {
+        std::vector<uint16> out;
+        for (PageHome const& page : PAGES)
+            if (page.boss == bossEntry)
+                out.push_back(page.node);
+        return out;
+    }
+
+    std::vector<uint16> AllPages()
+    {
+        std::vector<uint16> out;
+        for (PageHome const& page : PAGES)
+            out.push_back(page.node);
+        return out;
+    }
+
+    std::vector<uint8> AllRunes()
+    {
+        std::vector<uint8> out;
+        for (RuneDef const& rune : Runes())
+            out.push_back(rune.id);
+        return out;
+    }
+
+    char const* PageName(uint16 node)
+    {
+        for (SkillDef const& skill : Skills())
+            for (SkillNode const& n : skill.nodes)
+                if (n.id == node)
+                    return n.name;
+        return "";
+    }
+
+    char const* RuneName(uint8 rune)
+    {
+        RuneDef const* def = FindRune(rune);
+        return def ? def->name : "";
+    }
+
+    char const* RuneText(uint8 rune)
+    {
+        RuneDef const* def = FindRune(rune);
+        return def ? def->text : "";
+    }
+
+    void ReadPage(Player* player, uint16 node)
+    {
+        if (!PageOf(node))
+            return;
+        bool fresh = false;
+        Edit(player, [&](PlayerSkills& s) { fresh = s.pages.insert(node).second; });
+        if (fresh)
+        {
+            SavePage(player, node);
+            ChatHandler(player).PSendSysMessage("|cffa335eeYou read the Codex page: %s is unsealed.|r", PageName(node));
+        }
+        else
+        {
+            // A page already read is torn into fragments.
+            AddFragments(player, FRAGMENTS_FOR_DUPLICATE);
+            return;
+        }
+        SendSkills(player);
+    }
+
+    void AddFragments(Player* player, uint32 count)
+    {
+        uint32 total = 0;
+        Edit(player, [&](PlayerSkills& s) { s.fragments += count; total = s.fragments; });
+        SaveHeld(player, 0, total);
+        ChatHandler(player).PSendSysMessage("|cff1eff00Codex fragments: %u (%u unseal a capstone).|r", total, uint32(FRAGMENTS_PER_PAGE));
+        SendSkills(player);
+    }
+
+    void AddRune(Player* player, uint8 rune)
+    {
+        if (!FindRune(rune))
+            return;
+        uint32 held = 0;
+        Edit(player, [&](PlayerSkills& s) { held = std::min<uint32>(s.runes[rune] + 1, 255); s.runes[rune] = uint8(held); });
+        SaveHeld(player, rune, held);
+        ChatHandler(player).PSendSysMessage("|cff0070ddYou gain a %s (%u held). Socket it in the Skills window.|r", RuneName(rune), held);
+        SendSkills(player);
+    }
+
+    void UnsealWithFragments(Player* player, uint16 node)
+    {
+        SkillDef const* skill = nullptr;
+        SkillNode const* n = FindNode(player->getClass(), node, &skill);
+        PlayerSkills const s = SkillsFor(player);
+        if (!n || n->kind != SKILL_NODE_CAPSTONE || !PageOf(node) || s.pages.count(node) ||
+                s.fragments < FRAGMENTS_PER_PAGE || SlotOf(s, skill->id) < 0)
+            return SendSkills(player);
+        uint32 left = 0;
+        Edit(player, [&](PlayerSkills& e) { e.fragments -= FRAGMENTS_PER_PAGE; left = e.fragments; e.pages.insert(node); });
+        SaveHeld(player, 0, left);
+        SavePage(player, node);
+        ChatHandler(player).PSendSysMessage("|cffa335eeThe fragments bind into a page: %s is unsealed.|r", n->name);
+        SendSkills(player);
+    }
+
+    void SocketRune(Player* player, uint8 skill, uint8 rune)
+    {
+        PlayerSkills const s = SkillsFor(player);
+        SkillDef const* def = FindSkill(player->getClass(), skill);
+        auto refuse = [&](char const* why)
+        {
+            sLog.outDetail("ARPG skills: %s cannot socket rune %u in skill %u: %s", player->GetName(), uint32(rune), uint32(skill), why);
+            SendSkills(player);
+        };
+        if (!def || SlotOf(s, skill) < 0)
+            return refuse("the skill is not specialised");
+        if (player->IsInCombat())
+            return refuse("in combat");
+        if (rune)
+        {
+            RuneDef const* r = FindRune(rune);
+            if (!r || !(r->fits & FIT(SkillId(skill))))
+                return refuse("the rune does not fit the skill");
+            if (SpentIn(s, skill) < SOCKET_POINTS)
+                return refuse("the socket is not open yet");
+            auto held = s.runes.find(rune);
+            uint32 inUse = 0;
+            for (auto const& [other, socketed] : s.sockets)
+                if (socketed == rune && other != skill)
+                    ++inUse;
+            if (held == s.runes.end() || held->second <= inUse)
+                return refuse("no such rune free");
+        }
+        Edit(player, [&](PlayerSkills& e)
+        {
+            if (rune)
+                e.sockets[skill] = rune;
+            else
+                e.sockets.erase(skill);
+        });
+        SaveSocket(player, skill, rune);
+        RefreshTotals(player);
+        SendSkills(player);
     }
 }

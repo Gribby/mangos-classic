@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 
 #include "Entities/Creature.h"
@@ -254,7 +256,7 @@ namespace Arpg
             chat.SendSysMessage("ARPG test loot is off on this server: set Arpg.DevTools = 1 in mangosd.conf.");
             return;
         }
-        if (quality != DEV_LOOT_MIXED && quality > ITEM_QUALITY_LEGENDARY)
+        if (quality != DEV_LOOT_MIXED && quality != DEV_LOOT_CODEX && quality > ITEM_QUALITY_LEGENDARY)
             return;
         count = std::min<uint8>(std::max<uint8>(count, 1), 16);
         uint32 const ilvl = level ? level : player->GetLevel();
@@ -281,6 +283,28 @@ namespace Arpg
         Loot* loot = corpse->m_loot;
 
         uint32 added = 0;
+        // Codex items: a page, then fragments and runes in turn.
+        if (quality == DEV_LOOT_CODEX)
+        {
+            std::vector<uint16> const pages = AllPages();
+            std::vector<uint8> const runes = AllRunes();
+            for (uint8 i = 0; i < count; ++i)
+            {
+                uint32 id;
+                if (i == 0 && !pages.empty())
+                    id = CODEX_PAGE_BASE + pages[urand(0, uint32(pages.size() - 1))];
+                else if (i % 2 == 1 || runes.empty())
+                    id = CODEX_FRAGMENT;
+                else
+                    id = CODEX_RUNE_BASE + runes[urand(0, uint32(runes.size() - 1))];
+                loot->AddItem(id, 1, 0, 0);
+                ++added;
+            }
+            corpse->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
+            OnCorpseLoot(corpse);
+            chat.PSendSysMessage("ARPG test loot: %u Codex items.", added);
+            return;
+        }
         for (uint8 i = 0; i < count; ++i)
         {
             uint32 const q = quality == DEV_LOOT_MIXED ? MixedQuality() : quality;

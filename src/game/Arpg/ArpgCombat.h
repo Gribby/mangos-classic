@@ -58,6 +58,8 @@ namespace Arpg
         ACTION_DODGE        = 17,                           // float x, y: roll toward (Arpg/ArpgActions.h)
         ACTION_FLASK        = 18,                           // -: drink a flask charge
         ACTION_TIER         = 19,                           // uint8 tier: the dungeon tier asked for (Arpg/ArpgDungeons.h)
+        ACTION_UNSEAL       = 20,                           // uint16 node: unseal with Codex fragments (Arpg/ArpgSkills.h)
+        ACTION_SOCKET       = 21,                           // uint8 skill, uint8 rune: socket a rune
     };
 
     // What the client's cast aims at, by the spell's own target word.

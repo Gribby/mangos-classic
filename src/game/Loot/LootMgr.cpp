@@ -18,6 +18,7 @@
 
 #include "Loot/LootMgr.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgCombat.h"
 #include "Log/Log.h"
 #include "Util/ProgressBar.h"
@@ -2025,10 +2026,13 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
     if (target->GetSession())
     {
         ItemPosCountVec dest;
-        msg = target->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem->itemId, lootItem->count);
+        // ARPG: a Codex page, fragment or rune goes into the character's Codex, not the bags
+        // (Arpg/ArpgCodex.h).
+        bool const codex = Arpg::TakeCodexItem(target, lootItem->itemId, lootItem->count);
+        msg = codex ? EQUIP_ERR_OK : target->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem->itemId, lootItem->count);
         if (msg == EQUIP_ERR_OK)
         {
-            Item* newItem = target->StoreNewItem(dest, lootItem->itemId, true, lootItem->randomPropertyId);
+            Item* newItem = codex ? nullptr : target->StoreNewItem(dest, lootItem->itemId, true, lootItem->randomPropertyId);
 
             if (lootItem->freeForAll)
             {
@@ -2038,7 +2042,8 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
             else
                 NotifyItemRemoved(lootItem->lootSlot);
 
-            target->SendNewItem(newItem, uint32(lootItem->count), false, false, true);
+            if (newItem)
+                target->SendNewItem(newItem, uint32(lootItem->count), false, false, true);
 
             if (!m_isChest)
             {

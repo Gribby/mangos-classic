@@ -29,6 +29,8 @@
 
 namespace
 {
+    // Rune of Leech: this share of the damage heals.
+    constexpr uint32 RUNE_LEECH_PCT = 3;
     using namespace Arpg;
 
     // The attributes' ARPG effects: points of the attribute per 1%, and the cap in percent.
@@ -638,6 +640,10 @@ namespace Arpg
         Runtime& r = R(attacker);
         uint32 const now = WorldTimer::getMSTime();
 
+        // Rune of Leech in Strike.
+        if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
+            attacker->ModifyHealth(int32(std::max<uint32>(1, damage * RUNE_LEECH_PCT / 100)));
+
         if (t.Has(KEY_MOMENTUM) && damage)
         {
             r.momentum = WorldTimer::getMSTimeDiff(r.lastHit, now) <= MOMENTUM_WINDOW ? std::min(r.momentum + 1, MOMENTUM_MAX) : 1;
@@ -675,6 +681,10 @@ namespace Arpg
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
+
+        // Rune of Leech in the skill.
+        if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
+            caster->ModifyHealth(int32(std::max<uint32>(1, dealt * RUNE_LEECH_PCT / 100)));
 
         if (skill == SKILL_SEALS)
         {

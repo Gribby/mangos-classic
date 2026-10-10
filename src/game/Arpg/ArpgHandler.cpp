@@ -30,6 +30,8 @@
  *     ACTION_DODGE        float x, y: roll toward the point (Arpg/ArpgActions.h)
  *     ACTION_FLASK        -: drink a flask charge
  *     ACTION_TIER         uint8 tier: the dungeon difficulty tier asked for (Arpg/ArpgDungeons.h)
+ *     ACTION_UNSEAL       uint16 node: unseal a capstone with Codex fragments (Arpg/ArpgSkills.h)
+ *     ACTION_SOCKET       uint8 skill, uint8 rune (0 empties): socket a rune
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -315,6 +317,32 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             {
                 if (Player* arpg = session->GetPlayer())
                     Arpg::SetWantedTier(arpg, tier);
+            });
+            break;
+        }
+        case Arpg::ACTION_UNSEAL:
+        {
+            uint16 node;
+            recvPacket >> node;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([node](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::UnsealWithFragments(arpg, node);
+            });
+            break;
+        }
+        case Arpg::ACTION_SOCKET:
+        {
+            uint8 skill, rune;
+            recvPacket >> skill >> rune;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([skill, rune](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::SocketRune(arpg, skill, rune);
             });
             break;
         }

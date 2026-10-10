@@ -28,12 +28,26 @@
  *                    kind 13 take a rank: uint16 node
  *                    kind 14 give a rank back: uint16 node
  *                    kind 15 respec a skill: uint8 skill
- *   SMSG_ARPG_SKILLS (0x340): uint8 version (1), uint16 points total, uint16 points spent,
+ * Codex pages and runes: each capstone is sealed until its Codex page is read: a book its home
+ * boss drops (PAGES), read at once when picked up. Codex fragments (champions, rares, Wardens,
+ * Caches) unseal any capstone of a specialised skill, FRAGMENTS_PER_PAGE at a time; a page
+ * already read tears into FRAGMENTS_FOR_DUPLICATE. A capstone taken before pages sealed them
+ * counts as read. Each skill's tree has one rune socket, open with 10 points in the skill; a
+ * rune (Runes()) fits some skills and adds a kit row, spell modifiers, a keystone rank or a hook
+ * (Leech) to the skill it is in. Socketing is free, the rune stays held, and unslotting the
+ * skill empties its socket. Saved in character_arpg_codex (guid, page), character_arpg_held
+ * (guid, thing: 0 fragments, else a rune; count) and character_arpg_socket (guid, skill, rune).
+ *
+ *   SMSG_ARPG_SKILLS (0x340): uint8 version (2), uint16 points total, uint16 points spent,
  *     uint8 level; uint8 slot count, per slot: uint8 level it opens at, uint8 skill (0: empty);
  *     uint8 skill count, per skill: uint8 id, uint32 icon spell, cstring name, cstring text,
- *     uint8 points in it, uint8 cap, uint8 branch count and a cstring each, uint8 node count, per
- *     node: uint16 id, uint8 kind, uint8 column, uint8 row, uint16 parent (0: the root), uint8 max
- *     rank, uint8 rank, uint32 icon spell, cstring name, cstring text.
+ *     uint8 points in it, uint8 cap, uint8 socketed rune (0 none), uint8 points the socket opens
+ *     at, uint8 branch count and a cstring each, uint8 node count, per node: uint16 id, uint8
+ *     kind, uint8 column, uint8 row, uint16 parent (0: the root), uint8 max rank, uint8 rank,
+ *     uint32 icon spell, cstring name, cstring text, uint8 sealed, cstring the page's home ("" for
+ *     none); then uint16 fragments held, uint8 fragments a page takes, uint8 rune count, per rune:
+ *     uint8 id, uint32 icon spell, cstring name, cstring text, uint8 held, uint8 the skills it
+ *     fits (bit per skill id).
  */
 
 #ifndef MANGOS_ARPG_SKILLS_H
@@ -69,6 +83,25 @@ namespace Arpg
         SKILL_NODE_CAPSTONE    = 4,
     };
 
+    // Runes, one per skill tree's socket (docs/ARPG-CHARACTER.md, "Runes").
+    enum RuneId : uint8
+    {
+        RUNE_NONE       = 0,
+        RUNE_CHAINS     = 1,
+        RUNE_SHATTERING = 2,
+        RUNE_EXPANSE    = 3,
+        RUNE_LINGERING  = 4,
+        RUNE_HASTE      = 5,
+        RUNE_LEECH      = 6,
+        RUNE_COMMAND    = 7,
+        RUNE_SANCTITY   = 8,
+        RUNE_FURY       = 9,
+    };
+
+    // Codex fragments that make one page, and what a page already read tears into.
+    constexpr uint8 FRAGMENTS_PER_PAGE = 5;
+    constexpr uint8 FRAGMENTS_FOR_DUPLICATE = 2;
+
     constexpr uint8 SKILL_SLOTS = 5;
     constexpr uint32 SLOT_LEVEL[SKILL_SLOTS] = { 1, 10, 20, 30, 40 };
     constexpr uint8 SKILL_CAP = 20;
@@ -101,8 +134,33 @@ namespace Arpg
     // Add what the player's skill nodes give to `totals`.
     void AddSkillTotals(Player const* player, WebTotals& totals);
 
-    // The uniques-kit rows the player's skill nodes give.
+    // The uniques-kit rows the player's skill nodes and socketed runes give.
     std::vector<UniqueMechanic const*> SkillModifiers(Player const* player);
+
+    // Whether `rune` is socketed, and in effect, in `player`'s `skill`.
+    bool HasRune(Player const* player, SkillId skill, uint8 rune);
+
+    // The capstones whose Codex page `bossEntry` drops; every page; every rune.
+    std::vector<uint16> PagesFrom(uint32 bossEntry);
+    std::vector<uint16> AllPages();
+    std::vector<uint8> AllRunes();
+    char const* PageName(uint16 node);
+    char const* RuneName(uint8 rune);
+    char const* RuneText(uint8 rune);
+
+    // Picked up: a Codex page (read at once; one already read tears into fragments), fragments,
+    // a rune (held, for any socket).
+    void ReadPage(Player* player, uint16 node);
+    void AddFragments(Player* player, uint32 count);
+    void AddRune(Player* player, uint8 rune);
+
+    // Unseal capstone `node` of a specialised skill with FRAGMENTS_PER_PAGE fragments
+    // (CMSG_ARPG_ACTION kind 20, uint16 node).
+    void UnsealWithFragments(Player* player, uint16 node);
+
+    // Socket `rune` (0: empty the socket) in `skill`, once it has 10 points (kind 21, uint8
+    // skill, uint8 rune). Socketing is free and the rune stays held.
+    void SocketRune(Player* player, uint8 skill, uint8 rune);
 }
 
 #endif

@@ -21,6 +21,7 @@
 */
 
 #include "World/World.h"
+#include "Arpg/ArpgCodex.h"
 #include "Database/DatabaseEnv.h"
 #include "Config/Config.h"
 #include "Platform/Define.h"
@@ -1015,6 +1016,8 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading Item Random Enchantments Table...");
     LoadRandomEnchantmentsTable();
 
+    // ARPG: the Codex pages, fragments and runes write their own item rows first (Arpg/ArpgCodex.h).
+    Arpg::EnsureCodexItems();
     sLog.outString("Loading Item Templates...");            // must be after LoadRandomEnchantmentsTable and LoadPageTexts
     sObjectMgr.LoadItemPrototypes();
 

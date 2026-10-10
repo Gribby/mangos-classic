@@ -5,6 +5,7 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgTree.h"
 
@@ -635,8 +636,13 @@ namespace Arpg
 
     void OnDungeonLoot(Creature* victim)
     {
-        if (!DungeonsOn() || !victim || !victim->m_loot || !victim->GetMap()->IsDungeon())
+        if (!victim || !victim->m_loot)
             return;
+        if (!DungeonsOn() || !victim->GetMap()->IsDungeon())
+        {
+            OnCodexLoot(victim, false, false, 0);
+            return;
+        }
         Loot* loot = victim->m_loot;
         uint8 const tier = TierOf(victim->GetMap());
         uint32 const level = victim->GetLevel() + tier * TIER_ITEM_LEVELS;
@@ -658,11 +664,15 @@ namespace Arpg
                 name = victim->GetName();
             std::string const text = "The Warden " + name + " has fallen.";
             TellMap(victim->GetMap(), text.c_str());
+            OnCodexLoot(victim, true, false, tier);
             return;
         }
         std::vector<uint32> const& bosses = Bosses();
         if (std::find(bosses.begin(), bosses.end(), victim->GetEntry()) == bosses.end())
+        {
+            OnCodexLoot(victim, false, false, tier);
             return;
+        }
         // The Cache: gold, and for each player there a blue, a green and a chance at a purple.
         uint32 const players = std::max<uint32>(1, victim->GetMap()->GetPlayersCountExceptGMs());
         loot->AddArpgDevGold(level * level * 2 * players * (1 + tier));
@@ -674,6 +684,8 @@ namespace Arpg
             if (roll_chance_i(int32(CACHE_EPIC_PCT + epicBonus)))
                 AddPick(loot, ITEM_QUALITY_EPIC, level + CACHE_ITEM_LEVELS);
         }
+        // The Codex drops after the Cache's gear, so a full corpse keeps the gear.
+        OnCodexLoot(victim, false, true, tier);
         std::string const text = std::string(victim->GetName()) + "'s Cache spills open (" + TIER_NAME[tier] + ").";
         TellMap(victim->GetMap(), text.c_str());
         UnlockNext(victim->GetMap(), tier);

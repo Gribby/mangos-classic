@@ -88,6 +88,8 @@ each ARPG player of the champions within 100 yards. Design: the client's
 | 17 dodge | `f32` x y: roll toward the point (`Arpg/ArpgActions.h`) |
 | 18 flask | — |
 | 19 tier | `u8` the dungeon tier asked for (`Arpg/ArpgDungeons.h`) |
+| 20 unseal | `u16` capstone node: unseal it with Codex fragments (`Arpg/ArpgSkills.h`) |
+| 21 socket | `u8` skill, `u8` rune (0 empties): socket a rune |
 
 Server to client, 0x33D to 0x342 (`NUM_MSG_TYPES` 0x343): loot, item mechanics, the web, skills,
 champions, and `SMSG_ARPG_STATUS` (0x342: `u8` flask charges, `u8` max, `u8` the next charge's
@@ -104,6 +106,14 @@ the server). Hooks: `Creature::AddToWorld` (through `Arpg::OnCreatureAdded`), `R
 and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a knockback; dodges
 in `Unit::RollMeleeOutcomeAgainst` and `SpellHitResult` while airborne) and the flask (kills fill
 it from `Unit::JustKilledCreature`). Design: the client's `docs/ARPG-PROGRESSION.md`.
+
+## Codex pages and runes
+
+`Arpg/ArpgCodex.{h,cpp}`: the Codex items (entries 90001 fragment, 90011-90019 runes, 90000 +
+capstone node pages), written into `item_template` at start before the templates load
+(`World::SetInitialWorldSettings`), their drops (from `Arpg::OnDungeonLoot`), and the pickup
+(`Loot::SendItem` asks `Arpg::TakeCodexItem`, which keeps them out of the bags). The seals,
+fragments, sockets and rune effects are `Arpg/ArpgSkills.{h,cpp}`; `SMSG_ARPG_SKILLS` is version 2.
 
 ## Where
 

@@ -59,6 +59,8 @@ namespace Arpg
 
     // ACTION_DEV_LOOT's quality byte for a random mix.
     constexpr uint8 DEV_LOOT_MIXED = 0xFF;
+    // Dev loot of Codex pages, fragments and runes (Arpg/ArpgCodex.h).
+    constexpr uint8 DEV_LOOT_CODEX = 0xFE;
 
     // Testing aid (Arpg.DevTools): kill a fresh creature (Arpg.DevTools.Creature) at `player`'s
     // feet and put `count` random items of `quality` (or a mix) near item level `level` (0 the
