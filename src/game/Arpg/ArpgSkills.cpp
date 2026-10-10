@@ -98,6 +98,15 @@ namespace
         return node;
     }
 
+    // A capstone built from a kit row.
+    SkillNode KitCap(uint16 id, uint8 col, uint8 row, uint16 parent, char const* name, char const* text, uint32 icon,
+                     UniqueKit kit, uint32 spell, uint8 n, float value, uint32 pct)
+    {
+        SkillNode node = Kit(id, col, row, parent, 1, name, text, icon, kit, spell, { n }, { value }, { pct });
+        node.kind = SKILL_NODE_CAPSTONE;
+        return node;
+    }
+
     // The paladin's specialisable skills (docs/ARPG-CHARACTER.md, "The paladin, in full").
     std::vector<SkillDef> const& Skills()
     {
@@ -172,6 +181,54 @@ namespace
                   Key(507, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Holy Hammer", "Hammer of Justice also deals Holy damage of 30/45/60% of your attack power.", 20218, KEY_HOLY_HAMMER),
                   Key(508, SKILL_NODE_CAPSTONE, 2, 2, 507, 1, "Sentence Passed", "Stunned enemies take +15% damage from you.", 879, KEY_SENTENCE_PASSED),
               } },
+            { SKILL_EXORCISM, CLASS_PALADIN, "Exorcism", "Holy fire at an enemy. Specialised, it strikes any foe, not only undead and demons.", 879, { "Exorcism" },
+              { "Burning", "Chain", "Purge" },
+              {
+                  Kit(601, 0, 1, 0, 3, "Holy Fire", "Exorcism bursts onto enemies within 4/6/8 yards of its target, at 35%.", 2812,
+                      KIT_BURST, 879, { 0, 0, 0 }, { 4, 6, 8 }, { 35, 35, 35 }),
+                  Mod(602, 0, 2, 601, 4, "Searing Word", "+10% Exorcism damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+                  KitCap(603, 0, 3, 602, "Purging Light", "Exorcism's light passes through its target: every enemy within 10 yards behind it takes the full hit.", 19750,
+                         KIT_FRAGMENTS, 879, 10, 10.0f, 100),
+                  Kit(604, 1, 1, 0, 3, "Chain Exorcism", "Exorcism leaps to 1/2/3 more enemies within 10 yards, at 60%.", 20186,
+                      KIT_CHAIN, 879, { 1, 2, 3 }, { 10, 10, 10 }, { 60, 60, 60 }),
+                  Mod(605, 1, 2, 604, 3, "Swift Exorcism", "-2 sec Exorcism cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -2000),
+                  Kit(606, 1, 3, 605, 2, "Echoing Word", "Every 4th/3rd Exorcism repeats for free along the same aim, at 50%.", 20185,
+                      KIT_ECHO, 879, { 4, 3 }, { 0, 0 }, { 50, 50 }),
+                  Mod(607, 2, 1, 0, 3, "Exorcist", "+5% Exorcism critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
+                  Mod(608, 2, 2, 607, 3, "Zealous Word", "-15% Exorcism mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -15),
+                  KitCap(609, 2, 3, 608, "Twin Exorcism", "Exorcism fires a second bolt beside the first, at 70%.", 879,
+                         KIT_EXTRA_PROJECTILES, 879, 1, 12.0f, 70),
+              } },
+            { SKILL_HOLY_WRATH, CLASS_PALADIN, "Holy Wrath", "A nova of holy fire around you. Specialised, it strikes any foe.", 2812, { "Holy Wrath" },
+              { "Radius", "Fury", "Zeal" },
+              {
+                  Mod(701, 0, 1, 0, 4, "Wide Wrath", "+12% Holy Wrath radius per rank.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 12),
+                  Mod(702, 0, 2, 701, 3, "Searing Wrath", "+10% Holy Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+                  Key(703, SKILL_NODE_CAPSTONE, 0, 3, 702, 1, "Wrathful", "Holy Wrath fires on its own whenever 4 or more enemies are within 10 yards, every 12 sec at most.", 20925, KEY_WRATHFUL),
+                  Mod(704, 1, 1, 0, 4, "Swift Wrath", "-8 sec Holy Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -8000),
+                  Mod(705, 1, 2, 704, 3, "Quick Wrath", "-0.4 sec Holy Wrath cast time per rank.", 20166, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -400),
+                  Kit(706, 1, 3, 705, 2, "Shattering Wrath", "Each enemy Holy Wrath strikes bursts onto those within 4/6 yards, at 20/30%.", 24275,
+                      KIT_BURST, 2812, { 0, 0 }, { 4, 6 }, { 20, 30 }),
+                  Mod(707, 2, 1, 0, 3, "Zealous Wrath", "-15% Holy Wrath mana cost per rank.", 20208, SPELLMOD_COST, SPELLMOD_PCT, -15),
+                  Mod(708, 2, 2, 707, 3, "Righteous Wrath", "+5% Holy Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
+                  Mod(709, 2, 3, 708, 2, "Radiant Wrath", "+10% Holy Wrath damage per rank.", 19750, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+              } },
+            { SKILL_HAMMER_OF_WRATH, CLASS_PALADIN, "Hammer of Wrath", "Hurl a hammer at an enemy, at any health.", 24275, { "Hammer of Wrath" },
+              { "Volley", "Pierce", "Execute" },
+              {
+                  Kit(801, 0, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
+                      KIT_EXTRA_PROJECTILES, 24275, { 1, 2 }, { 15, 15 }, { 60, 60 }),
+                  Mod(802, 0, 2, 801, 4, "Weighted Hammer", "+8% Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8),
+                  KitCap(803, 0, 3, 802, "Storm of Hammers", "Every 2nd Hammer of Wrath repeats for free along the same aim, at 60%.", 20185,
+                         KIT_ECHO, 24275, 2, 0.0f, 60),
+                  Kit(804, 1, 1, 0, 3, "Piercing Hammer", "Hammer of Wrath flies on through 2/4/10 enemies in its path, at 60%.", 20186,
+                      KIT_PIERCE, 24275, { 2, 4, 10 }, { 0, 0, 0 }, { 60, 60, 60 }),
+                  Mod(805, 1, 2, 804, 3, "Long Throw", "+5 yards Hammer of Wrath range per rank.", 5588, SPELLMOD_RANGE, SPELLMOD_FLAT, 5),
+                  Mod(806, 1, 3, 805, 3, "Swift Hammer", "-1 sec Hammer of Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
+                  Mod(807, 2, 1, 0, 3, "Righteous Hammer", "+5% Hammer of Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
+                  Mod(808, 2, 2, 807, 3, "Zealous Hammer", "-15% Hammer of Wrath mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -15),
+                  Key(809, SKILL_NODE_CAPSTONE, 2, 3, 808, 1, "Executioner", "Hammer of Wrath deals double damage to enemies below 20% health.", 879, KEY_EXECUTIONER),
+              } },
         };
         return skills;
     }
@@ -227,6 +284,11 @@ namespace
         { 409, 10813, "Balnazzar, Stratholme" },                        // Sacred Seal
         { 503, 10440, "Baron Rivendare, Stratholme" },                  // Blessed Hammer
         { 508, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Sentence Passed
+        { 603, 10508, "Ras Frostwhisper, Scholomance" },                // Purging Light
+        { 609, 10435, "Magistrate Barthilas, Stratholme" },             // Twin Exorcism
+        { 703, 10811, "Archivist Galford, Stratholme" },                // Wrathful
+        { 803, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Storm of Hammers
+        { 809, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Executioner
     };
 
     PageHome const* PageOf(uint16 node)
@@ -256,30 +318,31 @@ namespace
         std::vector<std::tuple<uint8, uint8, int32>> mods; // RUNE_MODS: op, type, amount
     };
 
-    constexpr uint8 FIT(SkillId id) { return uint8(1u << id); }
+    // A rune fits skills 1-7 (the wire's mask is a byte); later skills take none yet.
+    constexpr uint8 FIT(SkillId id) { return id < 8 ? uint8(1u << id) : uint8(0); }
 
     std::vector<RuneDef> const& Runes()
     {
         static std::vector<RuneDef> const runes =
         {
             { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on Chain of Judgement).", 20186,
-              uint8(FIT(SKILL_JUDGEMENT)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
             { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on Hammer of Light).", 24275,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_SEALS)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_SEALS) | FIT(SKILL_EXORCISM)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
-              uint8(FIT(SKILL_CONSECRATION)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) } },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) } },
             { RUNE_LEECH, "Rune of Leech", "3% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 3, {} },
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 3, {} },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
-              uint8(FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              uint8(FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) } },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
@@ -304,6 +367,9 @@ namespace
             case SKILL_JUDGEMENT: return { 20271 };
             case SKILL_CONSECRATION: return { 26573 };
             case SKILL_HAMMER: return { 853 };
+            case SKILL_EXORCISM: return { 879 };
+            case SKILL_HOLY_WRATH: return { 2812 };
+            case SKILL_HAMMER_OF_WRATH: return { 24275 };
             default: return {};
         }
     }
@@ -343,6 +409,7 @@ namespace
         uint32 fragments = 0;                 // Codex fragments held
         std::map<uint8, uint8> runes;         // runes held, socketed ones included
         std::map<uint8, uint8> sockets;       // by skill: the rune in its socket
+        std::map<uint16, uint32> things;      // other held things (100 and up: raid key pieces)
     };
 
     std::mutex sSkillsLock;
@@ -593,6 +660,8 @@ namespace Arpg
                 uint32 const count = fields[1].GetUInt32();
                 if (thing == 0)
                     s.fragments = count;
+                else if (thing >= HELD_OTHER)
+                    s.things[uint16(thing)] = count;
                 else if (FindRune(uint8(thing)))
                     s.runes[uint8(thing)] = uint8(std::min<uint32>(count, 255));
             }
@@ -1049,5 +1118,35 @@ namespace Arpg
         SaveSocket(player, skill, rune);
         RefreshTotals(player);
         SendSkills(player);
+    }
+
+    uint32 Held(Player const* player, uint16 thing)
+    {
+        PlayerSkills const s = SkillsFor(player);
+        auto it = s.things.find(thing);
+        return it == s.things.end() ? 0 : it->second;
+    }
+
+    uint32 AddHeld(Player* player, uint16 thing, int32 delta)
+    {
+        if (thing < HELD_OTHER)
+            return 0;
+        uint32 count = 0;
+        Edit(player, [&](PlayerSkills& s)
+        {
+            int64 const now = int64(s.things[thing]) + delta;
+            count = uint32(std::max<int64>(0, std::min<int64>(now, 65535)));
+            if (count)
+                s.things[thing] = count;
+            else
+                s.things.erase(thing);
+        });
+        SaveHeld(player, thing, count);
+        return count;
+    }
+
+    bool IsSpecialised(Player const* player, SkillId skill)
+    {
+        return SlotOf(SkillsFor(player), skill) >= 0;
     }
 }

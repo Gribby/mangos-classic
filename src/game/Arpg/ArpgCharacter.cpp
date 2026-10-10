@@ -31,6 +31,11 @@ namespace
 {
     // Rune of Leech: this share of the damage heals.
     constexpr uint32 RUNE_LEECH_PCT = 3;
+    // Executioner: below this share of health; Wrathful: this many enemies this close, this often.
+    constexpr float EXECUTE_BELOW = 0.2f;
+    constexpr float WRATHFUL_RANGE = 10.0f;
+    constexpr size_t WRATHFUL_COUNT = 4;
+    constexpr uint32 WRATHFUL_EVERY = 12000;
     using namespace Arpg;
 
     // The attributes' ARPG effects: points of the attribute per 1%, and the cap in percent.
@@ -97,6 +102,7 @@ namespace
         uint32 martyrPending = 0;
         uint32 favourReady = 0;      // Divine Favour: the time it is ready again
         uint32 recoveryUntil = 0;    // Blessed Recovery: the time its bonus ends
+        uint32 lastWrath = 0;        // Wrathful: the last time Holy Wrath fired on its own
     };
 
     std::mutex sRuntimeLock;
@@ -408,6 +414,26 @@ namespace Arpg
                     StrikeFoe(player, unit, aura, SPELL_SCHOOL_MASK_HOLY, share);
         }
 
+        // Wrathful: Holy Wrath fires on its own when the player is surrounded.
+        if (player->IsAlive() && player->IsInCombat() && WorldTimer::getMSTimeDiff(r.lastWrath, now) >= WRATHFUL_EVERY &&
+                HasKeystone(player, KEY_WRATHFUL))
+        {
+            size_t foes = 0;
+            for (Unit* unit : EnemiesNear(player, WRATHFUL_RANGE))
+                if (unit->IsAlive() && MayCatchUnit(player, unit, nullptr))
+                    ++foes;
+            if (foes >= WRATHFUL_COUNT)
+            {
+                for (uint32 spell : { 10318u, 2812u })      // Holy Wrath, its highest rank known
+                    if (player->HasSpell(spell))
+                    {
+                        player->CastSpell(player, spell, TRIGGERED_OLD_TRIGGERED | TRIGGERED_INSTANT_CAST);
+                        r.lastWrath = now ? now : 1;
+                        break;
+                    }
+            }
+        }
+
         // Walking Consecration follows a few times a second.
         if (WorldTimer::getMSTimeDiff(r.lastWalk, now) >= WALK_MS)
         {
@@ -489,7 +515,12 @@ namespace Arpg
         }
         if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_SEARING_LIGHT) && Consecrated(victim, attacker))
             pct += 5 * t.Rank(KEY_SEARING_LIGHT);
-        return std::max(0.0f, 1.0f + pct / 100.0f);
+        float mod = std::max(0.0f, 1.0f + pct / 100.0f);
+        // Executioner: Hammer of Wrath doubles on an enemy below 20% health.
+        if (skill == SKILL_HAMMER_OF_WRATH && t.Has(KEY_EXECUTIONER) && victim &&
+                victim->GetHealth() < victim->GetMaxHealth() * EXECUTE_BELOW)
+            mod *= 2.0f;
+        return mod;
     }
 
     float HealingDoneMod(Unit const* healer, SpellEntry const* /*spellInfo*/)

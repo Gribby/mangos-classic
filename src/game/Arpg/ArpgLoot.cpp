@@ -221,7 +221,7 @@ namespace Arpg
         }
 
         LootItem* item = loot->GetLootItemInSlot(slot);
-        if (!MayTake(player, loot, item))
+        if (!MayTake(player, loot, item) || CodexRefuses(player, item->itemId))
         {
             SendGroundLoot(player, creature);
             return;

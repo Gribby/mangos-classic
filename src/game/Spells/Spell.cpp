@@ -5403,8 +5403,9 @@ SpellCastResult Spell::CheckCast(bool strict)
             }
             case SPELL_EFFECT_SCHOOL_DAMAGE:
             {
-                // Hammer of Wrath
-                if (m_spellInfo->SpellVisual == 7250)
+                // Hammer of Wrath (ARPG: at any health, and as a skillshot into the empty air too;
+                // Arpg/ArpgSkills.h's Hammer of Wrath tree)
+                if (m_spellInfo->SpellVisual == 7250 && !Arpg::Active(m_trueCaster))
                 {
                     if (!m_targets.getUnitTarget())
                         return SPELL_FAILED_BAD_IMPLICIT_TARGETS;

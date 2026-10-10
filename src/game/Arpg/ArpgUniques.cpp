@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCharacter.h"
@@ -638,8 +639,14 @@ namespace Arpg
         if (!caster || !spellInfo || !spellInfo->SpellName[0] || !caster->IsPlayer())
             return false;
         char const* name = spellInfo->SpellName[0];
-        bool const purifiable = std::strcmp(name, "Exorcism") == 0 || std::strcmp(name, "Holy Wrath") == 0;
-        return purifiable && HasKeystone(static_cast<Unit const*>(caster), KEY_PURIFYING_LIGHT);
+        bool const exorcism = std::strcmp(name, "Exorcism") == 0;
+        bool const wrath = std::strcmp(name, "Holy Wrath") == 0;
+        if (!exorcism && !wrath)
+            return false;
+        Player const* player = static_cast<Player const*>(caster);
+        // The web's Purifying Light, or the skill specialised (Arpg/ArpgSkills.h).
+        return HasKeystone(player, KEY_PURIFYING_LIGHT) ||
+               IsSpecialised(player, exorcism ? SKILL_EXORCISM : SKILL_HOLY_WRATH);
     }
 
     void OnHeal(Spell* spell, Unit* caster, Unit* target, uint32 amount)

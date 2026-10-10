@@ -37,6 +37,10 @@
  * affixes (one more from Brutal, two from Torment II), XP (x1.15 to x2), and the Warden's and
  * the Cache's drops: item levels, purple chances, and an extra blue per two tiers.
  *
+ * Enrage timers keep a damage check: a dungeon boss still fighting after 4 minutes (a raid boss
+ * after 6) enrages, +50% damage and cap, and a stack more every 30 seconds, up to ten. The
+ * players there are told; leaving combat ends it.
+ *
  * A boss, for the caps and the rolls: rank 3, or a ScriptDev "boss_" script, or (in a dungeon)
  * a health multiplier of 5 or more (6 from level 40), which vanilla's trash never reaches.
  */

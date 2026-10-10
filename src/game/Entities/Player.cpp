@@ -19,6 +19,7 @@
 #include "Entities/Player.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgCodex.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -18219,7 +18220,11 @@ void Player::SendTransferAbortedByLockStatus(MapEntry const* mapEntry, AreaTrigg
             break;
         case AREA_LOCKSTATUS_MISSING_ITEM:
             if (AreaTrigger const* at = sObjectMgr.GetMapEntranceTrigger(mapEntry->MapID))
-                GetSession()->SendAreaTriggerMessage(GetSession()->GetMangosString(LANG_LEVEL_MINREQUIRED_AND_ITEM), at->requiredLevel, sObjectMgr.GetItemPrototype(miscRequirement)->Name1);
+            {
+                ItemPrototype const* item = sObjectMgr.GetItemPrototype(miscRequirement);
+                GetSession()->SendAreaTriggerMessage(GetSession()->GetMangosString(LANG_LEVEL_MINREQUIRED_AND_ITEM), at->requiredLevel,
+                                                     item ? item->Name1 : "a key");
+            }
             break;
         case AREA_LOCKSTATUS_TOO_MANY_INSTANCE:
             GetSession()->SendTransferAborted(TRANSFER_ABORT_TOO_MANY_INSTANCES);
@@ -20031,10 +20036,17 @@ AreaLockStatus Player::GetAreaTriggerLockStatus(AreaTrigger const* at, uint32& m
         return AREA_LOCKSTATUS_TOO_LOW_LEVEL;
     }
 
-    // Raid Requirements
-    if (mapEntry->IsRaid() && !sWorld.getConfig(CONFIG_BOOL_INSTANCE_IGNORE_RAID))
+    // Raid Requirements (ARPG: one to five ARPG players take on a raid; no raid group needed)
+    if (mapEntry->IsRaid() && !sWorld.getConfig(CONFIG_BOOL_INSTANCE_IGNORE_RAID) && !Arpg::Active(this))
         if (!GetGroup() || !GetGroup()->IsRaidGroup())
             return AREA_LOCKSTATUS_RAID_LOCKED;
+
+    // ARPG: a raid's attunement, the key forged from endgame dungeon drops (Arpg/ArpgCodex.h).
+    if (Arpg::Active(this) && !Arpg::IsAttuned(this, at->target_mapId))
+    {
+        miscRequirement = Arpg::AttunementItem(at->target_mapId);
+        return AREA_LOCKSTATUS_MISSING_ITEM;
+    }
 
 #ifdef ENABLE_PLAYERBOTS
     // Playerbots can skip raid requirements

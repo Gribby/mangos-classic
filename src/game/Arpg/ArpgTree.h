@@ -120,6 +120,8 @@ namespace Arpg
         KEY_BLESSED_HAMMER,    // Hammer of Justice also hurls three blessed hammers
         KEY_HOLY_HAMMER,       // Hammer of Justice deals Holy damage, 30% of attack power + 15% per rank
         KEY_SENTENCE_PASSED,   // +15% damage to stunned enemies
+        KEY_WRATHFUL,          // Holy Wrath fires on its own when 4 or more enemies are near
+        KEY_EXECUTIONER,       // Hammer of Wrath deals double damage below 20% health
         MAX_KEYSTONE
     };
 

@@ -72,6 +72,9 @@ namespace Arpg
         SKILL_JUDGEMENT    = 3,
         SKILL_CONSECRATION = 4,
         SKILL_HAMMER       = 5,
+        SKILL_EXORCISM     = 6,
+        SKILL_HOLY_WRATH   = 7,
+        SKILL_HAMMER_OF_WRATH = 8,
     };
 
     enum SkillNodeKind : uint8
@@ -137,6 +140,9 @@ namespace Arpg
     // The uniques-kit rows the player's skill nodes and socketed runes give.
     std::vector<UniqueMechanic const*> SkillModifiers(Player const* player);
 
+    // Whether `player` has `skill` in a slot.
+    bool IsSpecialised(Player const* player, SkillId skill);
+
     // Whether `rune` is socketed, and in effect, in `player`'s `skill`.
     bool HasRune(Player const* player, SkillId skill, uint8 rune);
 
@@ -153,6 +159,12 @@ namespace Arpg
     void ReadPage(Player* player, uint16 node);
     void AddFragments(Player* player, uint32 count);
     void AddRune(Player* player, uint8 rune);
+
+    // Other things a character holds outside its bags, from HELD_OTHER up (the raid keys' pieces,
+    // Arpg/ArpgCodex.h): how many, and add `delta` (returns the new count). Saved with the runes.
+    constexpr uint16 HELD_OTHER = 100;
+    uint32 Held(Player const* player, uint16 thing);
+    uint32 AddHeld(Player* player, uint16 thing, int32 delta);
 
     // Unseal capstone `node` of a specialised skill with FRAGMENTS_PER_PAGE fragments
     // (CMSG_ARPG_ACTION kind 20, uint16 node).

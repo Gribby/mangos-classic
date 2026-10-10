@@ -20,12 +20,14 @@
 #include "Groups/Group.h"
 #include "Maps/Map.h"
 #include "Server/DBCStores.h"
+#include "Util/Timer.h"
 #include "World/World.h"
 
 #include <algorithm>
 #include <map>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -488,6 +490,91 @@ namespace
         }
     }
 
+    // --- Enrage timers ---
+
+    // A dungeon boss still fighting after ENRAGE_DUNGEON_MS (a raid or world boss after
+    // ENRAGE_RAID_MS) enrages: +50% damage, and as much on its cap, a stack more every
+    // ENRAGE_STACK_MS, up to ENRAGE_MAX. Leaving combat ends it.
+    constexpr uint32 ENRAGE_DUNGEON_MS = 4 * MINUTE * IN_MILLISECONDS;
+    constexpr uint32 ENRAGE_RAID_MS = 6 * MINUTE * IN_MILLISECONDS;
+    // Open-world world bosses keep vanilla's pacing: only instance bosses enrage.
+    constexpr uint32 ENRAGE_STACK_MS = 30 * IN_MILLISECONDS;
+    constexpr uint32 ENRAGE_TICK_MS = 2000;
+    constexpr uint8 ENRAGE_MAX = 10;
+    constexpr float ENRAGE_PER_STACK = 0.5f;
+
+    struct Enrage
+    {
+        uint32 since = 0;
+        uint8 stacks = 0;
+    };
+
+    // Keyed by instance as well: a database spawn has the same guid in every copy of a dungeon.
+    using EnrageKey = std::tuple<uint32, uint32, uint64>;
+    EnrageKey KeyOf(Unit const* unit)
+    {
+        return EnrageKey(unit->GetMapId(), unit->GetInstanceId(), unit->GetObjectGuid().GetRawValue());
+    }
+
+    std::mutex sEnrageLock;
+    std::map<EnrageKey, Enrage> sEnrage;
+
+    float EnrageMod(Unit const* unit)
+    {
+        std::lock_guard<std::mutex> guard(sEnrageLock);
+        auto it = sEnrage.find(KeyOf(unit));
+        return it == sEnrage.end() ? 1.0f : 1.0f + ENRAGE_PER_STACK * float(it->second.stacks);
+    }
+
+    void TellMap(Map* map, char const* text);
+
+    void EnrageTick(Creature* boss)
+    {
+        uint32 const now = WorldTimer::getMSTime();
+        if (!boss->IsInWorld() || !boss->IsAlive() || !boss->IsInCombat() || boss->GetCombatManager().IsInEvadeMode())
+        {
+            std::lock_guard<std::mutex> guard(sEnrageLock);
+            sEnrage.erase(KeyOf(boss));
+            return;
+        }
+        uint32 const limit = boss->GetMap()->IsRaid() ? ENRAGE_RAID_MS : ENRAGE_DUNGEON_MS;
+        uint8 stacks = 0, before = 0;
+        {
+            std::lock_guard<std::mutex> guard(sEnrageLock);
+            Enrage& e = sEnrage[KeyOf(boss)];
+            uint32 const elapsed = WorldTimer::getMSTimeDiff(e.since, now);
+            before = e.stacks;
+            if (elapsed >= limit)
+                e.stacks = uint8(std::min<uint32>(1 + (elapsed - limit) / ENRAGE_STACK_MS, ENRAGE_MAX));
+            stacks = e.stacks;
+        }
+        if (stacks > before)
+        {
+            std::string const text = before == 0 ? std::string(boss->GetName()) + " becomes enraged!" :
+                                     std::string(boss->GetName()) + "'s fury grows!";
+            TellMap(boss->GetMap(), text.c_str());
+        }
+        boss->m_events.AddEvent(new UnitLambdaEvent(*boss, [](Unit& unit)
+        {
+            EnrageTick(static_cast<Creature*>(&unit));
+        }), boss->m_events.CalculateTime(ENRAGE_TICK_MS));
+    }
+
+    // A boss entered combat: start its enrage clock, once per fight.
+    void WatchEnrage(Creature* boss)
+    {
+        {
+            std::lock_guard<std::mutex> guard(sEnrageLock);
+            if (sEnrage.count(KeyOf(boss)))
+                return;
+            sEnrage[KeyOf(boss)].since = WorldTimer::getMSTime();
+        }
+        boss->m_events.AddEvent(new UnitLambdaEvent(*boss, [](Unit& unit)
+        {
+            EnrageTick(static_cast<Creature*>(&unit));
+        }), boss->m_events.CalculateTime(ENRAGE_TICK_MS));
+    }
+
     bool MayRollChampion(Creature* creature)
     {
         Map const* map = creature->GetMap();
@@ -547,6 +634,8 @@ namespace Arpg
         Kind const kind = KindOf(creature);
         if (kind == KIND_NONE)
             return;
+        if (kind == KIND_INSTANCE && IsDungeonBoss(creature))
+            WatchEnrage(creature);
         uint32 const players = PlayersFor(creature, kind, enemy);
         uint8 const tier = TierOf(creature->GetMap());
         {
@@ -580,7 +669,7 @@ namespace Arpg
             caps = CAP_CHAMPION;
         else
             return 0;                                       // open-world mobs hit as vanilla
-        float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())];
+        float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature);
         return std::max<uint32>(1, uint32(float(victim->GetMaxHealth()) * pct / 100.0f));
     }
 
@@ -616,7 +705,7 @@ namespace Arpg
         if (!DungeonsOn() || !attacker || attacker->GetTypeId() != TYPEID_UNIT || !attacker->GetMap()->IsDungeon() ||
                 PlayerOwned(static_cast<Creature const*>(attacker)))
             return 1.0f;
-        return TIER_DAMAGE[TierOf(attacker->GetMap())];
+        return TIER_DAMAGE[TierOf(attacker->GetMap())] * EnrageMod(attacker);
     }
 
     float TierXpMod(Unit const* victim)
@@ -698,6 +787,10 @@ namespace Arpg
         {
             std::lock_guard<std::mutex> guard(sScaledLock);
             sScaled.erase(creature->GetObjectGuid());
+        }
+        {
+            std::lock_guard<std::mutex> guard(sEnrageLock);
+            sEnrage.erase(KeyOf(creature));
         }
         std::lock_guard<std::mutex> guard(sWardenLock);
         sWardens.erase(creature->GetObjectGuid());
