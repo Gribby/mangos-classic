@@ -29,7 +29,8 @@
 namespace
 {
     // Fragments fly on into a cone this wide (half-angle, radians) behind the target.
-    constexpr float FRAGMENT_HALF_CONE = float(M_PI) / 4.0f;
+    // A scattering shard lands this share of the shatter's reach out.
+    constexpr float SHARD_SCATTER = 0.7f;
     // A melee ability's arc (kit G): the swing's own 120 degrees.
     constexpr float ARC_WIDTH = 2.0f * float(M_PI) / 3.0f;
     // A burst (kit E), a pierce through all (B), a spread on death (F): at most this many enemies.
@@ -127,6 +128,23 @@ namespace
             return false;
         size_t const n = std::strlen(want);
         return std::strncmp(have, want, n) == 0 && (have[n] == '\0' || have[n] == ' ');
+    }
+
+    // A cosmetic SMSG_SPELL_GO of `spellInfo` from `from` at the ground point (x, y, z): its
+    // missile flies there and lands (a shard scattering with no enemy to strike).
+    void SendGroundVisual(Unit* from, float x, float y, float z, SpellEntry const* spellInfo)
+    {
+        WorldPacket data(SMSG_SPELL_GO, 40);
+        data << from->GetPackGUID();
+        data << from->GetPackGUID();
+        data << uint32(spellInfo->Id);
+        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint8(0);                                   // hit
+        data << uint8(0);                                   // missed
+        SpellCastTargets targets;
+        targets.setDestination(x, y, z);
+        data << targets;
+        from->SendMessageToSet(data, true);
     }
 
     // How long `spellInfo`'s missile flies from `from` to `to`, in ms (0 for an instant spell).
@@ -240,11 +258,11 @@ namespace Arpg
             // Quillshooter, Razorfen Downs: Arcane Shot.
             { 10567, KIT_EXTRA_PROJECTILES, 3044, 2, 15.0f, 50, "Arcane Shot fires 3 quills in a 30 degree fan. Each extra deals 50% damage." },
             // Rod of the Sleepwalker, Twilight Lord Kelris (Blackfathom Deeps): Wrath.
-            { 1155,  KIT_FRAGMENTS,         5176, 3, 8.0f,  30, "Wrath bursts into 3 motes on hit, each dealing 30% to the enemies behind." },
+            { 1155,  KIT_FRAGMENTS,         5176, 3, 8.0f,  30, "Wrath bursts into 3 motes on hit that strike the nearest enemies within 8 yards for 30% damage each." },
             // Staff of Jordan, world drop: Frostbolt.
-            { 873,   KIT_FRAGMENTS,         116,  4, 8.0f,  30, "Frostbolt shatters on hit into 4 ice shards, each dealing 30% to the enemies behind." },
+            { 873,   KIT_FRAGMENTS,         116,  4, 10.0f, 35, "Frostbolt shatters on hit into 4 ice shards that strike the nearest enemies within 10 yards for 35% damage each." },
             // Staff of Dominance, Golemagg (Molten Core): Fireball.
-            { 18842, KIT_FRAGMENTS,         133,  5, 10.0f, 25, "Fireball bursts into 5 fragments on hit, each dealing 25% to the enemies behind." },
+            { 18842, KIT_FRAGMENTS,         133,  5, 10.0f, 25, "Fireball bursts into 5 fragments on hit that strike the nearest enemies within 10 yards for 25% damage each." },
             // Freezing Shard, Razorfen Downs: the wand's Shoot.
             { 10572, KIT_CHAIN,             5019, 2, 8.0f,  50, "Your wand bolts chain to 2 more enemies within 8 yards for 50% damage." },
             // Illusionary Rod, Arcanist Doan (Scarlet Monastery): each Arcane Missiles missile.
@@ -381,7 +399,10 @@ namespace Arpg
         if (UniqueMechanic const* row = WornMechanic(player, KIT_EXTRA_PROJECTILES, spellInfo))
         {
             float const step = row->value * float(M_PI) / 180.0f;
-            ObjectGuid const exclude = struck ? struck->GetObjectGuid() : ObjectGuid();
+            // No target is left out: up close the fan lands on one enemy (a shotgun), farther out
+            // it spreads over several.
+            ObjectGuid const exclude;
+            (void)struck;
             for (uint8 i = 1; i <= row->n; ++i)
             {
                 float const side = (i % 2) ? 1.0f : -1.0f;
@@ -427,27 +448,18 @@ namespace Arpg
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SpellSchoolMask const mask = spell->GetSchoolMask();
 
-        // Fragments (D): onward from the caster through the target, into a cone behind it.
+        // Fragments (D): the hit shatters, `n` shards flying out from the target to the nearest
+        // enemies around it within `value` yards; shards with no enemy to find scatter on the
+        // ground, so a shatter always shows.
         if (UniqueMechanic const* row = WornMechanic(player, KIT_FRAGMENTS, spellInfo))
         {
-            float const dir = caster->GetAngle(victim);
-            float const dirX = std::cos(dir);
-            float const dirY = std::sin(dir);
             std::vector<std::pair<float, Unit*>> struckBy;
             for (Unit* unit : EnemiesNear(victim, row->value + 5.0f))
             {
                 if (unit == victim || !unit->IsAlive() || !MayCatchUnit(caster, unit, nullptr))
                     continue;
-                float const offX = unit->GetPositionX() - victim->GetPositionX();
-                float const offY = unit->GetPositionY() - victim->GetPositionY();
-                float const dist = std::sqrt(offX * offX + offY * offY);
-                if (dist - unit->GetCombatReach() > row->value)
-                    continue;
-                float const along = offX * dirX + offY * dirY;
-                float const across = std::fabs(offX * dirY - offY * dirX);
-                if (dist > unit->GetCombatReach() && std::atan2(across, along) > FRAGMENT_HALF_CONE)
-                    continue;
-                if (!victim->IsWithinLOSInMap(unit))
+                float const dist = victim->GetDistance(unit);
+                if (dist > row->value || !victim->IsWithinLOSInMap(unit))
                     continue;
                 struckBy.emplace_back(dist, unit);
             }
@@ -459,6 +471,18 @@ namespace Arpg
             for (auto const& [dist, unit] : struckBy)
                 RelayHit(player, victim->GetObjectGuid(), unit->GetObjectGuid(), spellInfo, mask, share, 0, 0.0f,
                          GuidVector{ victim->GetObjectGuid(), unit->GetObjectGuid() });
+            // The rest scatter outward, fanned about the line the spell flew.
+            uint32 const spare = row->n - uint32(struckBy.size());
+            float const away = caster->GetAngle(victim);
+            for (uint32 k = 0; k < spare; ++k)
+            {
+                float const fan = away + (float(k) - float(spare - 1) * 0.5f) * (float(M_PI) / 4.0f);
+                float x = victim->GetPositionX() + std::cos(fan) * row->value * SHARD_SCATTER;
+                float y = victim->GetPositionY() + std::sin(fan) * row->value * SHARD_SCATTER;
+                float z = victim->GetPositionZ();
+                victim->UpdateAllowedPositionZ(x, y, z);
+                SendGroundVisual(victim, x, y, z, spellInfo);
+            }
         }
 
         // Chain (C): leaps from the target to the nearest enemy not yet hit, `n` times.

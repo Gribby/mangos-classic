@@ -583,6 +583,7 @@ class Spell
         void SetArpgSecondary(uint32 pct, ObjectGuid exclude) { m_arpgSecondaryPct = pct; m_arpgExclude = exclude; }
         bool IsArpgSecondary() const { return m_arpgSecondaryPct != 0; }
         bool IsArpgLine() const { return m_arpgLine; }
+        bool HasArpgAim() const { return m_arpgAimSet; }
         SpellSchoolMask GetSchoolMask() const { return m_spellSchoolMask; }
 
         // scriptable conditionals

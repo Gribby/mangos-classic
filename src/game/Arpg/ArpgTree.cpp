@@ -10,6 +10,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgSkills.h"
 
+#include "Chat/Chat.h"
 #include "Database/DatabaseEnv.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
@@ -678,8 +679,9 @@ namespace Arpg
 
     uint32 TreePointsFor(Player const* player)
     {
+        // One every second level (30 at 60) and one per final boss first killed.
         uint32 const level = player->GetLevel();
-        return (level > 1 ? level - 1 : 0) + uint32(WebFor(player).bosses.size());
+        return level / 2 + uint32(WebFor(player).bosses.size());
     }
 
     void LoadTree(Player* player)
@@ -733,10 +735,29 @@ namespace Arpg
         return TalentsOf(player->getClass()).all.count(spell) != 0;
     }
 
+    // More nodes than the level gives (the points were rebalanced): the web comes back whole. Not
+    // mid-fight; the once-a-second update tries again after it.
+    bool SettleWebPoints(Player* player)
+    {
+        PlayerWeb const w = WebFor(player);
+        if (!w.arpg || player->IsInCombat() || Spent(w.nodes) <= TreePointsFor(player))
+            return false;
+        Respec(player);
+        ChatHandler(player).SendSysMessage("|cffffd200Passive points were rebalanced: your web's points are back to spend.|r");
+        return true;
+    }
+
     void OnTreeHello(Player* player)
     {
         if (!WebOf(player->getClass()))
+        {
+            // A class with no web (yet) still answers: an empty web and no skills, so the client
+            // drops what another character of the session left in its windows.
+            SettleSkillPoints(player);
+            SendTree(player);
+            SendSkills(player);
             return;
+        }
         bool fresh = false;
         Edit(player, [&](PlayerWeb& w)
         {
@@ -756,6 +777,8 @@ namespace Arpg
             if (WebNode const* node = FindNode(*web, id))
                 if (node->talent)
                     TeachNode(player, *node, true);
+        SettleWebPoints(player);
+        SettleSkillPoints(player);
         Refresh(player);
         SendTree(player);
         SendSkills(player);
@@ -763,6 +786,14 @@ namespace Arpg
 
     void UpdateTree(Player* player)
     {
+        // A refund held back by a fight at login goes through once it ends.
+        bool const settled = SettleWebPoints(player) | SettleSkillPoints(player);
+        if (settled)
+        {
+            Refresh(player);
+            SendTree(player);
+            SendSkills(player);
+        }
         PlayerWeb const w = WebFor(player);
         if (!w.arpg || w.level == player->GetLevel())
             return;

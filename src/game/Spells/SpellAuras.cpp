@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Arpg/ArpgCombat.h"
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
 #include "Server/WorldPacket.h"
@@ -843,6 +844,9 @@ void Aura::PickTargetsForSpellTrigger(Unit*& triggerCaster, Unit*& triggerTarget
             if (!triggerCaster)
                 triggerCaster = triggerTarget;
             triggerTarget = triggerCaster->GetTarget(); // This will default to channel target for channels
+            // ARPG: an ARPG player selects nothing; each tick of its channel takes the aim line (Arpg/ArpgCombat.h).
+            if (Unit* aimed = Arpg::ChannelTickTarget(triggerCaster, GetId()))
+                triggerTarget = aimed;
             break;
         case TARGET_UNIT_FRIEND: // Abolish Disease / Poison confirms this
         case TARGET_UNIT_CASTER:

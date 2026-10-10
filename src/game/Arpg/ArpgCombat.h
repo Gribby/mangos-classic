@@ -61,6 +61,7 @@ namespace Arpg
         ACTION_UNSEAL       = 20,                           // uint16 node: unseal with Codex fragments (Arpg/ArpgSkills.h)
         ACTION_SOCKET       = 21,                           // uint8 skill, uint8 rune: socket a rune
         ACTION_TOWN_PORTAL  = 22,                           // -: open a town portal, or go back through it
+        ACTION_GLOBE        = 23,                           // uint32 globe: take a health globe
     };
 
     // What the client's cast aims at, by the spell's own target word.
@@ -116,6 +117,11 @@ namespace Arpg
     // orientation) between `minRange` and `maxRange` yards, the line LINE_HALF_WIDTH wide plus each
     // target's combat reach, in line of sight; nullptr when the line is clear.
     // `exclude`, if set, is never picked (an extra projectile passes the unit the main one took).
+    // An ARPG player's channel that fires a missile each tick (Arcane Missiles) has no selection
+    // to fire at: each missile takes the first enemy on the channel's aim line, else the unit the
+    // channel opened on. nullptr for anyone else (the stock target stands).
+    Unit* ChannelTickTarget(Unit* caster, uint32 auraSpellId);
+
     Unit* SelectLineTarget(WorldObject* caster, float aim, float minRange, float maxRange, Unit const* intended,
                            Unit const* exclude = nullptr);
 

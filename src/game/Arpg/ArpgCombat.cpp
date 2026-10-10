@@ -303,10 +303,38 @@ namespace Arpg
         spell->SpellStart(&targets);
     }
 
+    Unit* ChannelTickTarget(Unit* caster, uint32 auraSpellId)
+    {
+        if (!caster || !Active(caster))
+            return nullptr;
+        // Only the caster's own open channel is re-aimed; any other periodic trigger keeps its target.
+        Spell* channel = caster->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (!channel || channel->m_spellInfo->Id != auraSpellId)
+            return nullptr;
+        Unit* held = channel->m_targets.getUnitTarget();
+        if (held && !held->IsAlive())
+            held = nullptr;
+        float const bearing = channel->HasArpgAim() ? channel->GetArpgAim()
+                              : held ? caster->GetAngle(held) : caster->GetOrientation();
+        SpellRangeEntry const* range = sSpellRangeStore.LookupEntry(channel->m_spellInfo->rangeIndex);
+        float maxRange = GetSpellMaxRange(range);
+        if (caster->GetTypeId() == TYPEID_PLAYER)
+            static_cast<Player*>(caster)->ApplySpellMod(channel->m_spellInfo->Id, SPELLMOD_RANGE, maxRange, false);
+        if (Unit* first = SelectLineTarget(caster, bearing, 0.0f, maxRange, nullptr))
+            return first;
+        return held;
+    }
+
     void UpdateAim(Player* player, float x, float y, float /*z*/, ObjectGuid intendedGuid)
     {
         if (!Active(player))
             return;
+        // A channel that fires each tick follows the cursor: its next missile takes the new line.
+        if (Spell* channel = player->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+        {
+            if (channel->m_clientCast && FlatDistance(player, x, y) >= AIM_MIN)
+                channel->SetArpgAim(player->GetAngle(x, y), FlatDistance(player, x, y));
+        }
         Spell* spell = player->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         if (!spell || !spell->m_clientCast || spell->getState() != SPELL_STATE_CASTING ||
                 !IsLineSpell(spell->m_spellInfo))

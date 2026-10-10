@@ -33,6 +33,7 @@
  *     ACTION_UNSEAL       uint16 node: unseal a capstone with Codex fragments (Arpg/ArpgSkills.h)
  *     ACTION_SOCKET       uint8 skill, uint8 rune (0 empties): socket a rune
  *     ACTION_TOWN_PORTAL  -: open a town portal, or go back through it (Arpg/ArpgActions.h)
+ *     ACTION_GLOBE        uint32 globe: take a health globe the player walked onto
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -300,6 +301,19 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
                         Arpg::Dodge(arpg, x, y);
+            });
+            break;
+        }
+        case Arpg::ACTION_GLOBE:
+        {
+            uint32 globe;
+            recvPacket >> globe;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([globe](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::TakeGlobe(arpg, globe);
             });
             break;
         }

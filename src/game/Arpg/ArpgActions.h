@@ -21,6 +21,14 @@
  * health and mana, at the dungeon's entrance inside the dungeon, or at the nearest graveyard
  * outside; its corpse turns to bones. The durability loss stays.
  *
+ * Health globes (Diablo's): a kill by an ARPG player sometimes drops a globe where the creature
+ * died (a rare, a boss always; a champion half the time; anything else 7%, 15% while the killer is
+ * under half health). Any ARPG player there walking onto it (kind 23) heals GLOBE_HEAL_PCT of
+ * their maximum health; it fades after GLOBE_LIFE_MS.
+ *
+ *   SMSG_ARPG_GLOBE (0x345): uint8 kind (1 dropped, 2 gone), uint32 globe, float x, y, z. To the
+ *     ARPG players near it.
+ *
  *   SMSG_ARPG_STATUS (0x342): uint8 flask charges, uint8 flask max, uint8 the next charge's
  *     progress (0-100), uint32 ms until the dodge is ready (0 ready), uint32 the dodge cooldown
  *     ms. Sent on a change, at most every STATUS_EVERY_MS, and once after the hello.
@@ -50,6 +58,9 @@ namespace Arpg
 
     // Each player update: the out-of-combat refill and the status packet.
     void UpdateActions(Player* player);
+
+    // `player` walked onto health globe `globe` (kind 23).
+    void TakeGlobe(Player* player, uint32 globe);
 
     // Open a town portal, or go back through the one that is open (kind 22).
     void TownPortal(Player* player);

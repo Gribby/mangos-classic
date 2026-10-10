@@ -134,6 +134,9 @@ namespace Arpg
     // Give back every point in `skill`.
     void RespecSkill(Player* player, uint8 skill);
 
+    // More skill points spent than the character's level gives: give them all back.
+    bool SettleSkillPoints(Player* player);
+
     // Add what the player's skill nodes give to `totals`.
     void AddSkillTotals(Player const* player, WebTotals& totals);
 

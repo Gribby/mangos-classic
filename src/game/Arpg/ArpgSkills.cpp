@@ -597,7 +597,23 @@ namespace Arpg
 {
     uint32 SkillPointsFor(uint32 level)
     {
-        return level >= 2 ? 2 * (std::min<uint32>(level, 51) - 1) : 0;
+        // One a level from the second: 19 at 20, 59 at 60, against 20 a skill in five slots, so
+        // a character fills two or three skills, not all five.
+        return level >= 2 ? std::min<uint32>(level, 60) - 1 : 0;
+    }
+
+    bool SettleSkillPoints(Player* player)
+    {
+        PlayerSkills const s = SkillsFor(player);
+        if (SpentIn(s) <= SkillPointsFor(player->GetLevel()) || player->IsInCombat())
+            return false;
+        // More spent than the level gives (the points were rebalanced): every skill's back.
+        for (SkillDef const& skill : Skills())
+            if (skill.classId == player->getClass() && SpentIn(s, skill.id))
+                ClearSkill(player, skill.id);
+        RefreshTotals(player);
+        ChatHandler(player).SendSysMessage("|cffffd200Skill points were rebalanced: your skill trees' points are back to spend.|r");
+        return true;
     }
 
     SkillId SkillOfSpell(uint8 classId, SpellEntry const* spellInfo)
@@ -710,8 +726,7 @@ namespace Arpg
         for (SkillDef const& skill : Skills())
             if (skill.classId == classId)
                 mine.push_back(&skill);
-        if (mine.empty())
-            return;
+        // A class with no skills is sent none: the client empties its Skills tab.
 
         WorldPacket data(SMSG_ARPG_SKILLS, 512 + mine.size() * 1600);
         data << uint8(2);

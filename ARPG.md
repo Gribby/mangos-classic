@@ -49,8 +49,8 @@ Dawnbringer and Purifying Light keep their hooks for later skill trees. Design: 
 
 ## Skills
 
-`Arpg/ArpgSkills.{h,cpp}`: five specialisation slots (open at 1/10/20/30/40), two skill points a
-level from 2 to 51, 20 at most in a skill, and the paladin's Strike, Seals, Judgement,
+`Arpg/ArpgSkills.{h,cpp}`: five specialisation slots (open at 1/10/20/30/40), one skill point a
+level from 2 (59 at 60; the web, one every second level and one per final boss), 20 at most in a skill, and the paladin's Strike, Seals, Judgement,
 Consecration and Hammer of Justice trees. Saved in `character_arpg_skill` and
 `character_arpg_skill_node`. Kinds 12 slot (`u8` slot, `u8` skill), 13 take (`u16` node), 14 give
 back (`u16` node), 15 respec a skill (`u8` skill); kind 10 answers with the skills too.
@@ -117,6 +117,15 @@ blast) from `Unit` combat start (`OnTelegraphAggro`), on the creature's own even
 for a share of maximum health past the damage caps, and a stun, fear or confuse breaks them off.
 `SMSG_ARPG_TELEGRAPH` = 0x344. Design: the client's `docs/ARPG-PROGRESSION.md`, "Threats and the
 roll". Mana on hit is a stat: two web nodes (Bloodthirst, Devotion) and an item affix.
+
+## Monster moves and globes
+
+`Arpg/ArpgThreats.cpp`: every creature fighting an ARPG player without a heavy attack has one
+move by family, class or name (lunge and charge lines, maul and cleave cones, slam rings, web and
+bomb blasts, a caster's back-off), through the same wind-up chain; murlocs call their kin.
+`Arpg/ArpgActions.cpp`: health globes, dropped on kills (`OnFlaskKill`), `SMSG_ARPG_GLOBE` 0x345,
+taken with `CMSG_ARPG_ACTION` kind 23. A channel firing each tick (Arcane Missiles) takes each
+missile's target off its aim line (`Arpg::ChannelTickTarget`, in `SingleEnemyTargetAura`).
 
 ## Town portal, death, junk
 

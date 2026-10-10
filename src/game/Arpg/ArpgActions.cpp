@@ -60,6 +60,7 @@ namespace
         float x = 0.0f, y = 0.0f, z = 0.0f, o = 0.0f;
     };
 
+
     struct State
     {
         uint8 charges = FLASK_MAX;
@@ -98,6 +99,70 @@ namespace
     {
         uint32 const at = now + ms;
         return at ? at : 1;
+    }
+
+    // Health globes: the heal, how long one lies there, how near a taker must stand (server
+    // positions lag the client's a little), and the drop chances in percent.
+    constexpr uint32 GLOBE_HEAL_PCT = 20;
+    constexpr uint32 GLOBE_LIFE_MS = 60 * IN_MILLISECONDS;
+    constexpr float GLOBE_REACH = 4.0f;
+    constexpr float GLOBE_SEND_RANGE = 100.0f;
+    constexpr uint32 GLOBE_PCT_CHAMPION = 50, GLOBE_PCT = 7, GLOBE_PCT_HURT = 15;
+    enum GlobeKind : uint8 { GLOBE_DROPPED = 1, GLOBE_GONE = 2 };
+
+    struct Globe
+    {
+        uint32 map = 0, instance = 0;
+        float x = 0.0f, y = 0.0f, z = 0.0f;
+        uint32 until = 0;
+    };
+    std::mutex sGlobesLock;
+    std::unordered_map<uint32, Globe> sGlobes;
+    uint32 sGlobeSerial = 0;
+
+    void SendGlobe(WorldObject const* source, uint8 kind, uint32 id, Globe const& g)
+    {
+        WorldPacket data(SMSG_ARPG_GLOBE, 1 + 4 + 12);
+        data << uint8(kind) << uint32(id) << g.x << g.y << g.z;
+        for (auto const& ref : source->GetMap()->GetPlayers())
+        {
+            Player* player = ref.getSource();
+            if (player && player->IsInWorld() && Active(player) && player->IsWithinDist3d(g.x, g.y, g.z, GLOBE_SEND_RANGE))
+                player->GetSession()->SendPacket(data);
+        }
+    }
+
+    void DropGlobe(Player* killer, Unit* victim)
+    {
+        if (victim->GetTypeId() != TYPEID_UNIT)
+            return;
+        Creature* creature = static_cast<Creature*>(victim);
+        // Nothing from critters, totems or anyone's pets and guardians.
+        if (creature->IsCritter() || creature->IsTotem() || creature->IsPet() || creature->GetOwnerGuid() ||
+                creature->IsPlayerControlled())
+            return;
+        uint32 pct = killer->GetHealth() * 2 < killer->GetMaxHealth() ? GLOBE_PCT_HURT : GLOBE_PCT;
+        if (IsDungeonBoss(creature) || ChampionTier(creature) == 2)
+            pct = 100;
+        else if (ChampionTier(creature) == 1)
+            pct = GLOBE_PCT_CHAMPION;
+        if (!roll_chance_i(int(pct)))
+            return;
+        uint32 const now = WorldTimer::getMSTime();
+        Globe g{ victim->GetMapId(), victim->GetInstanceId(), victim->GetPositionX(), victim->GetPositionY(),
+                 victim->GetPositionZ(), After(now, GLOBE_LIFE_MS) };
+        uint32 id;
+        {
+            std::lock_guard<std::mutex> guard(sGlobesLock);
+            // Old ones go as new ones come.
+            for (auto it = sGlobes.begin(); it != sGlobes.end();)
+                it = Later(it->second.until, now) ? std::next(it) : sGlobes.erase(it);
+            id = ++sGlobeSerial;
+            if (!id)
+                id = ++sGlobeSerial;
+            sGlobes[id] = g;
+        }
+        SendGlobe(victim, GLOBE_DROPPED, id, g);
     }
 
     void SendStatus(Player* player, State const& s, uint32 now)
@@ -210,9 +275,36 @@ namespace Arpg
     {
         if (!killer || !victim || !Active(killer))
             return;
+        DropGlobe(killer, victim);
         uint32 const points = KillPoints(victim);
         std::lock_guard<std::mutex> guard(sActionsLock);
         AddPoints(sStates[killer->GetObjectGuid()], points);
+    }
+
+    void TakeGlobe(Player* player, uint32 id)
+    {
+        if (!Active(player) || !player->IsAlive() || !player->IsInWorld())
+            return;
+        Globe g;
+        {
+            std::lock_guard<std::mutex> guard(sGlobesLock);
+            auto it = sGlobes.find(id);
+            if (it == sGlobes.end())
+                return;
+            Globe const& found = it->second;
+            if (found.map != player->GetMapId() || found.instance != player->GetInstanceId() ||
+                    !player->IsWithinDist3d(found.x, found.y, found.z, GLOBE_REACH))
+                return;
+            bool const fresh = Later(found.until, WorldTimer::getMSTime());
+            g = found;
+            sGlobes.erase(it);
+            if (!fresh)
+                return;
+        }
+        uint32 const heal = std::max<uint32>(1, player->GetMaxHealth() * GLOBE_HEAL_PCT / 100);
+        if (SpellEntry const* potion = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_HEALING_POTION))
+            player->DealHeal(player, heal, potion);
+        SendGlobe(player, GLOBE_GONE, id, g);
     }
 
     bool InTown(Player* player)
