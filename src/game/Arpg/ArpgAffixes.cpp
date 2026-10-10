@@ -27,7 +27,7 @@ namespace
 {
     using namespace Arpg;
 
-    enum AffixKind : uint8 { AK_STAT, AK_TAG, AK_HEALING, AK_ARMOUR, AK_BLOCK, AK_MOVE, AK_COOLDOWN, AK_LIFE_ON_KILL };
+    enum AffixKind : uint8 { AK_STAT, AK_TAG, AK_HEALING, AK_ARMOUR, AK_BLOCK, AK_MOVE, AK_COOLDOWN, AK_LIFE_ON_KILL, AK_MANA_ON_HIT };
 
     struct AffixDef
     {
@@ -56,6 +56,7 @@ namespace
         { AK_MOVE, 0,              2, 8,  "+%d%% movement speed", INVTYPE_FEET },
         { AK_COOLDOWN, 0,          2, 10, "+%d%% cooldown recovery", 0 },
         { AK_LIFE_ON_KILL, 0,      3, 30, "+%d life on kill", 0 },
+        { AK_MANA_ON_HIT, 0,       6, 40, "+%d mana on hit", 0 },
     };
 
     // A value's share of the level 60 range, by item level: about a sixth at level 10, raid gear
@@ -244,6 +245,7 @@ namespace Arpg
                     case AK_MOVE: totals.movePct += r.value; break;
                     case AK_COOLDOWN: totals.cooldownPct += r.value; break;
                     case AK_LIFE_ON_KILL: totals.lifeOnKill += r.value; break;
+                    case AK_MANA_ON_HIT: totals.manaOnHit += r.value; break;
                 }
             }
         }

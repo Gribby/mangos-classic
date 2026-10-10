@@ -6,6 +6,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgUniques.h"
 
 #include "AI/BaseAI/CreatureAI.h"
@@ -810,6 +811,7 @@ namespace Arpg
             return;
         ObjectGuid const guid = creature->GetObjectGuid();
         ForgetScaled(creature);
+        ForgetTelegraph(creature);
         std::lock_guard<std::mutex> guard(sPacksLock);
         // Guids are per map, so a stale record could crown another map's creature.
         sChampions.erase(guid);

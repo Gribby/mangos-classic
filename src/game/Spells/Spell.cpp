@@ -28,6 +28,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgThreats.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -954,6 +955,7 @@ void Spell::AddUnitTarget(Unit* target, uint8 effectMask, CheckException excepti
     targetInfo.diminishLevel = DIMINISHING_LEVEL_1;
     targetInfo.diminishGroup = DIMINISHING_NONE;
     targetInfo.executionless = false;
+    targetInfo.arpgBolt = false;
 
     // Calculate hit result
     targetInfo.missCondition = m_ignoreHitResult ? SPELL_MISS_NONE : Unit::SpellHitResult(m_trueCaster, target, m_spellInfo, targetInfo.effectMask, m_reflectable, false, &targetInfo.heartbeatResistChance);
@@ -983,6 +985,17 @@ void Spell::AddUnitTarget(Unit* target, uint8 effectMask, CheckException excepti
         // Calculate minimum incoming time
         if (m_delayMoment == 0 || m_delayMoment > targetInfo.timeDelay)
             m_delayMoment = targetInfo.timeDelay;
+
+        // ARPG: a hostile creature's bolt at an ARPG player flies at where the player stands now.
+        if (targetInfo.missCondition == SPELL_MISS_NONE && Arpg::AimsBolt(m_trueCaster, target, m_spellInfo))
+        {
+            targetInfo.arpgBolt = true;
+            targetInfo.arpgFrom[0] = affectiveObject->GetPositionX();
+            targetInfo.arpgFrom[1] = affectiveObject->GetPositionY();
+            targetInfo.arpgAim[0] = target->GetPositionX();
+            targetInfo.arpgAim[1] = target->GetPositionY();
+            targetInfo.arpgAim[2] = target->GetPositionZ();
+        }
     }
     else
         targetInfo.timeDelay = uint64(0);
@@ -1185,6 +1198,23 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
     Unit* affectiveCaster = GetAffectiveCasterOrOwner();
     // FIXME: in case wild GO heal/damage spells will be used target bonuses
     WorldObject* caster = affectiveCaster ? affectiveCaster : m_trueCaster;
+
+    // ARPG: a bolt that flew at a point hits only a target still in its path (Arpg/ArpgThreats.h).
+    if (target->arpgBolt && target->missCondition == SPELL_MISS_NONE)
+    {
+        target->arpgBolt = false;
+        SpellMissInfo const outcome = Arpg::BoltOutcome(unit, target->arpgFrom[0], target->arpgFrom[1],
+                                                        target->arpgAim[0], target->arpgAim[1], target->arpgAim[2]);
+        if (outcome != SPELL_MISS_NONE)
+        {
+            // Its damage was worked out at launch: a miss deals none of it.
+            target->missCondition = outcome;
+            target->damage = 0;
+            target->healing = 0;
+            target->isCrit = false;
+            Unit::SendSpellMiss(m_trueCaster, unit, m_spellInfo->Id, outcome);
+        }
+    }
 
     SpellMissInfo missInfo = target->missCondition;
     // Need init unitTarget by default unit (can changed in code on reflect)

@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgSkills.h"
@@ -33,9 +34,11 @@ namespace
     constexpr uint32 RUNE_LEECH_PCT = 3;
     // ARPG pacing: mana comes back from fighting, not from drinking. A swing that hits returns
     // MANA_ON_SWING_PCT of the maximum, a skill hit MANA_ON_SPELL_PCT (at most every
-    // MANA_SPELL_EVERY ms), a kill MANA_ON_KILL_PCT; out of combat for REST_DELAY_MS, health and
-    // mana come back REST_PCT_PER_SEC a second. The run is BASE_SPEED_PCT faster than vanilla's.
-    constexpr uint32 MANA_ON_SWING_PCT = 2, MANA_ON_SPELL_PCT = 1, MANA_ON_KILL_PCT = 5;
+    // MANA_SPELL_EVERY ms), a kill MANA_ON_KILL_PCT, a floor every character has; each swing and
+    // skill hit adds the "mana on hit" of the web and the items. Out of combat for REST_DELAY_MS,
+    // health and mana come back REST_PCT_PER_SEC a second. The run is BASE_SPEED_PCT faster than
+    // vanilla's.
+    constexpr uint32 MANA_ON_SWING_PCT = 1, MANA_ON_SPELL_PCT = 1, MANA_ON_KILL_PCT = 3;
     constexpr uint32 MANA_SPELL_EVERY = 250;
     constexpr uint32 REST_DELAY_MS = 2000;
     constexpr float REST_PCT_PER_SEC = 8.0f;
@@ -46,13 +49,15 @@ namespace
     // The longest gap one rest tick covers: after a loading screen, no lump of healing.
     constexpr uint32 REST_GAP_MAX_MS = 1000;
 
-    void GiveManaPct(Unit* unit, uint32 pct)
+    // Give `unit` `pct` of its maximum mana and `flat` more.
+    void GiveManaPct(Unit* unit, uint32 pct, int32 flat = 0)
     {
         if (unit->GetPowerType() != POWER_MANA || !unit->IsAlive())
             return;
         uint32 const max = unit->GetMaxPower(POWER_MANA);
+        int32 const gain = int32(std::max<uint32>(1, max * pct / 100)) + std::max<int32>(0, flat);
         if (max && unit->GetPower(POWER_MANA) < max)
-            unit->ModifyPower(POWER_MANA, int32(std::max<uint32>(1, max * pct / 100)));
+            unit->ModifyPower(POWER_MANA, gain);
     }
 
     // Executioner: below this share of health; Wrathful: this many enemies this close, this often.
@@ -732,7 +737,10 @@ namespace Arpg
 
         // A swing that lands gives mana back.
         if (damage)
-            GiveManaPct(attacker, MANA_ON_SWING_PCT);
+            GiveManaPct(attacker, MANA_ON_SWING_PCT, t.manaOnHit);
+        // A foe this player joined late still winds up its telegraphs at them.
+        if (victim->GetTypeId() == TYPEID_UNIT)
+            OnTelegraphAggro(static_cast<Creature*>(victim), attacker);
 
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
@@ -776,6 +784,8 @@ namespace Arpg
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
 
+        if (dealt && victim->GetTypeId() == TYPEID_UNIT)
+            OnTelegraphAggro(static_cast<Creature*>(victim), caster);
         // A skill's hit gives mana back, a little, at most a few times a second.
         if (dealt)
         {
@@ -784,7 +794,7 @@ namespace Arpg
             if (WorldTimer::getMSTimeDiff(r.lastManaHit, now) >= MANA_SPELL_EVERY)
             {
                 r.lastManaHit = now;
-                GiveManaPct(caster, MANA_ON_SPELL_PCT);
+                GiveManaPct(caster, MANA_ON_SPELL_PCT, t.manaOnHit);
             }
         }
 

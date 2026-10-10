@@ -681,6 +681,9 @@ class Spell
             bool   procReflect : 1; // Used to tell hit to proc reflect only and return reflect back
             bool   isCrit : 1;
             bool   executionless : 1;
+            bool   arpgBolt : 1;     // ARPG: flies at a point, not after the target (Arpg/ArpgThreats.h)
+            float  arpgFrom[2];      // the bolt's line: from the caster
+            float  arpgAim[3];       // to where the target stood
             uint32 heartbeatResistChance;
             uint32 effectDuration;
             uint32 diminishDuration; // Store duration after diminishing returns are applied

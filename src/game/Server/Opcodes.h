@@ -879,10 +879,12 @@ enum Opcodes
     SMSG_ARPG_STATUS                                = 0x342,
     // ARPG: the rolled affixes of the player's items (Arpg/ArpgAffixes.h)
     SMSG_ARPG_ITEM_AFFIXES                          = 0x343,
+    // ARPG: a telegraphed attack winding up, or broken off (Arpg/ArpgThreats.h)
+    SMSG_ARPG_TELEGRAPH                             = 0x344,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x344
+#define NUM_MSG_TYPES 0x345
 
 /// Player state
 enum SessionStatus

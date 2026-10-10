@@ -147,6 +147,7 @@ namespace Arpg
         int32 movePct = 0;
         int32 cooldownPct = 0;
         int32 lifeOnKill = 0;
+        int32 manaOnHit = 0;         // mana per swing or skill hit
         int32 meleeAreaPct = 0;
         int32 spellAreaPct = 0;
         int32 blockPct = 0;

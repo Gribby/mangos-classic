@@ -49,6 +49,7 @@ namespace
         FX_MELEE_AREA,    // % melee area
         FX_SPELL_AREA,    // % spell area
         FX_BLOCK,         // % block chance
+        FX_MANA_ON_HIT,   // mana per swing or skill hit
     };
 
     struct Fx
@@ -153,7 +154,7 @@ namespace
                     true },
               },
               { { "Reach", "+5% melee area", { Of(FX_MELEE_AREA, 5) } },
-                { "Bloodthirst", "+5 life on kill", { Of(FX_LIFE_ON_KILL, 5) } } } },
+                { "Bloodthirst", "+5 life on kill and +6 mana on hit", { Of(FX_LIFE_ON_KILL, 5), Of(FX_MANA_ON_HIT, 6) } } } },
             { "Lightbringer", -30.0f,
               { "Lightbringer", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
               {
@@ -165,7 +166,7 @@ namespace
                     { "Holy Power", "+5% chance to critically strike with Holy spells.", {}, 0, "Holy Power", 5 },
                     { "Divine Favour", "Every 20 sec, your next Holy spell is a critical strike.", {}, 20216, nullptr, 0, KEY_DIVINE_FAVOUR },
                     false },
-                  { { "Devotion", "+5 Spirit", { Stat(STAT_SPIRIT, 5) } },
+                  { { "Devotion", "+4 Spirit and +3 mana on hit", { Stat(STAT_SPIRIT, 4), Of(FX_MANA_ON_HIT, 3) } },
                     { "Healing Light", "+12% Holy Light and Flash of Light healing, and +10% all healing.", { Of(FX_HEALING, 10) }, 0, "Healing Light", 3 },
                     { "Blessed Recovery", "Healing yourself gives +10% cooldown recovery for 4 sec.", {}, 633, nullptr, 0, KEY_BLESSED_RECOVERY },
                     false },
@@ -447,6 +448,7 @@ namespace
                     case FX_MELEE_AREA:   t.meleeAreaPct += fx.value; break;
                     case FX_SPELL_AREA:   t.spellAreaPct += fx.value; break;
                     case FX_BLOCK:        t.blockPct += fx.value; break;
+                    case FX_MANA_ON_HIT:  t.manaOnHit += fx.value; break;
                 }
             }
         }
@@ -535,12 +537,38 @@ namespace
         return out;
     }
 
+    // The other spells a trainer spell teaches: TrainerSpell::learnedSpell keeps only one of its
+    // learn effects, and the paladin's level 4 lesson teaches two, Seal of Righteousness rank 2
+    // and Judgement.
+    void TeachAlso(Player* player, TrainerSpell const* spell)
+    {
+        // A lesson that is itself the ability teaches nothing more.
+        SpellEntry const* teach = spell->learnedSpell != spell->spell ? sSpellTemplate.LookupEntry<SpellEntry>(spell->spell) : nullptr;
+        if (!teach)
+            return;
+        for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        {
+            uint32 const other = teach->EffectTriggerSpell[i];
+            if (teach->Effect[i] != SPELL_EFFECT_LEARN_SPELL || !other || other == spell->learnedSpell)
+                continue;
+            // The lesson's own learn effects, as ObjectMgr::LoadTrainers reads them.
+            if (teach->EffectImplicitTargetA[i] != TARGET_NONE && teach->EffectImplicitTargetA[i] != TARGET_UNIT_CASTER)
+                continue;
+            if (!player->HasSpell(other) && player->IsSpellFitByClassAndRace(other))
+                player->learnSpell(other, false);
+        }
+    }
+
     // Spells without ranks, first pass: the class's trainer spells come free at their level, so
     // each spell is the rank for the character's level (the server's spellbook shows a chain's
     // highest rank only, and the client keeps the bar on it).
     void TeachClassSpells(Player* player)
     {
         std::vector<TrainerSpell const*> const& spells = ClassTrainerSpells(player->getClass());
+        // A lesson already learned still gives what it left out (a character from before this).
+        for (TrainerSpell const* spell : spells)
+            if (player->HasSpell(spell->learnedSpell))
+                TeachAlso(player, spell);
         for (int pass = 0; pass < 8; ++pass)
         {
             bool learned = false;
@@ -554,6 +582,7 @@ namespace
                 if (player->GetTrainerSpellState(spell, reqLevel) != TRAINER_SPELL_GREEN)
                     continue;
                 player->learnSpell(spell->learnedSpell, false);
+                TeachAlso(player, spell);
                 learned = true;
             }
             if (!learned)

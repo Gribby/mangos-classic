@@ -53,6 +53,7 @@
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgLoot.h"
+#include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgPacks.h"
@@ -8088,6 +8089,8 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
         // present (Arpg/ArpgDungeons.h).
         Arpg::OnPackAggro(creature, enemy);
         Arpg::OnScaledAggro(creature, enemy);
+        // ARPG: its telegraphed attacks, against an ARPG player (Arpg/ArpgThreats.h).
+        Arpg::OnTelegraphAggro(creature, enemy);
 
         // can be overriden by spellcast on Aggro hook, hence must be done after EnterCombat hook
         if (!creature->GetCreatedBySpellId() && creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE) && !creature->IsRooted() && !creature->IsInPanic() && !creature->IsNonMeleeSpellCasted(false) && enemy && enemy->IsPlayerControlled())
