@@ -240,6 +240,9 @@ struct LootItem
     // storing item prototype for fast access
     ItemPrototype const* itemProto;
 
+    // ARPG: the item's affix seed, 0 for none (Arpg/ArpgAffixes.h)
+    uint32 arpgSeed = 0;
+
     // Constructor, copies most fields from LootStoreItem, generates random count and random suffixes/properties
     // Should be called for non-reference LootStoreItem entries only (mincountOrRef > 0)
     explicit LootItem(LootStoreItem const& li, uint32 _lootSlot, uint32 threshold);
@@ -381,6 +384,8 @@ class Loot
         // Fork-only (ARPG packs, Arpg::ThinPackLoot): keep `share` of the gold, and each item that
         // isn't for a quest at that chance.
         void ThinArpgLoot(float share);
+        // ARPG: each loot item, for the affix seeds (Arpg/ArpgAffixes.h).
+        template <class F> void ForEachArpgItem(F f) { for (LootItem* item : m_lootItems) f(item); }
         // ARPG: a corpse's loot is on the ground, never in a window, so a corpse with nothing left
         // to take (thinned to nothing, or core's sparkle-for-an-empty-window) stops sparkling.
         void SettleArpgCorpse();

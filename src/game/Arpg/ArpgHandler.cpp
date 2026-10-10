@@ -45,6 +45,7 @@
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgAffixes.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -88,7 +89,11 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             {
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
+                    {
                         Arpg::OnTreeHello(arpg);
+                        // The rolled affixes of the character's items (Arpg/ArpgAffixes.h).
+                        Arpg::LoadAffixes(arpg);
+                    }
             });
             break;
         }

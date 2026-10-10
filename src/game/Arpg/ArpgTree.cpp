@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
@@ -461,6 +462,7 @@ namespace
         std::set<uint16> const taken = WebFor(player).nodes;
         WebTotals totals = Sum(*web, taken);
         AddSkillTotals(player, totals);
+        AddItemTotals(player, totals);
         Edit(player, [&](PlayerWeb& w)
         {
             w.totals = std::make_shared<WebTotals const>(std::move(totals));

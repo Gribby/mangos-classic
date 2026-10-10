@@ -20,6 +20,7 @@
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -7053,6 +7054,9 @@ void Player::_ApplyItemMods(Item* item, uint8 slot, bool apply)
 
     if (!proto)
         return;
+
+    // ARPG: a worn item's affixes join the totals (Arpg/ArpgAffixes.h).
+    Arpg::OnEquipChanged(this, item);
 
     DETAIL_LOG("applying mods for item %u ", item->GetGUIDLow());
 

@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 
@@ -315,6 +316,7 @@ namespace Arpg
             }
         }
         loot->AddArpgDevGold(urand(ilvl * 10, ilvl * 60));
+        SeedArpgLoot(loot, player);
         // Lootable again, whatever the kill decided for an empty corpse.
         corpse->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
         OnCorpseLoot(corpse);

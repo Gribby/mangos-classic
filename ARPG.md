@@ -92,7 +92,7 @@ each ARPG player of the champions within 100 yards. Design: the client's
 | 21 socket | `u8` skill, `u8` rune (0 empties): socket a rune |
 
 Server to client, 0x33D to 0x342 (`NUM_MSG_TYPES` 0x343): loot, item mechanics, the web, skills,
-champions, and `SMSG_ARPG_STATUS` (0x342: `u8` flask charges, `u8` max, `u8` the next charge's
+champions, `SMSG_ARPG_STATUS` (0x342: `u8` flask charges, `u8` max, `u8` the next charge's
 progress, `u32` ms until the roll is ready, `u32` the roll's cooldown).
 
 ## Dungeons and survival
@@ -106,6 +106,14 @@ the server). Hooks: `Creature::AddToWorld` (through `Arpg::OnCreatureAdded`), `R
 and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a knockback; dodges
 in `Unit::RollMeleeOutcomeAgainst` and `SpellHitResult` while airborne) and the flask (kills fill
 it from `Unit::JustKilledCreature`). Design: the client's `docs/ARPG-PROGRESSION.md`.
+
+## Item affixes
+
+`Arpg/ArpgAffixes.{h,cpp}`: a seed per eligible loot item (`LootItem::arpgSeed`, set after the
+corpse's loot is made), kept with the stored item (`Loot::SendItem`, `character_arpg_item`),
+added into the totals when worn (`ArpgTree.cpp` Refresh; `Player::_ApplyItemMods` refreshes),
+and sent to the client after the hello and on store (`SMSG_ARPG_ITEM_AFFIXES`, 0x343;
+`NUM_MSG_TYPES` 0x344).
 
 ## Codex pages and runes
 

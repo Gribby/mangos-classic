@@ -19,6 +19,7 @@
 #include "Loot/LootMgr.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Log/Log.h"
 #include "Util/ProgressBar.h"
@@ -2033,6 +2034,9 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
         if (msg == EQUIP_ERR_OK)
         {
             Item* newItem = codex ? nullptr : target->StoreNewItem(dest, lootItem->itemId, true, lootItem->randomPropertyId);
+            // ARPG: the item keeps the affixes its seed rolls (Arpg/ArpgAffixes.h).
+            if (newItem && lootItem->arpgSeed)
+                Arpg::OnAffixedItemStored(target, newItem, lootItem->arpgSeed);
 
             if (lootItem->freeForAll)
             {

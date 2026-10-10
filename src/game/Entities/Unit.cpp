@@ -58,6 +58,7 @@
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgAffixes.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1445,6 +1446,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         Arpg::ThinPackLoot(victim);
         // ARPG: a Warden's drops and a final boss's Cache (Arpg/ArpgDungeons.h).
         Arpg::OnDungeonLoot(victim);
+        // ARPG: the drops' affix seeds (Arpg/ArpgAffixes.h).
+        Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient());
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
         Arpg::OnCorpseLoot(victim);
     }
