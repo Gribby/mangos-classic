@@ -20208,7 +20208,7 @@ void Player::AddGCD(SpellEntry const& spellEntry, uint32 /*forcedDuration = 0*/,
         gcdDuration = std::min(gcdDuration, 1500);
     }
 
-    if (!gcdDuration)
+    if (gcdDuration <= 0)
         return;
 
     // TODO: Remove this once spells are queuable and GCD is checked on execute
@@ -20221,6 +20221,10 @@ void Player::AddGCD(SpellEntry const& spellEntry, uint32 /*forcedDuration = 0*/,
 
         gcdDuration -= GetMap()->GetCurrentDiff() > 200 ? 200 : GetMap()->GetCurrentDiff();
     }
+
+    // A short GCD (the ARPG's, Arpg/ArpgCharacter.cpp) less the latency stays a GCD: never zero,
+    // which reads as the spell's own, nor negative, which would wrap.
+    gcdDuration = std::max(gcdDuration, 1);
 
     WorldObject::AddGCD(spellEntry, gcdDuration);
 

@@ -107,6 +107,16 @@ and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a k
 in `Unit::RollMeleeOutcomeAgainst` and `SpellHitResult` while airborne) and the flask (kills fill
 it from `Unit::JustKilledCreature`). Design: the client's `docs/ARPG-PROGRESSION.md`.
 
+## Pacing
+
+`Arpg/ArpgCharacter.cpp`, for ARPG players: mana comes from fighting, not drinking (2% of the
+maximum per swing that lands, 1% per skill hit at most four times a second, 5% per kill); two
+seconds out of combat, health and mana flow back at 8% a second; the run is 10% faster (the
+Agility speed cap is 30% with it); every class spell's global cooldown is a third of vanilla's
+(1.5 sec to 0.5) and its cast time half, as spell modifiers the client follows. `Player::AddGCD`
+keeps a short GCD less the latency at 1 ms or more (zero would read as the spell's own GCD, a
+negative one would wrap).
+
 ## Item affixes
 
 `Arpg/ArpgAffixes.{h,cpp}`: a seed per eligible loot item (`LootItem::arpgSeed`, set after the

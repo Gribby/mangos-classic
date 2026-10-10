@@ -31,6 +31,30 @@ namespace
 {
     // Rune of Leech: this share of the damage heals.
     constexpr uint32 RUNE_LEECH_PCT = 3;
+    // ARPG pacing: mana comes back from fighting, not from drinking. A swing that hits returns
+    // MANA_ON_SWING_PCT of the maximum, a skill hit MANA_ON_SPELL_PCT (at most every
+    // MANA_SPELL_EVERY ms), a kill MANA_ON_KILL_PCT; out of combat for REST_DELAY_MS, health and
+    // mana come back REST_PCT_PER_SEC a second. The run is BASE_SPEED_PCT faster than vanilla's.
+    constexpr uint32 MANA_ON_SWING_PCT = 2, MANA_ON_SPELL_PCT = 1, MANA_ON_KILL_PCT = 5;
+    constexpr uint32 MANA_SPELL_EVERY = 250;
+    constexpr uint32 REST_DELAY_MS = 2000;
+    constexpr float REST_PCT_PER_SEC = 8.0f;
+    constexpr int32 BASE_SPEED_PCT = 10;
+    // The global cooldown's cut (1.5 sec to 0.5, a rogue's 1 sec to a third) and the cast time's,
+    // for ARPG players. A share, not a flat cut, so no GCD reaches zero.
+    constexpr int32 ARPG_GCD_CUT_PCT = -67, ARPG_CAST_TIME_PCT = -50;
+    // The longest gap one rest tick covers: after a loading screen, no lump of healing.
+    constexpr uint32 REST_GAP_MAX_MS = 1000;
+
+    void GiveManaPct(Unit* unit, uint32 pct)
+    {
+        if (unit->GetPowerType() != POWER_MANA || !unit->IsAlive())
+            return;
+        uint32 const max = unit->GetMaxPower(POWER_MANA);
+        if (max && unit->GetPower(POWER_MANA) < max)
+            unit->ModifyPower(POWER_MANA, int32(std::max<uint32>(1, max * pct / 100)));
+    }
+
     // Executioner: below this share of health; Wrathful: this many enemies this close, this often.
     constexpr float EXECUTE_BELOW = 0.2f;
     constexpr float WRATHFUL_RANGE = 10.0f;
@@ -40,7 +64,7 @@ namespace
 
     // The attributes' ARPG effects: points of the attribute per 1%, and the cap in percent.
     constexpr int32 STR_PER_AREA = 10, AREA_CAP = 40;
-    constexpr int32 AGI_PER_SPEED = 20, SPEED_CAP = 20;
+    constexpr int32 AGI_PER_SPEED = 20, SPEED_CAP = 30;    // the cap includes BASE_SPEED_PCT
     constexpr int32 STA_PER_LIFE = 4;
     constexpr int32 INT_PER_AREA = 10;
     constexpr int32 SPI_PER_COOLDOWN = 10, COOLDOWN_CAP = 30;
@@ -103,6 +127,10 @@ namespace
         uint32 favourReady = 0;      // Divine Favour: the time it is ready again
         uint32 recoveryUntil = 0;    // Blessed Recovery: the time its bonus ends
         uint32 lastWrath = 0;        // Wrathful: the last time Holy Wrath fired on its own
+        uint32 lastManaHit = 0;      // the last skill hit that returned mana
+        uint32 combatSeen = 0;       // the last update the player was in combat
+        uint32 lastRest = 0;         // the last rest tick
+        float restCarry = 0.0f;      // the rest's fraction of a percent not yet given
     };
 
     std::mutex sRuntimeLock;
@@ -384,7 +412,16 @@ namespace Arpg
         player->UpdateBlockPercentage();
 
         SetHaste(player, r, HasteFor(player, t));
-        SetSkillMods(player, r, t.mods);
+        // ARPG pacing on every class spell, beside the trees' modifiers: a 0.5 sec global
+        // cooldown and half the cast time. Spell modifiers, so the client's cooldown sweep and
+        // the cast bar follow on their own.
+        std::vector<SkillSpellMod> mods = t.mods;
+        if (Active(player))
+        {
+            mods.push_back({ uint8(SPELLMOD_GLOBAL_COOLDOWN), uint8(SPELLMOD_PCT), ARPG_GCD_CUT_PCT, ~uint64(0) });
+            mods.push_back({ uint8(SPELLMOD_CASTING_TIME), uint8(SPELLMOD_PCT), ARPG_CAST_TIME_PCT, ~uint64(0) });
+        }
+        SetSkillMods(player, r, mods);
         SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (r.stunImmune && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
         // Speed and cooldowns at once, not at the next refresh.
         r.lastRefresh = 0;
@@ -403,6 +440,27 @@ namespace Arpg
     {
         Runtime& r = R(player);
         uint32 const now = WorldTimer::getMSTime();
+
+        // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
+        if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)
+            r.combatSeen = now ? now : 1;
+        if (r.lastRest && WorldTimer::getMSTimeDiff(r.combatSeen, now) >= REST_DELAY_MS)
+        {
+            float const pct = REST_PCT_PER_SEC * float(std::min(WorldTimer::getMSTimeDiff(r.lastRest, now), REST_GAP_MAX_MS)) / 1000.0f + r.restCarry;
+            if (pct >= 1.0f)
+            {
+                uint32 const whole = uint32(pct);
+                r.restCarry = pct - float(whole);
+                if (player->GetHealth() < player->GetMaxHealth())
+                    player->ModifyHealth(int32(std::max<uint32>(1, player->GetMaxHealth() * whole / 100)));
+                GiveManaPct(player, whole);
+            }
+            else
+                r.restCarry = pct;
+        }
+        else
+            r.restCarry = 0.0f;
+        r.lastRest = now ? now : 1;
 
         // Martyr: the damage taken since the last update strikes back.
         if (r.martyrPending && player->IsAlive())
@@ -559,7 +617,7 @@ namespace Arpg
             return 1.0f;
         std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
         WebTotals const& t = totals ? *totals : NoTotals();
-        int32 const pct = std::clamp(int32(unit->GetStat(STAT_AGILITY)) / AGI_PER_SPEED + t.movePct, 0, SPEED_CAP);
+        int32 const pct = std::clamp(BASE_SPEED_PCT + int32(unit->GetStat(STAT_AGILITY)) / AGI_PER_SPEED + t.movePct, 0, SPEED_CAP);
         float speed = 1.0f + pct / 100.0f;
         if (t.Has(KEY_CRUSADE) && !unit->IsInCombat())
             speed *= CRUSADE_SLOW;
@@ -641,6 +699,7 @@ namespace Arpg
         int32 const life = int32(killer->GetStat(STAT_STAMINA)) / STA_PER_LIFE + t.lifeOnKill;
         if (life > 0)
             killer->ModifyHealth(life);
+        GiveManaPct(killer, MANA_ON_KILL_PCT);
         if (t.Has(KEY_CRUSADE))
         {
             Runtime& r = R(killer);
@@ -670,6 +729,10 @@ namespace Arpg
         Player* player = static_cast<Player*>(attacker);
         Runtime& r = R(attacker);
         uint32 const now = WorldTimer::getMSTime();
+
+        // A swing that lands gives mana back.
+        if (damage)
+            GiveManaPct(attacker, MANA_ON_SWING_PCT);
 
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
@@ -712,6 +775,18 @@ namespace Arpg
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
+
+        // A skill's hit gives mana back, a little, at most a few times a second.
+        if (dealt)
+        {
+            Runtime& r = R(caster);
+            uint32 const now = WorldTimer::getMSTime();
+            if (WorldTimer::getMSTimeDiff(r.lastManaHit, now) >= MANA_SPELL_EVERY)
+            {
+                r.lastManaHit = now;
+                GiveManaPct(caster, MANA_ON_SPELL_PCT);
+            }
+        }
 
         // Rune of Leech in the skill.
         if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
