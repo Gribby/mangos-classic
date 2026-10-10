@@ -56,6 +56,8 @@
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgActions.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1431,6 +1433,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     Arpg::OnKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
     // ARPG: life on kill, the Crusade keystone, a final boss's passive point (Arpg/ArpgCharacter.h).
     Arpg::OnCharacterKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
+    // ARPG: the kill fills the killer's flask (Arpg/ArpgActions.h).
+    Arpg::OnFlaskKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
 
     /* ******************************** Prepare loot if can ************************************ */
     // only lootable if it has loot or can drop gold, must be done before threat list is cleared
@@ -1439,6 +1443,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         victim->PrepareBodyLootState(killer);
         // ARPG: a pack follower drops less (Arpg/ArpgPacks.h).
         Arpg::ThinPackLoot(victim);
+        // ARPG: a Warden's drops and a final boss's Cache (Arpg/ArpgDungeons.h).
+        Arpg::OnDungeonLoot(victim);
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
         Arpg::OnCorpseLoot(victim);
     }
@@ -1863,6 +1869,9 @@ void Unit::CalculateSpellDamage(SpellNonMeleeDamage* spellDamageInfo, int32 dama
     }
     else
         damage = 0;
+    // ARPG: a hit on an ARPG player is capped at a share of its health (Arpg/ArpgDungeons.h).
+    if (uint32 const cap = Arpg::DamageCap(this, pVictim, true))
+        damage = std::min<int32>(damage, int32(cap));
     spellDamageInfo->damage = damage;
 }
 
@@ -2132,6 +2141,21 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
         }
         default:
             break;
+    }
+
+    // ARPG: a blow on an ARPG player is capped at a share of its health (Arpg/ArpgDungeons.h).
+    if (uint32 const cap = Arpg::DamageCap(this, calcDamageInfo->target, false))
+    {
+        if (calcDamageInfo->totalDamage > cap)
+        {
+            float const share = float(cap) / float(calcDamageInfo->totalDamage);
+            calcDamageInfo->totalDamage = 0;
+            for (uint8 i = 0; i < m_weaponDamageInfo.weapon[calcDamageInfo->attackType].lines; i++)
+            {
+                calcDamageInfo->subDamage[i].damage = uint32(float(calcDamageInfo->subDamage[i].damage) * share);
+                calcDamageInfo->totalDamage += calcDamageInfo->subDamage[i].damage;
+            }
+        }
     }
 
     // Calculate absorb resist
@@ -2744,6 +2768,10 @@ MeleeHitOutcome Unit::RollMeleeOutcomeAgainst(const Unit* pVictim, WeaponAttackT
     if (pVictim->GetCombatManager().IsInEvadeMode())
         return MELEE_HIT_EVADE;
 
+    // ARPG: an ARPG player mid-roll dodges every blow (Arpg/ArpgActions.h).
+    if (Arpg::Dodging(pVictim))
+        return MELEE_HIT_DODGE;
+
     Die<UnitCombatDieSide, UNIT_COMBAT_DIE_HIT, NUM_UNIT_COMBAT_DIE_SIDES> die;
     die.set(UNIT_COMBAT_DIE_MISS, CalculateEffectiveMissChance(pVictim, attType));
     if (pVictim->GetTypeId() == TYPEID_PLAYER && !pVictim->IsStandState() && CanCrit(attType))
@@ -2966,6 +2994,10 @@ SpellMissInfo Unit::SpellHitResult(WorldObject* caster, Unit* pVictim, SpellEntr
                 return SPELL_MISS_NONE;
         }
     }
+
+    // ARPG: an ARPG player mid-roll dodges hostile spells too (Arpg/ArpgActions.h).
+    if (caster != pVictim && Arpg::Dodging(pVictim))
+        return SPELL_MISS_DODGE;
 
     // wand case
     bool wand = spellInfo->Id == 5019;
@@ -8049,8 +8081,10 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
         if (creature->AI())
             creature->AI()->EnterCombat(enemy);
 
-        // ARPG: the rest of its pack joins in (Arpg/ArpgPacks.h).
+        // ARPG: the rest of its pack joins in (Arpg/ArpgPacks.h); its health follows the players
+        // present (Arpg/ArpgDungeons.h).
         Arpg::OnPackAggro(creature, enemy);
+        Arpg::OnScaledAggro(creature, enemy);
 
         // can be overriden by spellcast on Aggro hook, hence must be done after EnterCombat hook
         if (!creature->GetCreatedBySpellId() && creature->GetSettings().HasFlag(CreatureStaticFlags::NO_MELEE_FLEE) && !creature->IsRooted() && !creature->IsInPanic() && !creature->IsNonMeleeSpellCasted(false) && enemy && enemy->IsPlayerControlled())

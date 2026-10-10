@@ -76,7 +76,7 @@ each ARPG player of the champions within 100 yards. Design: the client's
 
 ## Wire
 
-`CMSG_ARPG_ACTION` = 0x33C (`NUM_MSG_TYPES` 0x33D), protocol version 2. Body: `u8 kind`, then
+`CMSG_ARPG_ACTION` = 0x33C, protocol version 2. Body: `u8 kind`, then
 
 | kind | payload |
 |---|---|
@@ -84,6 +84,26 @@ each ARPG player of the champions within 100 yards. Design: the client's
 | 1 swing start | `u64` intended unit |
 | 2 swing stop | — |
 | 3 cast | `u32` spell, `u8` aim (0 enemy, 1 ally), `f32` x y z, `u64` intended unit |
+| 4–16 | aim, loot, dev loot, web, skills, dev pack: see `Arpg/ArpgCombat.h` |
+| 17 dodge | `f32` x y: roll toward the point (`Arpg/ArpgActions.h`) |
+| 18 flask | — |
+| 19 tier | `u8` the dungeon tier asked for (`Arpg/ArpgDungeons.h`) |
+
+Server to client, 0x33D to 0x342 (`NUM_MSG_TYPES` 0x343): loot, item mechanics, the web, skills,
+champions, and `SMSG_ARPG_STATUS` (0x342: `u8` flask charges, `u8` max, `u8` the next charge's
+progress, `u32` ms until the roll is ready, `u32` the roll's cooldown).
+
+## Dungeons and survival
+
+`Arpg/ArpgDungeons.{h,cpp}` (Arpg.Dungeons, on): health scaled by the players present in instances
+and for open-world elites, per-hit damage caps by source, dungeon champions and rares, a Warden
+per dungeon, a Cache at each final boss, and difficulty tiers (`character_arpg_tier`, created by
+the server). Hooks: `Creature::AddToWorld` (through `Arpg::OnCreatureAdded`), `RemoveFromWorld`
+(`Arpg::OnCreatureRemoved`), the combat start in `Unit` (`OnScaledAggro`), the end of
+`Unit::CalculateMeleeDamage` and `CalculateSpellDamage` and `Aura::PeriodicTick` (`DamageCap`),
+and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a knockback; dodges
+in `Unit::RollMeleeOutcomeAgainst` and `SpellHitResult` while airborne) and the flask (kills fill
+it from `Unit::JustKilledCreature`). Design: the client's `docs/ARPG-PROGRESSION.md`.
 
 ## Where
 

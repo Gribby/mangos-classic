@@ -1836,6 +1836,28 @@ Dummy.Debug2 = 0
 #        A follower's gold, and its chance to keep each item that isn't for a quest.
 #        Default: 0.5
 #
+#    Arpg.Dungeons
+#        With Arpg.Enable on, instances and open-world elites are scaled for one to five ARPG
+#        players: health by the players present, each hit on an ARPG player capped at a share of
+#        its maximum health (trash 6%, champions 9%, dungeon bosses 12%, raid bosses 15%; spells
+#        a little more), and dungeon trash rolling champions and rares.
+#        Default: 1  (enable)
+#                 0  (disable)
+#
+#    Arpg.Dungeons.SoloHealth
+#        A dungeon creature's health with one player inside, as a share of vanilla's. Raids
+#        use SoloHealth * 9 / the raid's size (about 8% for Molten Core).
+#        Default: 0.35
+#
+#    Arpg.Dungeons.PlayerHealth
+#        What each player past the first adds in a dungeon, as a share of vanilla's. In a raid,
+#        each player past the first adds three quarters of the raid's solo value.
+#        Default: 0.16
+#
+#    Arpg.Dungeons.EliteSoloHealth
+#        An open-world elite's health against one player; each group member near adds PlayerHealth.
+#        Default: 0.5
+#
 ###################################################################################################
 
 Arpg.Enable = 0
@@ -1845,3 +1867,7 @@ Arpg.Packs = 1
 Arpg.Packs.FollowerPower = 0.55
 Arpg.Packs.FollowerXp = 0.3
 Arpg.Packs.FollowerLoot = 0.5
+Arpg.Dungeons = 1
+Arpg.Dungeons.SoloHealth = 0.35
+Arpg.Dungeons.PlayerHealth = 0.16
+Arpg.Dungeons.EliteSoloHealth = 0.5

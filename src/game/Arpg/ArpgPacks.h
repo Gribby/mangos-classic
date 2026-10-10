@@ -50,6 +50,9 @@
 
 #include "Common.h"
 
+#include <string>
+#include <vector>
+
 class Creature;
 class Player;
 class Unit;
@@ -95,6 +98,26 @@ namespace Arpg
 
     // `victim` died: the fight log, once the whole pack is down.
     void OnPackMemberDied(Unit* victim);
+
+    // 0 an ordinary mob, 1 a champion, 2 a rare (pack members and dungeon champions alike).
+    uint8 ChampionTier(Unit const* unit);
+
+    // A rare's own name ("" for a champion, an ordinary mob, or a rare of the creature's name).
+    std::string ChampionName(Unit const* unit);
+
+    // A champion's or a rare's health multiplier, else 1 (for group scaling's re-scale).
+    float ChampionHealthMod(Unit const* unit);
+
+    // Make `creature` (a dungeon mob, a Warden) a champion (`tier` 1) or a rare (2), with the
+    // named affixes and `randomAffixes` more. A rare with no `name` gets a random one.
+    void MakeChampion(Creature* creature, uint8 tier, uint8 randomAffixes, std::string const& name = "",
+                      std::vector<std::string> const& affixNames = {});
+
+    // How many random affixes a champion or a rare of `level` has.
+    uint8 ChampionAffixCount(uint32 level, bool rare);
+
+    // `creature` is leaving the world: forget its pack and champion records.
+    void OnCreatureRemoved(Creature* creature);
 
     // Dev tools: the nearest eligible mob forms a pack of `size` (0: by level) and `tier`.
     void DevFormPack(Player* player, uint8 size, uint8 tier);

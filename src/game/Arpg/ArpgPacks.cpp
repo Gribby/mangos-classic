@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
 
@@ -11,6 +12,9 @@
 #include "Entities/Creature.h"
 #include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Grids/GridNotifiers.h"
+#include "Grids/GridNotifiersImpl.h"
+#include "Grids/CellImpl.h"
 #include "Log/Log.h"
 #include "Loot/LootMgr.h"
 #include "Maps/Map.h"
@@ -137,8 +141,7 @@ namespace
     // A copy of `unit`'s champion record; tier TIER_NONE for an ordinary mob.
     Champion ChampionOf(Unit const* unit)
     {
-        if (!unit || unit->GetTypeId() != TYPEID_UNIT ||
-                static_cast<Creature const*>(unit)->GetSubtype() != CREATURE_SUBTYPE_TEMPORARY_SUMMON)
+        if (!unit || unit->GetTypeId() != TYPEID_UNIT)
             return Champion();
         std::lock_guard<std::mutex> guard(sPacksLock);
         auto it = sChampions.find(unit->GetObjectGuid());
@@ -238,11 +241,26 @@ namespace
                         }
                     }
                 }
+                std::vector<Unit*> healed;
                 for (ObjectGuid const& guid : members)
                     if (Creature* member = champion->GetMap()->GetCreature(guid))
-                        if (member->IsAlive() && member->IsWithinDistInMap(champion, HEAL_RANGE) &&
-                                member->GetHealth() < member->GetMaxHealth())
-                            member->ModifyHealth(int32(member->GetMaxHealth() * HEAL_PCT / 100));
+                        healed.push_back(member);
+                if (members.empty())
+                {
+                    // A dungeon champion has no pack: its allies fighting near it.
+                    UnitList allies;
+                    MaNGOS::AnyFriendlyUnitInObjectRangeCheck check(champion, HEAL_RANGE);
+                    MaNGOS::UnitListSearcher<MaNGOS::AnyFriendlyUnitInObjectRangeCheck> searcher(allies, check);
+                    Cell::VisitAllObjects(champion, searcher, HEAL_RANGE);
+                    for (Unit* ally : allies)
+                        if (ally->GetTypeId() == TYPEID_UNIT && ally->IsInCombat())
+                            healed.push_back(ally);
+                    healed.push_back(champion);
+                }
+                for (Unit* member : healed)
+                    if (member->IsAlive() && member->IsWithinDistInMap(champion, HEAL_RANGE) &&
+                            member->GetHealth() < member->GetMaxHealth())
+                        member->ModifyHealth(int32(member->GetMaxHealth() * HEAL_PCT / 100));
             }
             if (c.Has(AFFIX_COLD_ENCHANTED) && !c.novaDone && champion->GetHealth() < champion->GetMaxHealth() * NOVA_AT)
             {
@@ -480,6 +498,8 @@ namespace Arpg
 {
     void OnCreatureAdded(Creature* creature)
     {
+        // Instances and open-world elites: group scaling and dungeon champions (Arpg/ArpgDungeons.h).
+        OnScalableCreatureAdded(creature);
         if (!PacksOn() || !creature || creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC ||
                 !creature->HasStaticDBSpawnData() || creature->GetMap()->Instanceable())
             return;
@@ -502,43 +522,46 @@ namespace Arpg
         return sFollowers.count(unit->GetObjectGuid()) != 0;
     }
 
+    // Champions are pack summons and dungeon spawns alike, so these ask any creature.
     float PackDamageMod(Unit const* attacker)
     {
-        if (!MaybeFollower(attacker))
+        if (!attacker || attacker->GetTypeId() != TYPEID_UNIT)
             return 1.0f;
+        float const tier = TierDamageMod(attacker);
         if (IsPackFollower(attacker))
-            return sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER);
+            return sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER) * tier;
         Champion const c = ChampionOf(attacker);
         if (c.tier == TIER_NONE)
-            return 1.0f;
+            return tier;
         float mod = c.tier == TIER_RARE ? RARE_DAMAGE : CHAMPION_DAMAGE;
         if (c.Has(AFFIX_EXTRA_STRONG))
             mod *= STRONG_DAMAGE;
-        return mod;
+        return mod * tier;
     }
 
     float PackDamageTakenMod(Unit const* victim)
     {
-        if (!MaybeFollower(victim))
+        if (!victim || victim->GetTypeId() != TYPEID_UNIT)
             return 1.0f;
         return ChampionOf(victim).Has(AFFIX_STONE_SKIN) ? STONE_TAKEN : 1.0f;
     }
 
     float PackSpeedMod(Unit const* unit)
     {
-        if (!MaybeFollower(unit))
+        if (!unit || unit->GetTypeId() != TYPEID_UNIT)
             return 1.0f;
         return ChampionOf(unit).Has(AFFIX_EXTRA_FAST) ? FAST_SPEED : 1.0f;
     }
 
     float PackXpMod(Unit const* victim)
     {
-        if (!MaybeFollower(victim))
+        if (!victim || victim->GetTypeId() != TYPEID_UNIT)
             return 1.0f;
+        float const tier = TierXpMod(victim);
         if (IsPackFollower(victim))
-            return sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_XP);
-        Tier const tier = ChampionOf(victim).tier;
-        return tier == TIER_RARE ? RARE_XP : tier == TIER_CHAMPION ? CHAMPION_XP : 1.0f;
+            return sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_XP) * tier;
+        Tier const t = ChampionOf(victim).tier;
+        return (t == TIER_RARE ? RARE_XP : t == TIER_CHAMPION ? CHAMPION_XP : 1.0f) * tier;
     }
 
     void ThinPackLoot(Creature* victim)
@@ -723,6 +746,82 @@ namespace Arpg
                        uint32(members.size()), victim->GetName(), it->second.level, seconds, it->second.damage);
         it->second.aggroAt = 0;
         it->second.damage = 0;
+    }
+
+    uint8 ChampionTier(Unit const* unit)
+    {
+        return uint8(ChampionOf(unit).tier);
+    }
+
+    std::string ChampionName(Unit const* unit)
+    {
+        return ChampionOf(unit).name;
+    }
+
+    float ChampionHealthMod(Unit const* unit)
+    {
+        switch (ChampionOf(unit).tier)
+        {
+            case TIER_CHAMPION: return CHAMPION_HEALTH;
+            case TIER_RARE: return RARE_HEALTH;
+            default: return 1.0f;
+        }
+    }
+
+    void MakeChampion(Creature* creature, uint8 tier, uint8 randomAffixes, std::string const& name,
+                      std::vector<std::string> const& affixNames)
+    {
+        if (!creature || tier == TIER_NONE || ChampionTier(creature) != TIER_NONE)
+            return;
+        std::vector<Affix> affixes;
+        for (std::string const& wanted : affixNames)
+            for (uint8 a = 0; a < MAX_AFFIX; ++a)
+                if (wanted == AFFIX_NAME[a])
+                    affixes.push_back(Affix(a));
+        for (Affix extra : RollAffixes(MAX_AFFIX))
+        {
+            if (randomAffixes == 0)
+                break;
+            if (std::find(affixes.begin(), affixes.end(), extra) != affixes.end())
+                continue;
+            affixes.push_back(extra);
+            --randomAffixes;
+        }
+        Tier const t = tier >= TIER_RARE ? TIER_RARE : TIER_CHAMPION;
+        std::string shown = name;
+        if (t == TIER_RARE && shown.empty())
+            shown = RareName(affixes);
+        Crown(creature, t, affixes, shown);
+    }
+
+    uint8 ChampionAffixCount(uint32 level, bool rare)
+    {
+        if (rare)
+            return level >= 30 ? 3 : 2;
+        return level >= 30 ? 2 : 1;
+    }
+
+    void OnCreatureRemoved(Creature* creature)
+    {
+        if (!creature)
+            return;
+        ObjectGuid const guid = creature->GetObjectGuid();
+        ForgetScaled(creature);
+        std::lock_guard<std::mutex> guard(sPacksLock);
+        // Guids are per map, so a stale record could crown another map's creature.
+        sChampions.erase(guid);
+        for (auto& [player, sent] : sChampionsSent)
+            sent.erase(guid);
+        sFollowers.erase(guid);
+        sForming.erase(guid);
+        auto pack = sPacks.find(guid);
+        if (pack != sPacks.end())
+        {
+            for (ObjectGuid const& follower : pack->second.followers)
+                sLeaderOf.erase(follower);
+            sPacks.erase(pack);
+        }
+        sLeaderOf.erase(guid);
     }
 
     void DevFormPack(Player* player, uint8 size, uint8 tier)

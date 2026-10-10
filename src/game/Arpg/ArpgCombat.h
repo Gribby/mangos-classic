@@ -55,6 +55,9 @@ namespace Arpg
         ACTION_SKILL_REFUND = 14,                           // uint16 node
         ACTION_SKILL_RESPEC = 15,                           // uint8 skill
         ACTION_DEV_PACK     = 16,                           // uint8 size (0: by level), uint8 tier; Arpg.DevTools
+        ACTION_DODGE        = 17,                           // float x, y: roll toward (Arpg/ArpgActions.h)
+        ACTION_FLASK        = 18,                           // -: drink a flask charge
+        ACTION_TIER         = 19,                           // uint8 tier: the dungeon tier asked for (Arpg/ArpgDungeons.h)
     };
 
     // What the client's cast aims at, by the spell's own target word.

@@ -5,6 +5,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgActions.h"
 
 #include "Entities/Unit.h"
 #include "Entities/Creature.h"
@@ -201,6 +202,7 @@ namespace Arpg
         {
             UpdateKeystones(player);
             UpdateCharacter(player);
+            UpdateActions(player);
         }
 
         if (!Active(player))

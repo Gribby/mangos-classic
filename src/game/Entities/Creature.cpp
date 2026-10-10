@@ -218,6 +218,9 @@ void Creature::RemoveFromWorld()
     ///- Remove the creature from the accessor
     if (IsInWorld())
     {
+        // ARPG: forget its pack, champion and scaling records (guids are per map).
+        Arpg::OnCreatureRemoved(this);
+
         if (IsUnit())
             GetMap()->GetObjectsStore().erase<Creature>(GetObjectGuid(), (Creature*)nullptr);
         if (GetDbGuid())

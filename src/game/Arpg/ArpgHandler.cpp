@@ -27,6 +27,9 @@
  *     ACTION_SKILL_RESPEC uint8 skill: give back every point in a skill
  *     ACTION_DEV_PACK     uint8 size (0: by level), optional uint8 tier: with Arpg.DevTools on,
  *                         the nearest mob forms a pack (Arpg/ArpgPacks.h)
+ *     ACTION_DODGE        float x, y: roll toward the point (Arpg/ArpgActions.h)
+ *     ACTION_FLASK        -: drink a flask charge
+ *     ACTION_TIER         uint8 tier: the dungeon difficulty tier asked for (Arpg/ArpgDungeons.h)
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -38,6 +41,8 @@
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgDungeons.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -274,6 +279,42 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
                         Arpg::DevFormPack(arpg, size, tier);
+            });
+            break;
+        }
+        case Arpg::ACTION_DODGE:
+        {
+            float x, y;
+            recvPacket >> x >> y;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([x, y](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::Dodge(arpg, x, y);
+            });
+            break;
+        }
+        case Arpg::ACTION_FLASK:
+        {
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::DrinkFlask(arpg);
+            });
+            break;
+        }
+        case Arpg::ACTION_TIER:
+        {
+            uint8 tier;
+            recvPacket >> tier;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([tier](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    Arpg::SetWantedTier(arpg, tier);
             });
             break;
         }

@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgSkills.h"
@@ -685,6 +687,8 @@ namespace Arpg
     void UnloadTree(Player* player)
     {
         ForgetCharacter(player);
+        ForgetActions(player);
+        ForgetTiers(player);
         UnloadSkills(player);
         std::lock_guard<std::mutex> guard(sWebsLock);
         sWebs.erase(player->GetObjectGuid());

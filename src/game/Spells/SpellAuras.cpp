@@ -49,6 +49,7 @@
 #include "Loot/LootMgr.h"
 #include "AI/ScriptDevAI/include/sc_grid_searchers.h"
 #include "Spells/SpellStacking.h"
+#include "Arpg/ArpgDungeons.h"
 
 #define NULL_AURA_SLOT 0xFF
 
@@ -4562,6 +4563,10 @@ void Aura::PeriodicTick()
                 WeaponAttackType attackType = GetWeaponAttackType(spellProto);
                 pdamage = target->MeleeDamageBonusTaken(caster, pdamage, attackType, GetSpellSchoolMask(spellProto), spellProto, GetEffIndex(), DOT, GetStackAmount());
             }
+
+            // ARPG: a tick on an ARPG player is capped as a blow is (Arpg/ArpgDungeons.h).
+            if (uint32 const cap = Arpg::DamageCap(caster, target, false))
+                pdamage = std::min(pdamage, cap);
 
             target->CalculateDamageAbsorbAndResist(caster, GetSpellSchoolMask(spellProto), DOT, pdamage, &absorb, &resist, IsReflectableSpell(spellProto), IsResistableSpell(spellProto));
 
