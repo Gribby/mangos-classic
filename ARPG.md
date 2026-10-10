@@ -118,6 +118,16 @@ for a share of maximum health past the damage caps, and a stun, fear or confuse 
 `SMSG_ARPG_TELEGRAPH` = 0x344. Design: the client's `docs/ARPG-PROGRESSION.md`, "Threats and the
 roll". Mana on hit is a stat: two web nodes (Bloodthirst, Devotion) and an item affix.
 
+## Town portal, death, junk
+
+`Arpg/ArpgActions.{h,cpp}`: the town portal (`CMSG_ARPG_ACTION` kind 22: two seconds still, out of
+combat, to the bind point; back from town within 30 minutes) and the death checkpoint
+(`Player::RepopAtGraveyard` asks `Arpg::RespawnAtCheckpoint`: an ARPG character rises at once at
+half health and mana, at a dungeon's entrance trigger target or the nearest graveyard).
+`Arpg/ArpgLoot.cpp` `SellJunk`: a grey item with a sell price picked up by an ARPG player is its
+price in gold (`Loot::SendItem`). Champion dangers are telegraphed through `Arpg::ShowTelegraph`
+(Fire Enchanted's death burst, Cold Enchanted's nova).
+
 ## Pacing
 
 `Arpg/ArpgCharacter.cpp`, for ARPG players: mana comes from fighting, not drinking (1% of the

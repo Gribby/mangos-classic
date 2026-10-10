@@ -59,6 +59,19 @@ namespace Arpg
 
     // `creature` left the world.
     void ForgetTelegraph(Creature const* creature);
+
+    // The telegraph shapes and grades, as the packet numbers them.
+    constexpr uint8 TELEGRAPH_SHAPE_RING = 1, TELEGRAPH_SHAPE_CONE = 2, TELEGRAPH_SHAPE_BLAST = 3;
+    constexpr uint8 TELEGRAPH_GRADE_ELITE = 0, TELEGRAPH_GRADE_CHAMPION = 1, TELEGRAPH_GRADE_RARE = 2;
+
+    // Show the ARPG players near `source` a mark for something another module lands on its own
+    // clock (a champion's death burst, its frost nova): the shape at (x, y, z) for `windUpMs`.
+    // Returns the mark's serial, for HideTelegraph.
+    uint32 ShowTelegraph(WorldObject const* source, uint8 shape, uint8 grade, float x, float y, float z,
+                         float orientation, float radius, uint32 windUpMs);
+
+    // The mark `serial` from `source` was broken off: it greys out.
+    void HideTelegraph(WorldObject const* source, uint32 serial);
 }
 
 #endif

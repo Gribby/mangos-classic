@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
@@ -101,7 +102,10 @@ namespace
     constexpr float CHAMPION_SCALE = 1.2f, RARE_SCALE = 1.3f;
     constexpr float CHAMPION_XP = 3.0f, RARE_XP = 5.0f;
     constexpr float STRONG_DAMAGE = 1.5f, STONE_TAKEN = 0.6f, FAST_SPEED = 1.3f, FAST_HASTE = 33.0f;
-    constexpr uint32 FIRE_SHARE_PCT = 25, FIRE_BURST_PCT = 8, FIRE_BURST_MS = 1000;
+    // Fire Enchanted's death burst, and Cold Enchanted's nova: both telegraphed (Arpg/ArpgThreats.h).
+    constexpr uint32 FIRE_SHARE_PCT = 25, FIRE_BURST_PCT = 15, FIRE_BURST_MS = 1200;
+    constexpr uint32 NOVA_WIND_UP_MS = 1000;
+    constexpr float NOVA_RANGE = 10.0f, NOVA_DRIFT = 3.0f;
     constexpr float FIRE_BURST_RANGE = 6.0f;
     constexpr uint32 VAMPIRIC_PCT = 50, THORNS_PCT = 20;
     constexpr float TELEPORT_REACH = 12.0f;
@@ -267,9 +271,33 @@ namespace
             }
             if (c.Has(AFFIX_COLD_ENCHANTED) && !c.novaDone && champion->GetHealth() < champion->GetMaxHealth() * NOVA_AT)
             {
-                champion->CastSpell(champion, SPELL_FROST_NOVA, TRIGGERED_OLD_TRIGGERED);
-                std::lock_guard<std::mutex> guard(sPacksLock);
-                sChampions[champion->GetObjectGuid()].novaDone = true;
+                {
+                    std::lock_guard<std::mutex> guard(sPacksLock);
+                    sChampions[champion->GetObjectGuid()].novaDone = true;
+                }
+                // The nova is shown on the ground first, then cast where it was shown: the
+                // champion holds still (a scripted one is left to its script) and a move, a stun
+                // or the end of the fight breaks it off.
+                float const x = champion->GetPositionX(), y = champion->GetPositionY();
+                uint32 const serial = ShowTelegraph(champion, TELEGRAPH_SHAPE_RING,
+                                                    c.tier == TIER_RARE ? TELEGRAPH_GRADE_RARE : TELEGRAPH_GRADE_CHAMPION,
+                                                    x, y, champion->GetPositionZ(), 0.0f, NOVA_RANGE, NOVA_WIND_UP_MS);
+                UnitAI* ai = champion->GetScriptId() ? nullptr : champion->AI();
+                bool const hadMovement = ai && ai->IsCombatMovement();
+                if (ai)
+                    ai->SetCombatMovement(false, true);
+                champion->m_events.AddEvent(new UnitLambdaEvent(*champion, [ai, hadMovement, serial, x, y](Unit& unit)
+                {
+                    // Only the AI that was frozen is thawed (a charm's end swaps it).
+                    if (ai && unit.AI() == ai)
+                        ai->SetCombatMovement(hadMovement, true);
+                    bool const lands = unit.IsAlive() && unit.IsInWorld() && unit.IsInCombat() && !unit.IsCrowdControlled() &&
+                                       std::hypot(unit.GetPositionX() - x, unit.GetPositionY() - y) <= NOVA_DRIFT;
+                    if (lands)
+                        unit.CastSpell(&unit, SPELL_FROST_NOVA, TRIGGERED_OLD_TRIGGERED);
+                    else
+                        HideTelegraph(&unit, serial);
+                }), champion->m_events.CalculateTime(NOVA_WIND_UP_MS));
             }
         }
         champion->m_events.AddEvent(new UnitLambdaEvent(*champion, [](Unit& unit)
@@ -721,6 +749,8 @@ namespace Arpg
         if (ChampionOf(victim).Has(AFFIX_FIRE_ENCHANTED))
         {
             float const x = victim->GetPositionX(), y = victim->GetPositionY();
+            ShowTelegraph(victim, TELEGRAPH_SHAPE_BLAST, ChampionTier(victim) == 2 ? TELEGRAPH_GRADE_RARE : TELEGRAPH_GRADE_CHAMPION,
+                          x, y, victim->GetPositionZ(), 0.0f, FIRE_BURST_RANGE, FIRE_BURST_MS);
             victim->m_events.AddEvent(new UnitLambdaEvent(*victim, [x, y](Unit& corpse)
             {
                 SpellEntry const* fire = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_FIRE_BLAST);
@@ -728,7 +758,8 @@ namespace Arpg
                     return;
                 for (auto const& ref : corpse.GetMap()->GetPlayers())
                     if (Player* player = ref.getSource())
-                        if (player->IsAlive() && std::hypot(player->GetPositionX() - x, player->GetPositionY() - y) <= FIRE_BURST_RANGE)
+                        if (player->IsAlive() && !Dodging(player) &&
+                                std::hypot(player->GetPositionX() - x, player->GetPositionY() - y) <= FIRE_BURST_RANGE)
                             StrikeFoe(&corpse, player, fire, SPELL_SCHOOL_MASK_FIRE,
                                       std::max<uint32>(1, player->GetMaxHealth() * FIRE_BURST_PCT / 100));
             }), victim->m_events.CalculateTime(FIRE_BURST_MS));

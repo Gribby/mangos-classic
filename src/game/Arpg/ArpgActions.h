@@ -12,6 +12,15 @@
  * an elite 4, a champion 5, a rare 10, a boss 20; FLASK_CHARGE_POINTS points make a charge. Out
  * of combat it refills a charge every FLASK_REST_MS.
  *
+ * Town portal (kind 22): out of combat, two seconds standing still open a portal home (the
+ * hearth's bind point), and the spot it opened from is kept for PORTAL_RETURN_MS. In town (resting,
+ * or near the bind point) the same key goes back through it, into the same dungeon when it opened
+ * in one. Moving, a blow or combat in the two seconds closes it.
+ *
+ * Death: an ARPG character who releases does not walk back as a ghost. It rises at once, at half
+ * health and mana, at the dungeon's entrance inside the dungeon, or at the nearest graveyard
+ * outside; its corpse turns to bones. The durability loss stays.
+ *
  *   SMSG_ARPG_STATUS (0x342): uint8 flask charges, uint8 flask max, uint8 the next charge's
  *     progress (0-100), uint32 ms until the dodge is ready (0 ready), uint32 the dodge cooldown
  *     ms. Sent on a change, at most every STATUS_EVERY_MS, and once after the hello.
@@ -41,6 +50,13 @@ namespace Arpg
 
     // Each player update: the out-of-combat refill and the status packet.
     void UpdateActions(Player* player);
+
+    // Open a town portal, or go back through the one that is open (kind 22).
+    void TownPortal(Player* player);
+
+    // The player released their spirit: an ARPG character rises at its checkpoint instead, and
+    // this is true (Player::RepopAtGraveyard does nothing more).
+    bool RespawnAtCheckpoint(Player* player);
 
     // A logged-out player's flask and roll.
     void ForgetActions(Player* player);

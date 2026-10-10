@@ -66,6 +66,10 @@ namespace Arpg
     // feet and put `count` random items of `quality` (or a mix) near item level `level` (0 the
     // player's) and some gold on its corpse, for the ground loot to show. Runs on the world thread.
     void DropDevLoot(Player* player, uint8 quality, uint8 count, uint8 level);
+
+    // An ARPG player picking up junk (a grey item with a sell price, no quest's) gets its price in
+    // gold instead, and true: the bags never fill with vendor trash.
+    bool SellJunk(Player* player, uint32 item, uint32 count);
 }
 
 #endif

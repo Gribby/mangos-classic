@@ -7,7 +7,12 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgPacks.h"
 
+#include "Chat/Chat.h"
 #include "Entities/Creature.h"
+#include "Globals/ObjectMgr.h"
+#include "Maps/Map.h"
+#include "Maps/MapPersistentStateMgr.h"
+#include "Server/DBCStores.h"
 #include "Entities/Player.h"
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
@@ -40,6 +45,21 @@ namespace
 
     constexpr uint32 STATUS_EVERY_MS = 200;
 
+    // The town portal: the cast, how far the player may drift in it, and how long the way back
+    // stays open; "in town" is resting or this near the bind point.
+    constexpr uint32 PORTAL_CAST_MS = 2000;
+    constexpr float PORTAL_DRIFT = 1.5f;
+    constexpr uint32 PORTAL_RETURN_MS = 30 * MINUTE * IN_MILLISECONDS;
+    constexpr float PORTAL_HOME_RANGE = 60.0f;
+    // A death's checkpoint gives back this share of health and mana.
+    constexpr float CHECKPOINT_RESTORE = 0.5f;
+
+    struct Spot
+    {
+        uint32 map = 0;
+        float x = 0.0f, y = 0.0f, z = 0.0f, o = 0.0f;
+    };
+
     struct State
     {
         uint8 charges = FLASK_MAX;
@@ -49,6 +69,19 @@ namespace
         uint32 evadeUntil = 0;      // the roll's dodge window ends
         bool dirty = true;
         uint32 lastSent = 0;
+        // The town portal being opened (the time it opens, 0 none) and from where; the way back.
+        uint32 portalAt = 0;
+        Spot portalFrom;
+        uint32 returnUntil = 0;
+        Spot returnTo;
+        uint32 returnInstance = 0;
+        // Where the player came into the map it is on (its instance too): a dungeon death rises
+        // there, at the door the player used.
+        uint32 entryMap = 0, entryInstance = 0;
+        Spot entry;
+        bool entrySet = false;
+        // Released and on the way to the checkpoint as a spirit: risen on arrival.
+        bool rising = false;
     };
 
     std::mutex sActionsLock;
@@ -182,12 +215,196 @@ namespace Arpg
         AddPoints(sStates[killer->GetObjectGuid()], points);
     }
 
+    bool InTown(Player* player)
+    {
+        if (player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING))
+            return true;
+        float x, y, z;
+        uint32 map;
+        player->GetHomebindLocation(x, y, z, map);
+        return map == player->GetMapId() && player->GetDistance(x, y, z) <= PORTAL_HOME_RANGE;
+    }
+
+    void TownPortal(Player* player)
+    {
+        if (!Active(player) || !player->IsAlive() || !player->IsInWorld() || player->IsTaxiFlying())
+            return;
+        ChatHandler chat(player);
+        if (player->InBattleGround())
+        {
+            chat.SendSysMessage("|cffff8080No town portal here.|r");
+            return;
+        }
+        if (player->IsInCombat())
+        {
+            chat.SendSysMessage("|cffff8080You can't use a portal in combat.|r");
+            return;
+        }
+        uint32 const now = WorldTimer::getMSTime();
+        Spot back;
+        uint32 backInstance = 0;
+        bool goBack = false;
+        {
+            std::lock_guard<std::mutex> guard(sActionsLock);
+            State& s = sStates[player->GetObjectGuid()];
+            if (s.portalAt)
+                return;
+            if (Later(s.returnUntil, now) && InTown(player))
+            {
+                back = s.returnTo;
+                backInstance = s.returnInstance;
+                goBack = true;
+            }
+        }
+        if (goBack)
+        {
+            // A dungeon reset (or a new group) since: the way back leads into another instance,
+            // deep inside, past what it holds; the portal has closed.
+            MapEntry const* entry = sMapStore.LookupEntry(back.map);
+            if (entry && entry->IsDungeon())
+            {
+                DungeonPersistentState* bound = player->GetBoundInstanceSaveForSelfOrGroup(back.map);
+                if (!bound || bound->GetInstanceId() != backInstance)
+                {
+                    {
+                        std::lock_guard<std::mutex> guard(sActionsLock);
+                        sStates[player->GetObjectGuid()].returnUntil = 0;
+                    }
+                    chat.SendSysMessage("|cffff8080Your portal has closed: that dungeon is not the one you left.|r");
+                    return;
+                }
+            }
+            if (player->TeleportTo(back.map, back.x, back.y, back.z, back.o))
+            {
+                {
+                    std::lock_guard<std::mutex> guard(sActionsLock);
+                    sStates[player->GetObjectGuid()].returnUntil = 0;
+                }
+                chat.SendSysMessage("|cff80c0ffYou step back through your portal.|r");
+            }
+            return;
+        }
+        if (player->GetTransport())
+        {
+            chat.SendSysMessage("|cffff8080You can't open a portal on a ship.|r");
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> guard(sActionsLock);
+            State& s = sStates[player->GetObjectGuid()];
+            s.portalAt = After(now, PORTAL_CAST_MS);
+            s.portalFrom = { player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation() };
+        }
+        player->HandleEmoteCommand(EMOTE_ONESHOT_SPELLPRECAST);
+        chat.SendSysMessage("|cff80c0ffOpening a town portal...|r");
+    }
+
+    bool RespawnAtCheckpoint(Player* player)
+    {
+        if (!player || player->IsAlive() || !Active(player) || player->InBattleGround() || !player->IsInWorld())
+            return false;
+        Map* map = player->GetMap();
+        Spot at;
+        bool have = false;
+        // In a dungeon: the door the player came in by (a dungeon of several wings has several),
+        // else its entrance.
+        if (map->IsDungeon())
+        {
+            {
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State const& s = sStates[player->GetObjectGuid()];
+                if (s.entrySet && s.entryMap == player->GetMapId() && s.entryInstance == player->GetInstanceId())
+                {
+                    at = s.entry;
+                    have = true;
+                }
+            }
+            if (!have)
+                if (AreaTrigger const* trigger = sObjectMgr.GetMapEntranceTrigger(player->GetMapId()))
+                {
+                    at = { trigger->target_mapId, trigger->target_X, trigger->target_Y, trigger->target_Z, trigger->target_Orientation };
+                    have = true;
+                }
+        }
+        if (!have)
+            if (WorldSafeLocsEntry const* grave = map->GetGraveyardManager().GetClosestGraveYard(
+                    player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetMapId(), player->GetTeam()))
+            {
+                at = { grave->map_id, grave->x, grave->y, grave->z, grave->o };
+                have = true;
+            }
+        {
+            std::lock_guard<std::mutex> guard(sActionsLock);
+            State& s = sStates[player->GetObjectGuid()];
+            s.portalAt = 0;
+            s.rising = true;
+        }
+        // On the way as a spirit, risen on arrival (UpdateActions): alive at the corpse until the
+        // client answers the teleport, it could die there again.
+        if (have)
+            player->TeleportTo(at.map, at.x, at.y, at.z, at.o);
+        return true;
+    }
+
     void UpdateActions(Player* player)
     {
         if (!Active(player))
             return;
         uint32 const now = WorldTimer::getMSTime();
         State copy;
+        // The town portal opening: it closes on a move, a fight or a death, else it opens.
+        bool portalFizzles = false, portalOpens = false, rise = false;
+        {
+            std::lock_guard<std::mutex> guard(sActionsLock);
+            State& s = sStates[player->GetObjectGuid()];
+            // A new map (or instance) under the player: where it came in.
+            if (!player->IsBeingTeleported() && player->IsAlive() &&
+                    (!s.entrySet || s.entryMap != player->GetMapId() || s.entryInstance != player->GetInstanceId()))
+            {
+                s.entrySet = true;
+                s.entryMap = player->GetMapId();
+                s.entryInstance = player->GetInstanceId();
+                s.entry = { player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation() };
+            }
+            if (s.rising && !player->IsBeingTeleported())
+            {
+                s.rising = false;
+                rise = !player->IsAlive();
+            }
+            if (s.portalAt)
+            {
+                Spot const& from = s.portalFrom;
+                bool const moved = from.map != player->GetMapId() ||
+                    player->GetDistance(from.x, from.y, from.z) > PORTAL_DRIFT;
+                if (moved || player->IsInCombat() || !player->IsAlive())
+                {
+                    s.portalAt = 0;
+                    portalFizzles = true;
+                }
+                else if (!Later(s.portalAt, now))
+                {
+                    s.portalAt = 0;
+                    s.returnTo = from;
+                    s.returnInstance = player->GetInstanceId();
+                    s.returnUntil = After(now, PORTAL_RETURN_MS);
+                    portalOpens = true;
+                }
+            }
+        }
+        if (rise)
+        {
+            player->ResurrectPlayer(CHECKPOINT_RESTORE);
+            player->SpawnCorpseBones();
+            ChatHandler(player).SendSysMessage("|cffffd200You rise again.|r");
+        }
+        if (portalFizzles)
+            ChatHandler(player).SendSysMessage("|cffff8080Your portal fizzles.|r");
+        if (portalOpens)
+        {
+            ChatHandler(player).SendSysMessage("|cff80c0ffYou step through to town. Your portal stays open for 30 minutes: press it again in town to go back.|r");
+            player->TeleportToHomebind();
+            return;
+        }
         {
             std::lock_guard<std::mutex> guard(sActionsLock);
             State& s = sStates[player->GetObjectGuid()];

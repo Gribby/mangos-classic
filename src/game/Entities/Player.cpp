@@ -21,6 +21,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgAffixes.h"
+#include "Arpg/ArpgActions.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -4730,6 +4731,10 @@ void Player::RepopAtGraveyard()
 {
     // note: this can be called also when the player is alive
     // for example from WorldSession::HandleMovementOpcodes
+
+    // ARPG: an ARPG character rises at its checkpoint, no ghost walk (Arpg/ArpgActions.h).
+    if (Arpg::RespawnAtCheckpoint(this))
+        return;
 
     AreaTableEntry const* zone = GetAreaEntryByAreaID(GetAreaId());
 

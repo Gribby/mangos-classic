@@ -536,6 +536,43 @@ namespace Arpg
         Schedule(*creature, key, generation, GRADES[grade].firstMs, false);
     }
 
+    // The packet to the ARPG players near `source`.
+    void SendMark(WorldObject const* source, uint8 kind, uint32 serial, uint8 shape, uint8 grade, float x, float y,
+                  float z, float orientation, float radius, uint32 windUpMs)
+    {
+        WorldPacket data(SMSG_ARPG_TELEGRAPH, 1 + 4 + 8 + 1 + 1 + 4 * 7);
+        data << uint8(kind) << uint32(serial) << source->GetObjectGuid() << uint8(shape) << uint8(grade);
+        data << x << y << z << orientation << radius;
+        data << float(shape == SHAPE_CONE ? CONE_HALF_ANGLE : 0.0f);
+        data << uint32(windUpMs);
+        for (auto const& ref : source->GetMap()->GetPlayers())
+        {
+            Player* player = ref.getSource();
+            if (player && player->IsInWorld() && Active(player) && source->IsWithinDist(player, SEND_RANGE))
+                player->GetSession()->SendPacket(data);
+        }
+    }
+
+    uint32 ShowTelegraph(WorldObject const* source, uint8 shape, uint8 grade, float x, float y, float z,
+                         float orientation, float radius, uint32 windUpMs)
+    {
+        if (!source || !source->IsInWorld())
+            return 0;
+        uint32 serial;
+        {
+            std::lock_guard<std::mutex> guard(sThreatsLock);
+            serial = ++sSerial;
+        }
+        SendMark(source, TELEGRAPH_WIND_UP, serial, shape, grade, x, y, z, orientation, radius, windUpMs);
+        return serial;
+    }
+
+    void HideTelegraph(WorldObject const* source, uint32 serial)
+    {
+        if (source && source->IsInWorld() && serial)
+            SendMark(source, TELEGRAPH_BROKEN, serial, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+    }
+
     void ForgetTelegraph(Creature const* creature)
     {
         if (!creature)

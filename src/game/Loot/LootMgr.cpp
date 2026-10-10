@@ -2029,7 +2029,9 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
         ItemPosCountVec dest;
         // ARPG: a Codex page, fragment or rune goes into the character's Codex, not the bags
         // (Arpg/ArpgCodex.h).
-        bool const codex = Arpg::TakeCodexItem(target, lootItem->itemId, lootItem->count);
+        // ARPG: junk turns to its price in gold (Arpg/ArpgLoot.h).
+        bool const codex = Arpg::TakeCodexItem(target, lootItem->itemId, lootItem->count) ||
+                           Arpg::SellJunk(target, lootItem->itemId, lootItem->count);
         msg = codex ? EQUIP_ERR_OK : target->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, lootItem->itemId, lootItem->count);
         if (msg == EQUIP_ERR_OK)
         {

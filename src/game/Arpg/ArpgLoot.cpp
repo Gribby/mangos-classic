@@ -11,6 +11,7 @@
 #include "Entities/Creature.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectAccessor.h"
+#include "Globals/ObjectMgr.h"
 #include "Groups/Group.h"
 #include "Loot/LootMgr.h"
 #include "Maps/Map.h"
@@ -25,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace
@@ -321,5 +323,35 @@ namespace Arpg
         corpse->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
         OnCorpseLoot(corpse);
         chat.PSendSysMessage("ARPG test loot: %u items around item level %u.", added, ilvl);
+    }
+
+    bool SellJunk(Player* player, uint32 item, uint32 count)
+    {
+        if (!player || !Active(player))
+            return false;
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(item);
+        if (!proto || proto->Quality != ITEM_QUALITY_POOR || !proto->SellPrice || proto->StartQuest ||
+                proto->Class == ITEM_CLASS_QUEST || proto->Bonding == BIND_QUEST_ITEM || player->HasQuestForItem(item))
+            return false;
+        // An item with a use is not junk.
+        for (auto const& spell : proto->Spells)
+            if (spell.SpellId)
+                return false;
+        // At the gold cap the item goes to the bags instead.
+        if (player->GetMoney() + uint64(proto->SellPrice) * std::max<uint32>(count, 1) > MAX_MONEY_AMOUNT)
+            return false;
+        uint32 const price = proto->SellPrice * std::max<uint32>(count, 1);
+        player->ModifyMoney(int32(price));
+        std::string coins;
+        uint32 const g = price / 10000, sv = price / 100 % 100, c = price % 100;
+        if (g)
+            coins += std::to_string(g) + "g ";
+        if (sv)
+            coins += std::to_string(sv) + "s ";
+        if (c || coins.empty())
+            coins += std::to_string(c) + "c ";
+        coins.pop_back();
+        ChatHandler(player).PSendSysMessage("|cff9d9d9d%s sold for %s.|r", proto->Name1, coins.c_str());
+        return true;
     }
 }
