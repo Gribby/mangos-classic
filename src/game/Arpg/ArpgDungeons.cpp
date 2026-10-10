@@ -61,10 +61,11 @@ namespace
 
     enum Kind : uint8 { KIND_NONE, KIND_INSTANCE, KIND_ELITE };
 
+    // A creature's scaling is a percent health modifier (UNIT_MOD_HEALTH, TOTAL_PCT), so the core's
+    // own recalculations (a stamina aura, a respawn's UpdateAllStats) keep it.
     struct Scaled
     {
-        uint32 base = 0;        // the core's own maximum health, before scaling
-        uint32 applied = 0;     // the maximum health we set
+        float pct = 0.0f;       // the modifier applied, in percent
         uint32 players = 0;     // the player count it was set for
         uint8 tier = 0;         // and the tier
     };
@@ -167,37 +168,30 @@ namespace
 
     void Apply(Creature* creature, Kind kind, uint32 players)
     {
-        uint32 const current = creature->GetMaxHealth();
-        // Outside the lock: the champion records have a lock of their own.
-        float const factor = HealthFactor(creature, kind, players) * ChampionHealthMod(creature);
+        float const pct = (HealthFactor(creature, kind, players) - 1.0f) * 100.0f;
         uint8 const tier = TierOf(creature->GetMap());
-        uint32 target;
+        bool had;
+        float previous;
         {
             std::lock_guard<std::mutex> guard(sScaledLock);
+            auto it = sScaled.find(creature->GetObjectGuid());
+            had = it != sScaled.end();
+            previous = had ? it->second.pct : 0.0f;
             Scaled& s = sScaled[creature->GetObjectGuid()];
-            // First time, or the core set its health afresh (a respawn, a script's phase).
-            if (!s.base || current != s.applied)
-                s.base = current;
-            target = std::max<uint32>(1, uint32(float(s.base) * factor));
-            s.applied = target;
+            s.pct = pct;
             s.players = players;
             s.tier = tier;
         }
-        if (target == current)
+        if (had && previous == pct)
             return;
-        float const share = current ? float(creature->GetHealth()) / float(current) : 1.0f;
-        creature->SetMaxHealth(target);
+        uint32 const before = creature->GetMaxHealth();
+        float const share = before ? float(creature->GetHealth()) / float(before) : 1.0f;
+        if (had)
+            creature->HandleStatModifier(UNIT_MOD_HEALTH, TOTAL_PCT, previous, false);
+        creature->HandleStatModifier(UNIT_MOD_HEALTH, TOTAL_PCT, pct, true);
+        creature->UpdateMaxHealth();
         if (creature->IsAlive())
-            creature->SetHealth(std::max<uint32>(1, uint32(float(target) * share)));
-    }
-
-    // After something else changed the maximum health on purpose (a champion's crown).
-    void Resync(Creature* creature)
-    {
-        std::lock_guard<std::mutex> guard(sScaledLock);
-        auto it = sScaled.find(creature->GetObjectGuid());
-        if (it != sScaled.end())
-            it->second.applied = creature->GetMaxHealth();
+            creature->SetHealth(std::max<uint32>(1, uint32(float(creature->GetMaxHealth()) * share)));
     }
 
     // --- Wardens and Caches ---
@@ -249,6 +243,9 @@ namespace
     std::mutex sWardenLock;
     std::map<uint32, std::vector<uint32>> sWardenCandidates;   // by map id: db guids
     std::map<uint32, uint32> sWardenOf;                        // by instance id: the chosen db guid
+    std::map<uint32, uint32> sWardenSeen;                      // by instance id: candidates settled
+    // A settling candidate becomes the Warden at 1 in WARDEN_ODDS; the WARDEN_BY-th surely.
+    constexpr uint32 WARDEN_ODDS = 12, WARDEN_BY = 25;
     std::unordered_set<ObjectGuid> sWardens;                   // the crowned, by object guid
 
     // Whether a spawn of `info` at `level` reads as a boss without a creature to ask.
@@ -262,13 +259,10 @@ namespace
         return info->HealthMultiplier >= threshold;
     }
 
-    // The trash spawns of `map` that may be its Warden.
-    std::vector<uint32> const& WardenCandidates(uint32 map)
+    // The trash spawns of `map` that may be its Warden, sorted.
+    std::vector<uint32> BuildWardenCandidates(uint32 map)
     {
-        auto it = sWardenCandidates.find(map);
-        if (it != sWardenCandidates.end())
-            return it->second;
-        std::vector<uint32>& out = sWardenCandidates[map];
+        std::vector<uint32> out;
         std::vector<uint32> const& bosses = Bosses();
         auto worker = [&](CreatureDataPair const& pair)
         {
@@ -293,21 +287,40 @@ namespace
         return out;
     }
 
-    // Whether `creature` is its instance's Warden (choosing one the first time it is asked).
+    // Whether `creature` is its instance's Warden. The Warden is chosen among the eligible
+    // spawns that actually load: each one that settles takes the crown at 1 in WARDEN_ODDS, and
+    // the WARDEN_BY-th surely, so it stands near the entrance's first stretch, in the wing the
+    // group is in (Scarlet Monastery, Dire Maul and Blackrock Spire are one map each).
     bool IsChosenWarden(Creature* creature)
     {
         Map* map = creature->GetMap();
         if (!ThemeFor(map->GetId()) || !creature->GetDbGuid())
             return false;
-        std::lock_guard<std::mutex> guard(sWardenLock);
-        auto it = sWardenOf.find(map->GetInstanceId());
-        if (it == sWardenOf.end())
+        uint32 const instance = map->GetInstanceId();
         {
-            std::vector<uint32> const& candidates = WardenCandidates(map->GetId());
-            uint32 const chosen = candidates.empty() ? 0 : candidates[urand(0, uint32(candidates.size() - 1))];
-            it = sWardenOf.emplace(map->GetInstanceId(), chosen).first;
+            std::lock_guard<std::mutex> guard(sWardenLock);
+            if (sWardenOf.count(instance))
+                return false;                       // crowned already
+            auto it = sWardenCandidates.find(map->GetId());
+            if (it != sWardenCandidates.end())
+            {
+                if (!std::binary_search(it->second.begin(), it->second.end(), creature->GetDbGuid()))
+                    return false;
+                uint32& seen = sWardenSeen[instance];
+                ++seen;
+                if (seen < WARDEN_BY && urand(1, WARDEN_ODDS) != 1)
+                    return false;
+                sWardenOf[instance] = creature->GetDbGuid();
+                return true;
+            }
         }
-        return it->second == creature->GetDbGuid();
+        // The first ask for this map: build its candidates outside the lock, then ask again.
+        std::vector<uint32> candidates = BuildWardenCandidates(map->GetId());
+        {
+            std::lock_guard<std::mutex> guard(sWardenLock);
+            sWardenCandidates.emplace(map->GetId(), std::move(candidates));
+        }
+        return IsChosenWarden(creature);
     }
 
     void TellMap(Map* map, char const* text)
@@ -501,7 +514,6 @@ namespace
         if (IsChosenWarden(creature))
         {
             CrownWarden(creature, TIER_AFFIXES[tier]);
-            Resync(creature);
             return;
         }
         float const more = TIER_CHAMPIONS[tier];
@@ -512,7 +524,6 @@ namespace
         if (!rare && roll > rares + champions)
             return;
         MakeChampion(creature, rare ? 2 : 1, ChampionAffixCount(creature->GetLevel(), rare) + TIER_AFFIXES[tier]);
-        Resync(creature);
     }
 }
 
@@ -540,8 +551,7 @@ namespace Arpg
         {
             std::lock_guard<std::mutex> guard(sScaledLock);
             auto it = sScaled.find(creature->GetObjectGuid());
-            if (it != sScaled.end() && it->second.players == players && it->second.applied == creature->GetMaxHealth() &&
-                    it->second.tier == tier)
+            if (it != sScaled.end() && it->second.players == players && it->second.tier == tier)
                 return;
         }
         Apply(creature, kind, players);

@@ -177,8 +177,10 @@ namespace
     // Make `creature` a champion or a rare.
     void Crown(Creature* creature, Tier tier, std::vector<Affix> affixes, std::string name)
     {
+        // A percent health modifier, which the core's own recalculations keep.
         float const health = tier == TIER_RARE ? RARE_HEALTH : CHAMPION_HEALTH;
-        creature->SetMaxHealth(std::max<uint32>(1, uint32(creature->GetMaxHealth() * health)));
+        creature->HandleStatModifier(UNIT_MOD_HEALTH, TOTAL_PCT, (health - 1.0f) * 100.0f, true);
+        creature->UpdateMaxHealth();
         creature->SetHealth(creature->GetMaxHealth());
         creature->SetObjectScale(creature->GetObjectScale() * (tier == TIER_RARE ? RARE_SCALE : CHAMPION_SCALE));
         Champion c;
@@ -439,7 +441,8 @@ namespace
             if (roles[i] == ROLE_FOLLOWER)
             {
                 member->SelectLevel(std::max<uint32>(1, level - std::min<uint32>(level - 1, urand(1, 2))));
-                member->SetMaxHealth(std::max<uint32>(1, uint32(member->GetMaxHealth() * power)));
+                member->HandleStatModifier(UNIT_MOD_HEALTH, TOTAL_PCT, (power - 1.0f) * 100.0f, true);
+                member->UpdateMaxHealth();
                 member->SetHealth(member->GetMaxHealth());
                 member->SetObjectScale(member->GetObjectScale() * FOLLOWER_SCALE);
                 lesser.push_back(member->GetObjectGuid());

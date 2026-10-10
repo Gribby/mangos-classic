@@ -56,8 +56,15 @@ namespace
 
     bool Later(uint32 a, uint32 b)
     {
-        // a is after b on the wrapping millisecond clock.
-        return int32(a - b) > 0;
+        // a is after b on the wrapping millisecond clock; 0 is "never set", never later.
+        return a != 0 && int32(a - b) > 0;
+    }
+
+    // A time `ms` from `now`, never 0 (which means unset).
+    uint32 After(uint32 now, uint32 ms)
+    {
+        uint32 const at = now + ms;
+        return at ? at : 1;
     }
 
     void SendStatus(Player* player, State const& s, uint32 now)
@@ -109,7 +116,7 @@ namespace Arpg
 {
     void Dodge(Player* player, float x, float y)
     {
-        if (!Active(player) || !player->IsAlive() || !player->IsInWorld())
+        if (!Active(player) || !player->IsAlive() || !player->IsInWorld() || !std::isfinite(x) || !std::isfinite(y))
             return;
         if (player->hasUnitState(UNIT_STAT_NO_FREE_MOVE) || player->IsMounted() || player->IsTaxiFlying() ||
                 player->IsInWater() || player->IsFalling())
@@ -120,8 +127,8 @@ namespace Arpg
             State& s = sStates[player->GetObjectGuid()];
             if (Later(s.dodgeReady, now))
                 return;
-            s.dodgeReady = now + DODGE_COOLDOWN_MS;
-            s.evadeUntil = now + DODGE_EVADE_MS;
+            s.dodgeReady = After(now, DODGE_COOLDOWN_MS);
+            s.evadeUntil = After(now, DODGE_EVADE_MS);
             s.dirty = true;
         }
         float const dx = x - player->GetPositionX(), dy = y - player->GetPositionY();
