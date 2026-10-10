@@ -3365,6 +3365,18 @@ bool LootMgr::ExistsRefLootTemplate(uint32 refLootId) const
     return LootTemplates_Reference.HaveLootFor(refLootId);
 }
 
+void Loot::SettleArpgCorpse()
+{
+    if (m_lootType != LOOT_CORPSE || !m_lootTarget || m_lootTarget->GetTypeId() != TYPEID_UNIT)
+        return;
+    if (!m_isFakeLoot && !IsLootedForAll())
+        return;
+    m_isFakeLoot = false;
+    Creature* creature = static_cast<Creature*>(m_lootTarget);
+    creature->RemoveFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
+    creature->SetLootStatus(CREATURE_LOOT_STATUS_LOOTED);
+}
+
 void Loot::ThinArpgLoot(float share)
 {
     share = std::max(0.0f, std::min(1.0f, share));

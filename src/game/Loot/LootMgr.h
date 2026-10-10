@@ -381,6 +381,9 @@ class Loot
         // Fork-only (ARPG packs, Arpg::ThinPackLoot): keep `share` of the gold, and each item that
         // isn't for a quest at that chance.
         void ThinArpgLoot(float share);
+        // ARPG: a corpse's loot is on the ground, never in a window, so a corpse with nothing left
+        // to take (thinned to nothing, or core's sparkle-for-an-empty-window) stops sparkling.
+        void SettleArpgCorpse();
         void SendGold(Player* player);
         bool IsItemAlreadyIn(uint32 itemId) const;
         void PrintLootList(ChatHandler& chat, WorldSession* session) const;

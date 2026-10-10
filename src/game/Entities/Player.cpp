@@ -2729,21 +2729,14 @@ void Player::GiveLevel(uint32 level)
     PlayerClassLevelInfo classInfo;
     sObjectMgr.GetPlayerClassLevelInfo(plClass, level, &classInfo);
 
-    // send levelup info to client
-    WorldPacket data(SMSG_LEVELUP_INFO, (4 + 4 + MAX_POWERS * 4 + MAX_STATS * 4));
-    data << uint32(level);
-    data << uint32(int32(classInfo.basehealth) - int32(GetCreateHealth()));
-    // for(int i = 0; i < MAX_POWERS; ++i)                  // Powers loop (0-6)
-    data << uint32(int32(classInfo.basemana)   - int32(GetCreateMana()));
-    data << uint32(0);
-    data << uint32(0);
-    data << uint32(0);
-    data << uint32(0);
-    // end for
-    for (int i = STAT_STRENGTH; i < MAX_STATS; ++i)         // Stats loop (0-4)
-        data << uint32(int32(info.stats[i]) - GetCreateStat(Stats(i)));
-
-    GetSession()->SendPacket(data);
+    // ARPG fork: the level-up line reports the change in maximum health and mana, sent once the
+    // new stats apply below. 1.12's base health alone can fall (a paladin's goes 28 to 26 at
+    // level 2) while Stamina raises the maximum, and the chat said "-2 hit points".
+    int32 statGain[MAX_STATS];
+    for (int i = STAT_STRENGTH; i < MAX_STATS; ++i)
+        statGain[i] = int32(info.stats[i]) - int32(GetCreateStat(Stats(i)));
+    int32 const oldMaxHealth = int32(GetMaxHealth());
+    int32 const oldMaxMana = int32(GetMaxPower(POWER_MANA));
 
     SetUInt32Value(PLAYER_NEXT_LEVEL_XP, sObjectMgr.GetXPForLevel(level));
 
@@ -2763,6 +2756,21 @@ void Player::GiveLevel(uint32 level)
     InitTalentForLevel();
 
     UpdateAllStats();
+
+    // send levelup info to client
+    WorldPacket data(SMSG_LEVELUP_INFO, (4 + 4 + MAX_POWERS * 4 + MAX_STATS * 4));
+    data << uint32(level);
+    data << uint32(int32(GetMaxHealth()) - oldMaxHealth);
+    // for(int i = 0; i < MAX_POWERS; ++i)                  // Powers loop (0-6)
+    data << uint32(int32(GetMaxPower(POWER_MANA)) - oldMaxMana);
+    data << uint32(0);
+    data << uint32(0);
+    data << uint32(0);
+    data << uint32(0);
+    // end for
+    for (int i = STAT_STRENGTH; i < MAX_STATS; ++i)         // Stats loop (0-4)
+        data << uint32(statGain[i]);
+    GetSession()->SendPacket(data);
 
     // set current level health and mana/energy to maximum after applying all mods.
     if (IsAlive())

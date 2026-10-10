@@ -141,6 +141,12 @@ namespace Arpg
     {
         if (!creature || !creature->m_loot)
             return;
+        if (sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+        {
+            creature->m_loot->SettleArpgCorpse();
+            if (!creature->m_loot)
+                return;
+        }
         // The looters: the tapping group's members, or the tapper alone.
         if (Group* group = creature->GetGroupLootRecipient())
         {
