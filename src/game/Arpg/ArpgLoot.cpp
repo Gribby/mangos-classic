@@ -7,6 +7,7 @@
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDungeons.h"
 
 #include "Entities/Creature.h"
 #include "Entities/Player.h"
@@ -318,11 +319,12 @@ namespace Arpg
             }
         }
         loot->AddArpgDevGold(urand(ilvl * 10, ilvl * 60));
-        SeedArpgLoot(loot, player);
+        uint8 const tier = WantedTier(player);
+        SeedArpgLoot(loot, player, tier);
         // Lootable again, whatever the kill decided for an empty corpse.
         corpse->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
         OnCorpseLoot(corpse);
-        chat.PSendSysMessage("ARPG test loot: %u items around item level %u.", added, ilvl);
+        chat.PSendSysMessage("ARPG test loot: %u items around item level %u, rolled at %s.", added, ilvl, TierName(tier));
     }
 
     bool SellJunk(Player* player, uint32 item, uint32 count)

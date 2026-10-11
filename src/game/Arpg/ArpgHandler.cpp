@@ -48,6 +48,7 @@
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgAffixes.h"
+#include "Arpg/ArpgCharacter.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -95,6 +96,8 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                         Arpg::OnTreeHello(arpg);
                         // The rolled affixes of the character's items (Arpg/ArpgAffixes.h).
                         Arpg::LoadAffixes(arpg);
+                        // The character sheet, at once (then whenever it changes).
+                        Arpg::UpdateSheet(arpg, true);
                     }
             });
             break;

@@ -4,11 +4,15 @@
 
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgTags.h"
 
 #include "Chat/Chat.h"
 
 #include "Database/DatabaseEnv.h"
+#include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Globals/ObjectMgr.h"
 #include "Log/Log.h"
 #include "Server/DBCStores.h"
 #include "Server/Opcodes.h"
@@ -17,6 +21,8 @@
 #include "Spells/SpellMgr.h"
 
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <set>
@@ -138,7 +144,7 @@ namespace
                   Key(206, SKILL_NODE_MODIFIER, 1, 3, 205, 3, "Relentless", "Seal of Command strikes 1 more time a minute per rank.", 20424, KEY_RELENTLESS),
                   Key(207, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Zeal", "+10% attack speed per rank while Seal of the Crusader is on you.", 21082, KEY_ZEAL),
                   Key(208, SKILL_NODE_SYNERGY, 2, 2, 207, 3, "Mana Strike", "Your Seal hits give you 1% of your maximum mana per rank.", 19742, KEY_MANA_STRIKE),
-                  Key(209, SKILL_NODE_CAPSTONE, 2, 3, 208, 1, "Light of the Crusader", "Your Seal hits heal you for 5% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
+                  Key(209, SKILL_NODE_CAPSTONE, 2, 3, 208, 1, "Light of the Crusader", "Your Seal hits heal you for 10% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
               } },
             { SKILL_JUDGEMENT, CLASS_PALADIN, "Judgement", "Unleash your Seal on an enemy.", 20271, { "Judgement" },
               { "Chain", "Burst", "Seal" },
@@ -539,7 +545,7 @@ namespace
         if (it == rows.end())
         {
             uint8 const i = std::min<uint8>(rank, node.max) - 1;
-            it = rows.emplace(key, UniqueMechanic{ 0, node.kit, node.kitSpell, node.n[i], node.value[i], node.pct[i] + bonusPct, node.text }).first;
+            it = rows.emplace(key, UniqueMechanic{ 0, node.kit, node.kitSpell, node.n[i], node.value[i], node.pct[i] + bonusPct, node.text, node.name }).first;
         }
         return &it->second;
     }
@@ -553,7 +559,7 @@ namespace
         auto key = std::make_pair(rune.id, spell);
         auto it = rows.find(key);
         if (it == rows.end())
-            it = rows.emplace(key, UniqueMechanic{ 0, rune.kit, spell, rune.n, rune.value, rune.pct, rune.text }).first;
+            it = rows.emplace(key, UniqueMechanic{ 0, rune.kit, spell, rune.n, rune.value, rune.pct, rune.text, rune.name }).first;
         return &it->second;
     }
 
@@ -1163,5 +1169,91 @@ namespace Arpg
     bool IsSpecialised(Player const* player, SkillId skill)
     {
         return SlotOf(SkillsFor(player), skill) >= 0;
+    }
+
+    std::vector<std::pair<uint8, std::vector<std::string>>> SkillBonusLines(Player const* player)
+    {
+        auto format = [](char const* fmt, auto... args)
+        {
+            char buf[256];
+            std::snprintf(buf, sizeof(buf), fmt, args...);
+            return std::string(buf);
+        };
+        std::vector<std::pair<uint8, std::vector<std::string>>> out;
+        uint8 const classId = player->getClass();
+        PlayerSkills const s = SkillsFor(player);
+        WebTotals const web = SourceTotals(player, TOTALS_WEB);
+        WebTotals const items = SourceTotals(player, TOTALS_ITEMS);
+        WebTotals const tree = SourceTotals(player, TOTALS_SKILLS);
+        std::vector<std::pair<SkillId, RuneDef const*>> const runes = ActiveRunes(s);
+        for (SkillDef const& skill : Skills())
+        {
+            if (skill.classId != classId)
+                continue;
+            std::vector<std::string> lines;
+            // Strike is the swing itself; the rest by their icon spell (the skill's own).
+            SpellEntry const* spell = skill.id == SKILL_STRIKE ? nullptr : sSpellTemplate.LookupEntry<SpellEntry>(skill.icon);
+            uint32 const tags = TagsOf(spell) & ~TagBit(TAG_HEAL);
+            std::string names;
+            for (uint8 tag = 0; tag < MAX_TAG; ++tag)
+                if (tags & TagBit(Tag(tag)))
+                    names += (names.empty() ? "" : ", ") + std::string(TagName(Tag(tag)));
+            lines.push_back(format("|cff9d9d9dTags: %s|r", names.empty() ? "none" : names.c_str()));
+
+            // Its tags' bonuses, summed as the damage is, and where each comes from.
+            std::vector<std::string> byTag;
+            int32 total = 0;
+            for (uint8 tag = 0; tag < MAX_TAG; ++tag)
+            {
+                if (!(tags & TagBit(Tag(tag))))
+                    continue;
+                int32 const w = web.tag[tag], i = items.tag[tag], k = tree.tag[tag];
+                if (!w && !i && !k)
+                    continue;
+                total += w + i + k;
+                std::string from;
+                if (w)
+                    from += format("web %d", w);
+                if (i)
+                    from += format("%sgear %d", from.empty() ? "" : ", ", i);
+                if (k)
+                    from += format("%sskills %d", from.empty() ? "" : ", ", k);
+                byTag.push_back(format("|cffffd200  %s +%d%%|r |cff9d9d9d(%s)|r", TagName(Tag(tag)), w + i + k, from.c_str()));
+            }
+            lines.push_back(format("|cffffd200Damage +%d%% from its tags|r", total));
+            lines.insert(lines.end(), byTag.begin(), byTag.end());
+            ConditionalDamageLines(player, tags, uint8(skill.id), lines);
+
+            // Its tree: the ranks taken.
+            for (SkillNode const& node : skill.nodes)
+            {
+                auto it = s.ranks.find(node.id);
+                if (it != s.ranks.end() && it->second)
+                    lines.push_back(format("|cff20ff20%s %u/%u|r: %s", node.name, uint32(it->second), uint32(node.max), node.text));
+            }
+            for (auto const& [id, rune] : runes)
+                if (id == skill.id)
+                    lines.push_back(format("|cffa335ee%s|r: %s", rune->name, rune->text));
+
+            // The worn uniques that change it.
+            for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            {
+                Item const* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+                if (!item)
+                    continue;
+                for (UniqueMechanic const& row : Uniques())
+                {
+                    if (row.item != item->GetEntry() || row.kit == KIT_RAISE)
+                        continue;
+                    SpellEntry const* changes = sSpellTemplate.LookupEntry<SpellEntry>(row.spell);
+                    if (changes && SkillOfSpell(classId, changes) == skill.id)
+                        lines.push_back(format("|cffe6cc80%s|r: %s", item->GetProto()->Name1, row.text));
+                }
+            }
+            if (lines.size() == 2 && !total)
+                lines.push_back("|cff9d9d9dNothing adds to it yet: points in its tree, web nodes and gear with its tags all do.|r");
+            out.emplace_back(uint8(skill.id), std::move(lines));
+        }
+        return out;
     }
 }

@@ -14,6 +14,7 @@
 #include "Entities/Item.h"
 #include "Loot/LootMgr.h"
 
+#include "Combat/ThreatManager.h"
 #include "Entities/Creature.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
@@ -698,6 +699,36 @@ namespace Arpg
         LoadTiers(player);
         std::lock_guard<std::mutex> guard(sTierLock);
         sPlayerTiers[player->GetObjectGuid()].wanted = std::min<uint8>(tier, MAX_TIER);
+    }
+
+    bool NoEvadeRegen(Creature const* creature)
+    {
+        if (!creature || !creature->IsInCombat())
+            return false;
+        for (HostileReference* ref : creature->getThreatManager().getThreatList())
+            if (Unit* unit = ref->getTarget())
+                if (Active(unit))
+                    return true;
+        return false;
+    }
+
+    uint8 LootTier(Map* map)
+    {
+        return DungeonsOn() && map && map->IsDungeon() ? TierOf(map) : 0;
+    }
+
+    uint8 WantedTier(Player* player)
+    {
+        if (!player)
+            return 0;
+        LoadTiers(player);
+        std::lock_guard<std::mutex> guard(sTierLock);
+        return sPlayerTiers[player->GetObjectGuid()].wanted;
+    }
+
+    char const* TierName(uint8 tier)
+    {
+        return TIER_NAME[std::min<uint8>(tier, MAX_TIER)];
     }
 
     float TierDamageMod(Unit const* attacker)

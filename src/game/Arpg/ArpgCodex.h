@@ -19,11 +19,11 @@
  *
  * Drops (a tier adds a quarter to every chance, and the page chance 7 points):
  *   a capstone's home boss   its page, 35%
- *   champion                 a fragment 12%, a rune 2%
- *   rare                     a fragment 40%, a rune 8%
- *   other dungeon boss       a fragment 25%, a rune 12%
- *   Warden                   two fragments, a rune 30%
- *   Cache                    a fragment and a 50% chance at another, a rune 40%
+ *   champion                 a rune 2%
+ *   rare                     a rune 8%
+ *   other dungeon boss       a rune 12%
+ *   Warden                   a rune 30%
+ *   Cache                    one fragment (the only source), a rune 40%
  */
 
 #ifndef MANGOS_ARPG_CODEX_H

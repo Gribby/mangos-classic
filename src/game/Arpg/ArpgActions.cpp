@@ -9,6 +9,7 @@
 
 #include "Chat/Chat.h"
 #include "Entities/Creature.h"
+#include "Entities/GameObject.h"
 #include "Globals/ObjectMgr.h"
 #include "Maps/Map.h"
 #include "Maps/MapPersistentStateMgr.h"
@@ -17,12 +18,14 @@
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
+#include "Spells/Spell.h"
 #include "Spells/SpellMgr.h"
 #include "Util/Timer.h"
 #include "World/World.h"
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <mutex>
 #include <unordered_map>
 
@@ -51,6 +54,12 @@ namespace
     constexpr float PORTAL_DRIFT = 1.5f;
     constexpr uint32 PORTAL_RETURN_MS = 30 * MINUTE * IN_MILLISECONDS;
     constexpr float PORTAL_HOME_RANGE = 60.0f;
+    // The portal's look: the Hearthstone's swirl while it opens, then a mage's portal (its door
+    // object, from the faction's Portal spell) standing where it opened, and where it leads back
+    // to, for PORTAL_DOOR_SECS. Only the look: it can't be clicked.
+    constexpr uint32 PORTAL_SWIRL = 8690;
+    constexpr uint32 PORTAL_DOOR_ALLIANCE = 10059, PORTAL_DOOR_HORDE = 11417;
+    constexpr uint32 PORTAL_DOOR_SECS = 8;
     // A death's checkpoint gives back this share of health and mana.
     constexpr float CHECKPOINT_RESTORE = 0.5f;
 
@@ -76,11 +85,13 @@ namespace
         uint32 returnUntil = 0;
         Spot returnTo;
         uint32 returnInstance = 0;
-        // Where the player came into the map it is on (its instance too): a dungeon death rises
-        // there, at the door the player used.
-        uint32 entryMap = 0, entryInstance = 0;
-        Spot entry;
-        bool entrySet = false;
+        // Where the player came into each map (and instance) it has been in: a dungeon death rises
+        // there, at the door the player used. Stepping back through a town portal is not a door:
+        // the dungeon's own door stays the one it rises at.
+        std::map<std::pair<uint32, uint32>, Spot> doors;
+        std::pair<uint32, uint32> onMap{ 0, 0 };
+        bool mapSeen = false;
+        bool viaPortal = false;     // the next arrival is a portal's way back
         // Released and on the way to the checkpoint as a spirit: risen on arrival.
         bool rising = false;
     };
@@ -301,10 +312,85 @@ namespace Arpg
             if (!fresh)
                 return;
         }
-        uint32 const heal = std::max<uint32>(1, player->GetMaxHealth() * GLOBE_HEAL_PCT / 100);
-        if (SpellEntry const* potion = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_HEALING_POTION))
-            player->DealHeal(player, heal, potion);
+        ProcHeal(player, "Health Globe", std::max<uint32>(1, player->GetMaxHealth() * GLOBE_HEAL_PCT / 100));
         SendGlobe(player, GLOBE_GONE, id, g);
+    }
+
+    // The swirl over `player` while its portal opens (SMSG_SPELL_START, nothing cast), or its end:
+    // `opened` finishes it as a cast (SMSG_SPELL_GO), else it breaks off.
+    void ShowPortalSwirl(Player* player, bool start, bool opened = false)
+    {
+        if (!sSpellTemplate.LookupEntry<SpellEntry>(PORTAL_SWIRL))
+            return;
+        if (opened)
+        {
+            WorldPacket data(SMSG_SPELL_GO, 40);
+            data << player->GetPackGUID();
+            data << player->GetPackGUID();
+            data << uint32(PORTAL_SWIRL);
+            data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+            data << uint8(1);
+            data << player->GetObjectGuid();
+            data << uint8(0);
+            SpellCastTargets targets;
+            targets.setUnitTarget(player);
+            data << targets;
+            player->SendMessageToSet(data, true);
+            return;
+        }
+        if (start)
+        {
+            WorldPacket data(SMSG_SPELL_START, 32);
+            data << player->GetPackGUID();
+            data << player->GetPackGUID();
+            data << uint32(PORTAL_SWIRL);
+            data << uint16(CAST_FLAG_UNKNOWN2 | CAST_FLAG_HIDDEN_COMBATLOG);
+            data << uint32(PORTAL_CAST_MS);
+            SpellCastTargets targets;
+            targets.setUnitTarget(player);
+            data << targets;
+            player->SendMessageToSet(data, true);
+            return;
+        }
+        WorldPacket data(SMSG_SPELL_FAILURE, 16);
+        data << player->GetPackGUID();
+        data << uint32(PORTAL_SWIRL);
+        data << uint8(SPELL_FAILED_INTERRUPTED);
+        player->SendMessageToSet(data, true);
+        WorldPacket other(SMSG_SPELL_FAILED_OTHER, 12);
+        other << player->GetObjectGuid();
+        other << uint32(PORTAL_SWIRL);
+        player->SendMessageToSet(other, true);
+    }
+
+    // A portal standing at (x, y, z) on `player`'s map for a few seconds.
+    void ShowPortalDoor(Player* player, float x, float y, float z, float o)
+    {
+        SpellEntry const* door = sSpellTemplate.LookupEntry<SpellEntry>(
+            player->GetTeam() == HORDE ? PORTAL_DOOR_HORDE : PORTAL_DOOR_ALLIANCE);
+        uint32 entry = 0;
+        if (door)
+            for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+                if (door->Effect[i] == SPELL_EFFECT_TRANS_DOOR)
+                    entry = uint32(door->EffectMiscValue[i]);
+        if (!entry || !ObjectMgr::GetGameObjectInfo(entry) || !player->IsInWorld())
+            return;
+        Map* map = player->GetMap();
+        GameObject* go = new GameObject;
+        uint32 const low = map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT);
+        if (!go->Create(low, low, entry, map, x, y, z, o))
+        {
+            delete go;
+            return;
+        }
+        go->SetRespawnTime(PORTAL_DOOR_SECS);
+        go->SetOwnerGuid(player->GetObjectGuid());
+        go->SetUInt32Value(GAMEOBJECT_LEVEL, player->GetLevel());
+        go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+        go->SetSpellId(door->Id);
+        go->SetSpawnerGuid(player->GetObjectGuid());
+        map->Add(go);
+        go->AIM_Initialize();
     }
 
     bool InTown(Player* player)
@@ -366,11 +452,18 @@ namespace Arpg
                     return;
                 }
             }
+            // The portal stands in town as the player steps through (a far teleport takes the
+            // player out of this map at once).
+            ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+            bool const newMap = back.map != player->GetMapId();
             if (player->TeleportTo(back.map, back.x, back.y, back.z, back.o))
             {
                 {
                     std::lock_guard<std::mutex> guard(sActionsLock);
-                    sStates[player->GetObjectGuid()].returnUntil = 0;
+                    State& s = sStates[player->GetObjectGuid()];
+                    s.returnUntil = 0;
+                    // Only an arrival on another map is the portal's; a near one never changes map.
+                    s.viaPortal = newMap;
                 }
                 chat.SendSysMessage("|cff80c0ffYou step back through your portal.|r");
             }
@@ -388,6 +481,7 @@ namespace Arpg
             s.portalFrom = { player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation() };
         }
         player->HandleEmoteCommand(EMOTE_ONESHOT_SPELLPRECAST);
+        ShowPortalSwirl(player, true);
         chat.SendSysMessage("|cff80c0ffOpening a town portal...|r");
     }
 
@@ -397,7 +491,7 @@ namespace Arpg
             return false;
         Map* map = player->GetMap();
         Spot at;
-        bool have = false;
+        bool have = false, casting = false;
         // In a dungeon: the door the player came in by (a dungeon of several wings has several),
         // else its entrance.
         if (map->IsDungeon())
@@ -405,9 +499,10 @@ namespace Arpg
             {
                 std::lock_guard<std::mutex> guard(sActionsLock);
                 State const& s = sStates[player->GetObjectGuid()];
-                if (s.entrySet && s.entryMap == player->GetMapId() && s.entryInstance == player->GetInstanceId())
+                auto door = s.doors.find({ player->GetMapId(), player->GetInstanceId() });
+                if (door != s.doors.end())
                 {
-                    at = s.entry;
+                    at = door->second;
                     have = true;
                 }
             }
@@ -428,9 +523,12 @@ namespace Arpg
         {
             std::lock_guard<std::mutex> guard(sActionsLock);
             State& s = sStates[player->GetObjectGuid()];
+            casting = s.portalAt != 0;
             s.portalAt = 0;
             s.rising = true;
         }
+        if (casting)
+            ShowPortalSwirl(player, false);
         // On the way as a spirit, risen on arrival (UpdateActions): alive at the corpse until the
         // client answers the teleport, it could die there again.
         if (have)
@@ -450,13 +548,19 @@ namespace Arpg
             std::lock_guard<std::mutex> guard(sActionsLock);
             State& s = sStates[player->GetObjectGuid()];
             // A new map (or instance) under the player: where it came in.
-            if (!player->IsBeingTeleported() && player->IsAlive() &&
-                    (!s.entrySet || s.entryMap != player->GetMapId() || s.entryInstance != player->GetInstanceId()))
+            std::pair<uint32, uint32> const here{ player->GetMapId(), player->GetInstanceId() };
+            if (!player->IsBeingTeleported() && player->IsAlive() && (!s.mapSeen || s.onMap != here))
             {
-                s.entrySet = true;
-                s.entryMap = player->GetMapId();
-                s.entryInstance = player->GetInstanceId();
-                s.entry = { player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation() };
+                s.mapSeen = true;
+                s.onMap = here;
+                if (!s.viaPortal || !s.doors.count(here))
+                {
+                    // A long session's oldest-looking doors go, never the one being written.
+                    if (s.doors.size() >= 16 && !s.doors.count(here))
+                        s.doors.erase(s.doors.begin());
+                    s.doors[here] = { player->GetMapId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation() };
+                }
+                s.viaPortal = false;
             }
             if (s.rising && !player->IsBeingTeleported())
             {
@@ -490,9 +594,15 @@ namespace Arpg
             ChatHandler(player).SendSysMessage("|cffffd200You rise again.|r");
         }
         if (portalFizzles)
+        {
+            ShowPortalSwirl(player, false);
             ChatHandler(player).SendSysMessage("|cffff8080Your portal fizzles.|r");
+        }
         if (portalOpens)
         {
+            ShowPortalSwirl(player, false, true);
+            // The portal stands where it opened, a moment, for anyone there to see.
+            ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
             ChatHandler(player).SendSysMessage("|cff80c0ffYou step through to town. Your portal stays open for 30 minutes: press it again in town to go back.|r");
             player->TeleportToHomebind();
             return;

@@ -19,8 +19,13 @@
 #include "Grids/GridNotifiers.h"
 #include "Grids/GridNotifiersImpl.h"
 #include "Grids/CellImpl.h"
+#include "Server/Opcodes.h"
+#include "Server/WorldPacket.h"
+#include "Server/WorldSession.h"
 
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
 #include <limits>
 
 namespace
@@ -476,5 +481,44 @@ namespace Arpg
             }
         }
         return first;
+    }
+
+    void ReportProc(Unit* player, ProcKind kind, uint32 amount, char const* name, char const* format, ...)
+    {
+        if (!player || player->GetTypeId() != TYPEID_PLAYER || !Active(player) || !name)
+            return;
+        char rest[192];
+        va_list args;
+        va_start(args, format);
+        std::vsnprintf(rest, sizeof(rest), format, args);
+        va_end(args);
+        std::string line = std::string("|cffffd200") + name + "|r " + rest;
+        WorldPacket data(SMSG_ARPG_PROC, 1 + 4 + line.size() + 1);
+        data << uint8(kind);
+        data << uint32(amount);
+        data << line;
+        static_cast<Player*>(player)->GetSession()->SendPacket(data);
+    }
+
+    uint32 ProcHeal(Unit* unit, char const* name, uint32 amount)
+    {
+        if (!unit || !unit->IsAlive() || !amount)
+            return 0;
+        int32 const gained = unit->ModifyHealth(int32(amount));
+        if (gained <= 0)
+            return 0;
+        ReportProc(unit, PROC_HEAL, uint32(gained), name, "heals you for %d.", gained);
+        return uint32(gained);
+    }
+
+    uint32 ProcMana(Unit* unit, char const* name, uint32 amount)
+    {
+        if (!unit || !unit->IsAlive() || !amount || unit->GetPowerType() != POWER_MANA)
+            return 0;
+        int32 const gained = unit->ModifyPower(POWER_MANA, int32(amount));
+        if (gained <= 0)
+            return 0;
+        ReportProc(unit, PROC_MANA, uint32(gained), name, "restores %d mana.", gained);
+        return uint32(gained);
     }
 }

@@ -51,6 +51,7 @@
 #include "Common.h"
 
 class Creature;
+class Map;
 class Player;
 class Unit;
 
@@ -62,6 +63,15 @@ namespace Arpg
     // The tier `player` asks for (CMSG_ARPG_ACTION kind 19; its client sends it at the hello and
     // on a change). Loads the tiers it has open.
     void SetWantedTier(Player* player, uint8 tier);
+
+    // The tier `map`'s instance runs at, for its drops (0 outside dungeons, or with Arpg.Dungeons off).
+    uint8 LootTier(Map* map);
+
+    // The tier `player` asks for (the dev tools' test loot rolls at it).
+    uint8 WantedTier(Player* player);
+
+    // "Normal" .. "Torment III".
+    char const* TierName(uint8 tier);
 
     // The multipliers a dungeon's tier puts on its creatures' damage, and on their kills' XP.
     float TierDamageMod(Unit const* attacker);
@@ -78,6 +88,10 @@ namespace Arpg
 
     // The most one hit of `attacker`'s may deal `victim` (0: no cap). `spell` for spell damage.
     uint32 DamageCap(Unit const* attacker, Unit const* victim, bool spell);
+
+    // Whether `creature` is fighting an ARPG player, which turns off its in-combat "can't reach
+    // you" regeneration.
+    bool NoEvadeRegen(Creature const* creature);
 
     // Whether `creature` is a dungeon or raid boss (see above).
     bool IsDungeonBoss(Creature const* creature);

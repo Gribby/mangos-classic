@@ -86,6 +86,7 @@ namespace Arpg
         float value;      // A: degrees between lines; C: jump range; D: reach behind; E: radius
         uint32 pct;       // each added hit's share of the main hit, in percent
         char const* text; // the tooltip line
+        char const* name = nullptr; // a skill node's or rune's name, for the combat log (nullptr: the item's)
     };
 
     // Every unique, in table order.

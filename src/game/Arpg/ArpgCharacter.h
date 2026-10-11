@@ -29,6 +29,9 @@
 
 #include "Common.h"
 
+#include <string>
+#include <vector>
+
 class Player;
 class Spell;
 class Unit;
@@ -105,6 +108,23 @@ namespace Arpg
 
     // Whether `unit` keeps its Seal `existing` while gaining the Seal `adding` (Twin Seals).
     bool KeepsSecondSeal(Unit const* unit, SpellEntry const* adding, SpellEntry const* existing);
+
+    // --- The character sheet, for the benilla ARPG client ---
+    //
+    // What the attributes do and what adds to each skill, with the player's own numbers, so
+    // nothing in the build is a guess:
+    //   SMSG_ARPG_SHEET (0x347): uint8 version (1); uint8 attribute count (5, Strength to Spirit),
+    //     a cstring each; uint8 skill count, per skill: uint8 skill id, cstring; cstring the
+    //     summary (movement, cooldowns, areas, damage by tag, worn uniques). Each cstring is lines
+    //     with "\n" between, colour escapes included.
+    // Built at most every two seconds from the once-a-second refresh, sent when it changed.
+
+    // The sheet's lines for the conditional damage bonuses DamageDoneMod adds to a spell of
+    // `tags` in `skill` (keystones that depend on the weapon, the enemies around, a kill streak).
+    void ConditionalDamageLines(Player const* player, uint32 tags, uint8 skill, std::vector<std::string>& out);
+
+    // Send `player` its sheet if it changed (`force`: now, whatever it last sent).
+    void UpdateSheet(Player* player, bool force);
 }
 
 #endif

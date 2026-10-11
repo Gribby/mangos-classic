@@ -91,9 +91,27 @@ each ARPG player of the champions within 100 yards. Design: the client's
 | 20 unseal | `u16` capstone node: unseal it with Codex fragments (`Arpg/ArpgSkills.h`) |
 | 21 socket | `u8` skill, `u8` rune (0 empties): socket a rune |
 
-Server to client, 0x33D to 0x342 (`NUM_MSG_TYPES` 0x343): loot, item mechanics, the web, skills,
+Server to client, 0x33D to 0x348 (`NUM_MSG_TYPES` 0x349): loot, item mechanics, the web, skills,
 champions, `SMSG_ARPG_STATUS` (0x342: `u8` flask charges, `u8` max, `u8` the next charge's
-progress, `u32` ms until the roll is ready, `u32` the roll's cooldown).
+progress, `u32` ms until the roll is ready, `u32` the roll's cooldown), item affixes (0x343),
+telegraphs (0x344), globes (0x345), procs (0x346), the character sheet (0x347) and share hits'
+impacts (0x348). The fork's packets go only to ARPG clients.
+
+## Procs, the sheet and impacts
+
+Every ARPG mechanic that fires on its own tells its player in one combat log line
+(`Arpg::ReportProc`, `SMSG_ARPG_PROC` 0x346: `u8` kind, `u32` amount, cstring line; the client
+floats a heal's or mana's amount): skill nodes, runes, web keystones, uniques' kits, globes,
+life on kill, and a Healer champion's heals (to its fighters). Heals and mana from procs go
+through `Arpg::ProcHeal` / `ProcMana`. The character sheet (`Arpg::UpdateSheet`, `SMSG_ARPG_SHEET`
+0x347, `Arpg/ArpgCharacter.h`) says what each attribute does at the character's numbers, what adds
+to each skill (its tags' bonuses by source, nodes, rune, uniques, conditional keystones), and the
+ARPG totals; built every two seconds, sent on a change. A share hit with no missile of its own
+(an arc, a burst, a cleave) sends its spell's impact (`SMSG_ARPG_IMPACT` 0x348: `u64` unit, `u32`
+spell, `u32` school mask). A creature fighting an ARPG player never takes the stock "can't reach
+you" evade: its target an ARPG player, `Unit::SelectHostileTarget` never starts the evade timer
+(which evades every hit and, in a dungeon, gives health back) and stops one running, and
+`Creature::RegenerateAll` asks `Arpg::NoEvadeRegen`.
 
 ## Dungeons and survival
 
@@ -125,24 +143,28 @@ move by family, class or name (lunge and charge lines, maul and cleave cones, sl
 bomb blasts, a caster's back-off), through the same wind-up chain; murlocs call their kin.
 `Arpg/ArpgActions.cpp`: health globes, dropped on kills (`OnFlaskKill`), `SMSG_ARPG_GLOBE` 0x345,
 taken with `CMSG_ARPG_ACTION` kind 23. A channel firing each tick (Arcane Missiles) takes each
-missile's target off its aim line (`Arpg::ChannelTickTarget`, in `SingleEnemyTargetAura`).
+missile's target off its aim line (`Arpg::ChannelTickTarget`, in `Aura::PickTargetsForSpellTrigger`).
 
 ## Town portal, death, junk
 
 `Arpg/ArpgActions.{h,cpp}`: the town portal (`CMSG_ARPG_ACTION` kind 22: two seconds still, out of
 combat, to the bind point; back from town within 30 minutes) and the death checkpoint
 (`Player::RepopAtGraveyard` asks `Arpg::RespawnAtCheckpoint`: an ARPG character rises at once at
-half health and mana, at a dungeon's entrance trigger target or the nearest graveyard).
+half health and mana, at the door it came into that dungeon instance by (stepping back through a
+portal is not a door), else the entrance trigger target, else the nearest graveyard). The portal
+shows the Hearthstone's swirl while it opens and a faction mage portal, not clickable, standing
+for a few seconds where it opened and where it is stepped back through.
 `Arpg/ArpgLoot.cpp` `SellJunk`: a grey item with a sell price picked up by an ARPG player is its
 price in gold (`Loot::SendItem`). Champion dangers are telegraphed through `Arpg::ShowTelegraph`
 (Fire Enchanted's death burst, Cold Enchanted's nova).
 
 ## Pacing
 
-`Arpg/ArpgCharacter.cpp`, for ARPG players: mana comes from fighting, not drinking (1% of the
-maximum per swing that lands, 1% per skill hit at most four times a second, 3% per kill, plus
-the web's and items' mana on hit per swing and skill hit); two
-seconds out of combat, health and mana flow back at 8% a second; the run is 10% faster (the
+`Arpg/ArpgCharacter.cpp`, for ARPG players: mana comes from fighting, not drinking, slowly (0.5% of
+the maximum per swing that lands, 0.5% for a skill hit at most once a second, 2% per kill, plus
+the web's and items' mana on hit with each); five
+seconds out of a fight (out of combat, no hit dealt or taken), health flows back at 5% a second
+and mana at 2%, so a run between packs is not a refill; the run is 10% faster (the
 Agility speed cap is 30% with it); every class spell's global cooldown is a third of vanilla's
 (1.5 sec to 0.5) and its cast time half, as spell modifiers the client follows. `Player::AddGCD`
 keeps a short GCD less the latency at 1 ms or more (zero would read as the spell's own GCD, a
@@ -153,8 +175,12 @@ negative one would wrap).
 `Arpg/ArpgAffixes.{h,cpp}`: a seed per eligible loot item (`LootItem::arpgSeed`, set after the
 corpse's loot is made), kept with the stored item (`Loot::SendItem`, `character_arpg_item`),
 added into the totals when worn (`ArpgTree.cpp` Refresh; `Player::_ApplyItemMods` refreshes),
-and sent to the client after the hello and on store (`SMSG_ARPG_ITEM_AFFIXES`, 0x343;
-`NUM_MSG_TYPES` 0x344).
+and sent to the client after the hello and on store (`SMSG_ARPG_ITEM_AFFIXES`, 0x343). Values grow
+with item level exponentially (a level 20 drop about a seventh of a level 60 one, Molten Core a
+third more, Blackwing Lair about double, Naxxramas three to four times) and with the dungeon tier
+the item dropped at (x1.15 Hard to x2 Torment III, kept in `character_arpg_item.tier`, added to
+an older table the first time the table is used); a raid purple and a Torment drop roll one more affix, and the tooltip
+names the tier. Capped stats (movement, block, cooldown recovery, armour) are capped per affix.
 
 ## Codex pages and runes
 

@@ -159,6 +159,12 @@ namespace Arpg
         uint8 Rank(Keystone key) const { return key < MAX_KEYSTONE ? rank[key] : 0; }
     };
 
+    // Where a share of the totals comes from, for the character sheet.
+    enum TotalsSource : uint8 { TOTALS_WEB, TOTALS_SKILLS, TOTALS_ITEMS };
+
+    // One source's share of `player`'s totals.
+    WebTotals SourceTotals(Player const* player, TotalsSource source);
+
     // The final bosses whose first kill gives a point, by creature entry.
     std::vector<uint32> const& Bosses();
 

@@ -29,8 +29,8 @@
  *                    kind 14 give a rank back: uint16 node
  *                    kind 15 respec a skill: uint8 skill
  * Codex pages and runes: each capstone is sealed until its Codex page is read: a book its home
- * boss drops (PAGES), read at once when picked up. Codex fragments (champions, rares, Wardens,
- * Caches) unseal any capstone of a specialised skill, FRAGMENTS_PER_PAGE at a time; a page
+ * boss drops (PAGES), read at once when picked up. Codex fragments (one in each final boss's
+ * Cache) unseal any capstone of a specialised skill, FRAGMENTS_PER_PAGE at a time; a page
  * already read tears into FRAGMENTS_FOR_DUPLICATE. A capstone taken before pages sealed them
  * counts as read. Each skill's tree has one rune socket, open with 10 points in the skill; a
  * rune (Runes()) fits some skills and adds a kit row, spell modifiers, a keystone rank or a hook
@@ -57,6 +57,8 @@
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgUniques.h"
 
+#include <string>
+#include <utility>
 #include <vector>
 
 class Player;
@@ -136,6 +138,11 @@ namespace Arpg
 
     // More skill points spent than the character's level gives: give them all back.
     bool SettleSkillPoints(Player* player);
+
+    // Per skill of the player's class: the lines of the character sheet's "what adds to it"
+    // (Arpg::UpdateSheet): its tags and their bonuses by source, its taken nodes, its rune, the
+    // worn uniques that change it, and the conditional bonuses.
+    std::vector<std::pair<uint8, std::vector<std::string>>> SkillBonusLines(Player const* player);
 
     // Add what the player's skill nodes give to `totals`.
     void AddSkillTotals(Player const* player, WebTotals& totals);

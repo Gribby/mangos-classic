@@ -22,6 +22,7 @@
 #include "World/World.h"
 #include "Globals/ObjectMgr.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgDungeons.h"
 #include "Globals/ObjectAccessor.h"
 #include "Entities/ObjectGuid.h"
 #include "Server/SQLStorages.h"
@@ -796,7 +797,9 @@ void Creature::RegenerateAll(uint32 diff)
     if (m_regenTimer < REGEN_TIME_FULL_UNIT)
         return;
 
-    if (!IsInCombat() || GetCombatManager().IsEvadeRegen())
+    // ARPG: never while it fights an ARPG player, who can always be reached by a skillshot from
+    // somewhere (Unit::SelectHostileTarget never starts its evade for one either; Arpg/ArpgDungeons.h).
+    if (!IsInCombat() || (GetCombatManager().IsEvadeRegen() && !Arpg::NoEvadeRegen(this)))
         RegenerateHealth();
 
     RegeneratePower(REGEN_TIME_FULL_UNIT / 1000);

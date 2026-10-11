@@ -210,30 +210,24 @@ namespace Arpg
                 if (Roll(float(PAGE_PCT + PAGE_TIER_PCT * tier)))
                     AddToLoot(loot, CODEX_PAGE_BASE + node);
 
+        // A fragment is a dungeon's prize: one from its final boss's Cache, nothing else.
         float fragment = 0.0f, rune = 0.0f;
         uint32 sureFragments = 0;
         if (warden)
-        {
-            sureFragments = 2;
             rune = 30.0f;
-        }
         else if (cache)
         {
             sureFragments = 1;
-            fragment = 50.0f;
             rune = 40.0f;
         }
         else if (dungeon && IsDungeonBoss(victim))
-        {
-            fragment = 25.0f;
             rune = 12.0f;
-        }
         else
         {
             switch (ChampionTier(victim))
             {
-                case 2: fragment = 40.0f; rune = 8.0f; break;
-                case 1: fragment = 12.0f; rune = 2.0f; break;
+                case 2: rune = 8.0f; break;
+                case 1: rune = 2.0f; break;
                 default: return;
             }
         }

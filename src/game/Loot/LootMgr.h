@@ -242,6 +242,8 @@ struct LootItem
 
     // ARPG: the item's affix seed, 0 for none (Arpg/ArpgAffixes.h)
     uint32 arpgSeed = 0;
+    // ARPG: the difficulty tier it dropped at, which raises its affixes (Arpg/ArpgAffixes.h)
+    uint8 arpgTier = 0;
 
     // Constructor, copies most fields from LootStoreItem, generates random count and random suffixes/properties
     // Should be called for non-reference LootStoreItem entries only (mincountOrRef > 0)

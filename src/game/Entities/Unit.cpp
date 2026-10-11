@@ -1448,7 +1448,7 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         // ARPG: a Warden's drops and a final boss's Cache (Arpg/ArpgDungeons.h).
         Arpg::OnDungeonLoot(victim);
         // ARPG: the drops' affix seeds (Arpg/ArpgAffixes.h).
-        Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient());
+        Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient(), Arpg::LootTier(victim->GetMap()));
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
         Arpg::OnCorpseLoot(victim);
     }
@@ -8870,7 +8870,15 @@ bool Unit::SelectHostileTarget()
 
         // check if currently selected target is reachable
         // NOTE: path alrteady generated from AttackStart()
-        if (AI()->IsCombatMovement())
+        // ARPG: an ARPG player is never "out of reach": a skillshot finds the creature from
+        // anywhere, and the stock evade (hits evaded, health back) would make a boss unkillable
+        // (Arpg/ArpgDungeons.h).
+        if (AI()->IsCombatMovement() && Arpg::Active(target))
+        {
+            if (GetCombatManager().IsInEvadeMode() && !GetCombatManager().IsEvadingHome())
+                GetCombatManager().StopEvade();
+        }
+        else if (AI()->IsCombatMovement())
         {
             if (!GetMotionMaster()->GetCurrent()->IsReachable())
             {

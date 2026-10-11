@@ -883,10 +883,16 @@ enum Opcodes
     SMSG_ARPG_TELEGRAPH                             = 0x344,
     // ARPG: a health globe dropped or taken (Arpg/ArpgActions.h)
     SMSG_ARPG_GLOBE                                 = 0x345,
+    // ARPG: a proc's line for the combat log (Arpg/ArpgCombat.h)
+    SMSG_ARPG_PROC                                  = 0x346,
+    // ARPG: the character sheet: attributes and each skill's bonuses (Arpg/ArpgCharacter.h)
+    SMSG_ARPG_SHEET                                 = 0x347,
+    // ARPG: a share hit's impact visual on its unit (Arpg/ArpgUniques.h)
+    SMSG_ARPG_IMPACT                                = 0x348,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x346
+#define NUM_MSG_TYPES 0x349
 
 /// Player state
 enum SessionStatus

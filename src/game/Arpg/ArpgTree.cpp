@@ -634,6 +634,25 @@ namespace
 
 namespace Arpg
 {
+    WebTotals SourceTotals(Player const* player, TotalsSource source)
+    {
+        WebTotals totals;
+        switch (source)
+        {
+            case TOTALS_WEB:
+                if (ClassWeb const* web = WebOf(player->getClass()))
+                    totals = Sum(*web, WebFor(player).nodes);
+                break;
+            case TOTALS_SKILLS:
+                AddSkillTotals(player, totals);
+                break;
+            case TOTALS_ITEMS:
+                AddItemTotals(player, totals);
+                break;
+        }
+        return totals;
+    }
+
     std::vector<uint32> const& Bosses()
     {
         static std::vector<uint32> const bosses =

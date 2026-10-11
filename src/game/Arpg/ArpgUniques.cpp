@@ -12,6 +12,7 @@
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
 #include "Log/Log.h"
+#include "Maps/Map.h"
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
@@ -173,12 +174,32 @@ namespace
         from->SendMessageToSet(data, true);
     }
 
+    // The impact of `spellInfo` on `unit`, for the ARPG clients near it (SMSG_ARPG_IMPACT): an
+    // added hit with no missile of its own (an arc, a burst, a cleave) still lands with the
+    // spell's own hit visual. The client finds the kit, or its school's stock one.
+    constexpr float IMPACT_SEEN = 80.0f;
+    void ShowImpact(Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask)
+    {
+        WorldPacket data(SMSG_ARPG_IMPACT, 16);
+        data << unit->GetObjectGuid();
+        data << uint32(spellInfo->Id);
+        data << uint32(mask);
+        // Only to ARPG clients: a stock client knows no such opcode.
+        for (auto const& ref : unit->GetMap()->GetPlayers())
+            if (Player* player = ref.getSource())
+                if (Arpg::Active(player) && player->IsWithinDistInMap(unit, IMPACT_SEEN))
+                    player->GetSession()->SendPacket(data);
+    }
+
     // Deal `share` of `spellInfo`'s school to `unit` as `caster`'s, through the ordinary spell
-    // damage path: armour for a physical hit, resistances, absorbs, the combat log.
-    void DealShare(Unit* caster, Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask, uint32 share)
+    // damage path: armour for a physical hit, resistances, absorbs, the combat log. `show`: the
+    // hit's impact plays (a relayed hit's missile already brings its own).
+    void DealShare(Unit* caster, Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask, uint32 share, bool show = true)
     {
         if (!unit->IsAlive())
             return;
+        if (show)
+            ShowImpact(unit, spellInfo, mask);
         SpellNonMeleeDamage damage(caster, unit, spellInfo->Id, GetFirstSchoolInMask(mask));
         damage.damage = share;
         if (mask & SPELL_SCHOOL_MASK_NORMAL)
@@ -187,6 +208,20 @@ namespace
         Unit::DealDamageMods(caster, unit, damage.damage, &damage.absorb, SPELL_DIRECT_DAMAGE, spellInfo);
         Unit::SendSpellNonMeleeDamageLog(&damage);
         Unit::DealSpellDamage(caster, &damage, true, false);
+    }
+
+    // The name a mechanic goes by in the combat log: the skill node's or rune's, else the item's.
+    char const* MechanicName(Arpg::UniqueMechanic const* row)
+    {
+        if (row->name)
+            return row->name;
+        ItemPrototype const* proto = ObjectMgr::GetItemPrototype(row->item);
+        return proto ? proto->Name1 : "A unique";
+    }
+
+    char const* Plural(size_t n, char const* one, char const* many)
+    {
+        return n == 1 ? one : many;
     }
 
     // The fair enemy nearest `from` within `range` yards that is not in `hit`, in sight of it.
@@ -229,7 +264,7 @@ namespace
             Unit* target = caster->GetMap()->GetUnit(toGuid);
             if (!target || !target->IsAlive())
                 return;
-            DealShare(caster, target, spellInfo, mask, share);
+            DealShare(caster, target, spellInfo, mask, share, false);
             if (!jumps)
                 return;
             GuidVector next = hit;
@@ -413,6 +448,8 @@ namespace Arpg
                 SpellCastTargets targets;
                 extra->SpellStart(&targets);
             }
+            ReportProc(player, PROC_EFFECT, 0, MechanicName(row), "fires %u extra %s at %u%% damage.",
+                       uint32(row->n), row->n == 1 ? spellInfo->SpellName[0] : "projectiles", row->pct);
         }
 
         // Echo (I): every `n`th cast flies again along the same aim a moment later.
@@ -423,7 +460,8 @@ namespace Arpg
             {
                 count = 0;
                 uint32 const pct = row->pct;
-                player->m_events.AddEvent(new UnitLambdaEvent(*player, [spellInfo, aim, aimDist, pct](Unit& owner)
+                char const* echoName = MechanicName(row);
+                player->m_events.AddEvent(new UnitLambdaEvent(*player, [spellInfo, aim, aimDist, pct, echoName](Unit& owner)
                 {
                     Player* caster = static_cast<Player*>(&owner);
                     if (!caster->IsInWorld() || !caster->IsAlive())
@@ -433,6 +471,7 @@ namespace Arpg
                     echo->SetArpgAim(aim, aimDist);
                     SpellCastTargets targets;
                     echo->SpellStart(&targets);
+                    ReportProc(caster, PROC_EFFECT, 0, echoName, "echoes %s at %u%% damage.", spellInfo->SpellName[0], pct);
                 }), player->m_events.CalculateTime(ECHO_DELAY));
             }
         }
@@ -471,6 +510,9 @@ namespace Arpg
             for (auto const& [dist, unit] : struckBy)
                 RelayHit(player, victim->GetObjectGuid(), unit->GetObjectGuid(), spellInfo, mask, share, 0, 0.0f,
                          GuidVector{ victim->GetObjectGuid(), unit->GetObjectGuid() });
+            ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "shatters %s into %u %s: %u %s hit for %u each.",
+                       spellInfo->SpellName[0], uint32(row->n), Plural(row->n, "shard", "shards"),
+                       uint32(struckBy.size()), Plural(struckBy.size(), "enemy", "enemies"), share);
             // The rest scatter outward, fanned about the line the spell flew.
             uint32 const spare = row->n - uint32(struckBy.size());
             float const away = caster->GetAngle(victim);
@@ -495,6 +537,8 @@ namespace Arpg
                 uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
                 RelayHit(player, victim->GetObjectGuid(), first->GetObjectGuid(), spellInfo, mask, share,
                          uint8(row->n - 1), row->value, hit);
+                ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "chains %s on to %s (up to %u %s) for %u each.",
+                           spellInfo->SpellName[0], first->GetName(), uint32(row->n), Plural(row->n, "jump", "jumps"), share);
             }
         }
 
@@ -514,12 +558,16 @@ namespace Arpg
                 DealShare(caster, unit, spellInfo, mask, share);
                 ++done;
             }
+            if (done)
+                ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "bursts %s onto %u %s for %u each.",
+                           spellInfo->SpellName[0], uint32(done), Plural(done, "enemy", "enemies"), share);
         }
 
         // Arc (G): a melee ability strikes every other enemy in the swing's arc and reach too.
         if (UniqueMechanic const* row = WornMechanic(player, KIT_ARC, spellInfo))
         {
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
+            size_t done = 0;
             for (Unit* unit : EnemiesNear(caster, 10.0f))
             {
                 if (unit == victim || !unit->IsAlive() || !MayCatchUnit(caster, unit, nullptr))
@@ -527,7 +575,11 @@ namespace Arpg
                 if (!caster->CanReachWithMeleeAttack(unit) || !caster->HasInArc(unit, ARC_WIDTH))
                     continue;
                 DealShare(caster, unit, spellInfo, mask, share);
+                ++done;
             }
+            if (done)
+                ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "sweeps %s through %u more %s for %u each.",
+                           spellInfo->SpellName[0], uint32(done), Plural(done, "enemy", "enemies"), share);
         }
 
         // Pierce (B): on along the line past the target, out to the spell's range.
@@ -550,14 +602,21 @@ namespace Arpg
                 RelayHit(player, from, unit->GetObjectGuid(), spellInfo, mask, share, 0, 0.0f, GuidVector{});
                 from = unit->GetObjectGuid();
             }
+            if (!onward.empty())
+                ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "drives %s through %u more %s for %u each.",
+                           spellInfo->SpellName[0], uint32(onward.size()), Plural(onward.size(), "enemy", "enemies"), share);
         }
 
         // Shockwave (H): along the caster's facing, past the target too.
         if (UniqueMechanic const* row = WornMechanic(player, KIT_SHOCKWAVE, spellInfo))
         {
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
-            for (Unit* unit : UnitsAlongLine(caster, caster->GetOrientation(), 0.0f, row->value, victim))
+            std::vector<Unit*> const line = UnitsAlongLine(caster, caster->GetOrientation(), 0.0f, row->value, victim);
+            for (Unit* unit : line)
                 DealShare(caster, unit, spellInfo, mask, share);
+            if (!line.empty())
+                ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "sends a shockwave ahead: %u %s hit for %u each.",
+                       uint32(line.size()), Plural(line.size(), "enemy", "enemies"), share);
         }
 
         // Step (K): a kill moves the player behind the nearest enemy, just after the hit.
@@ -569,7 +628,8 @@ namespace Arpg
                 if (!next.empty())
                 {
                     ObjectGuid const nextGuid = next.front()->GetObjectGuid();
-                    player->m_events.AddEvent(new UnitLambdaEvent(*player, [nextGuid](Unit& owner)
+                    char const* stepName = MechanicName(row);
+                    player->m_events.AddEvent(new UnitLambdaEvent(*player, [nextGuid, stepName](Unit& owner)
                     {
                         Unit* enemy = owner.IsInWorld() ? owner.GetMap()->GetUnit(nextGuid) : nullptr;
                         if (!enemy || !enemy->IsAlive() || !owner.IsAlive() || owner.IsRooted())
@@ -583,6 +643,7 @@ namespace Arpg
                         if (!owner.IsWithinLOS(x, y, z + 1.0f))
                             return;
                         owner.NearTeleportTo(x, y, z, o);
+                        ReportProc(&owner, PROC_EFFECT, 0, stepName, "steps you behind %s.", enemy->GetName());
                     }), player->m_events.CalculateTime(STEP_DELAY));
                 }
             }
@@ -601,8 +662,12 @@ namespace Arpg
         UniqueMechanic const* row = WornMechanic(player, KIT_SPREAD, spellInfo);
         if (!row || !row->n || !caster->CanAttack(target))
             return;
-        for (Unit* unit : NearestTo(caster, target, row->value, row->n))
+        std::vector<Unit*> const more = NearestTo(caster, target, row->value, row->n);
+        for (Unit* unit : more)
             CastCopyAt(player, spellInfo, unit);
+        if (!more.empty())
+            ReportProc(player, PROC_EFFECT, 0, MechanicName(row), "spreads %s to %u more %s.",
+                       spellInfo->SpellName[0], uint32(more.size()), Plural(more.size(), "enemy", "enemies"));
     }
 
     void OnKill(Player* killer, Unit* victim)
@@ -628,8 +693,12 @@ namespace Arpg
             UniqueMechanic const* row = caster ? WornMechanic(caster, KIT_SPREAD, spellInfo) : nullptr;
             if (!row)
                 continue;
-            for (Unit* unit : NearestTo(caster, victim, row->value, BURST_MAX))
+            std::vector<Unit*> const more = NearestTo(caster, victim, row->value, BURST_MAX);
+            for (Unit* unit : more)
                 CastCopyAt(caster, spellInfo, unit);
+            if (!more.empty())
+                ReportProc(caster, PROC_EFFECT, 0, MechanicName(row), "spreads %s from the corpse to %u %s.",
+                           spellInfo->SpellName[0], uint32(more.size()), Plural(more.size(), "enemy", "enemies"));
         }
 
         // Raise (J): the fallen foe may rise to fight for the killer a while.
@@ -649,6 +718,7 @@ namespace Arpg
         std::vector<Unit*> foes = NearestTo(killer, risen, 20.0f, 1);
         if (!foes.empty() && risen->AI())
             risen->AI()->AttackStart(foes.front());
+        ReportProc(killer, PROC_EFFECT, 0, MechanicName(raise), "raises %s to fight for you.", risen->GetName());
     }
 
     // --- The skill tree's keystones (ArpgTree.h) that hook into combat ---
@@ -687,6 +757,8 @@ namespace Arpg
             bolt = spell->m_spellInfo;
         RelayHit(player, caster->GetObjectGuid(), foes.front()->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
                  std::max<uint32>(1, amount / 2), 0, 0.0f, GuidVector{});
+        ReportProc(player, PROC_DAMAGE, 0, "Dawnbringer", "sends a Holy bolt at %s for %u.", foes.front()->GetName(),
+                   std::max<uint32>(1, amount / 2));
     }
 
     void UpdateKeystones(Player* player)
@@ -708,8 +780,12 @@ namespace Arpg
             uint32 const damage = uint32(std::max(0, aura->GetModifier()->m_amount)) * 2;
             if (!damage)
                 return;
-            for (Unit* unit : NearestTo(player, player, MARTYRS_WARD_RANGE, BURST_MAX))
+            std::vector<Unit*> const foes = NearestTo(player, player, MARTYRS_WARD_RANGE, BURST_MAX);
+            for (Unit* unit : foes)
                 DealShare(player, unit, proto, SPELL_SCHOOL_MASK_HOLY, damage);
+            if (!foes.empty())
+                ReportProc(player, PROC_DAMAGE, 0, "Martyr's Ward", "pulses Holy at %u %s for %u.",
+                           uint32(foes.size()), Plural(foes.size(), "enemy", "enemies"), damage);
             return;
         }
     }

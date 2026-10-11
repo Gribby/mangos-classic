@@ -2038,7 +2038,7 @@ InventoryResult Loot::SendItem(Player* target, LootItem* lootItem, bool sendErro
             Item* newItem = codex ? nullptr : target->StoreNewItem(dest, lootItem->itemId, true, lootItem->randomPropertyId);
             // ARPG: the item keeps the affixes its seed rolls (Arpg/ArpgAffixes.h).
             if (newItem && lootItem->arpgSeed)
-                Arpg::OnAffixedItemStored(target, newItem, lootItem->arpgSeed);
+                Arpg::OnAffixedItemStored(target, newItem, lootItem->arpgSeed, lootItem->arpgTier);
 
             if (lootItem->freeForAll)
             {

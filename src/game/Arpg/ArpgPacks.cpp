@@ -26,6 +26,7 @@
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
+#include "Spells/Spell.h"
 #include "Spells/SpellMgr.h"
 #include "Util/Timer.h"
 #include "World/World.h"
@@ -109,8 +110,28 @@ namespace
     constexpr float FIRE_BURST_RANGE = 6.0f;
     constexpr uint32 VAMPIRIC_PCT = 50, THORNS_PCT = 20;
     constexpr float TELEPORT_REACH = 12.0f;
-    constexpr uint32 TELEPORT_EVERY = 6000, HEAL_EVERY = 4000, HEAL_PCT = 8, TICK_MS = 1000;
+    constexpr uint32 TELEPORT_EVERY = 6000, HEAL_EVERY = 5000, HEAL_PCT = 4, TICK_MS = 1000;
     constexpr float HEAL_RANGE = 20.0f;
+    constexpr uint32 HEAL_VISUAL = 2050;    // Lesser Heal, rank 1: only its look
+
+    // A Healer's heal on `to`, shown as `from` casting Lesser Heal at it (nothing is cast).
+    void ShowHeal(Unit* from, Unit* to)
+    {
+        if (!sSpellTemplate.LookupEntry<SpellEntry>(HEAL_VISUAL))
+            return;
+        WorldPacket data(SMSG_SPELL_GO, 40);
+        data << from->GetPackGUID();
+        data << from->GetPackGUID();
+        data << uint32(HEAL_VISUAL);
+        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint8(1);
+        data << to->GetObjectGuid();
+        data << uint8(0);
+        SpellCastTargets targets;
+        targets.setUnitTarget(to);
+        data << targets;
+        from->SendMessageToSet(data, true);
+    }
     constexpr float NOVA_AT = 0.3f;
     constexpr float SEND_RANGE = 100.0f;
     constexpr uint32 SPELL_FIRE_BLAST = 2136, SPELL_CHILLED = 12484, SPELL_FROST_NOVA = 122, SPELL_THORNS = 467;
@@ -264,10 +285,27 @@ namespace
                             healed.push_back(ally);
                     healed.push_back(champion);
                 }
+                // Never a boss: a Healer beside one would undo a solo player's damage. Each heal
+                // shows as a Lesser Heal from the champion, and its fighters are told, so the
+                // Healer reads as the one to kill first.
+                uint32 count = 0;
                 for (Unit* member : healed)
-                    if (member->IsAlive() && member->IsWithinDistInMap(champion, HEAL_RANGE) &&
-                            member->GetHealth() < member->GetMaxHealth())
-                        member->ModifyHealth(int32(member->GetMaxHealth() * HEAL_PCT / 100));
+                {
+                    if (!member->IsAlive() || !member->IsWithinDistInMap(champion, HEAL_RANGE) ||
+                            member->GetHealth() >= member->GetMaxHealth())
+                        continue;
+                    if (member->GetTypeId() == TYPEID_UNIT && IsDungeonBoss(static_cast<Creature*>(member)))
+                        continue;
+                    member->ModifyHealth(int32(member->GetMaxHealth() * HEAL_PCT / 100));
+                    ShowHeal(champion, member);
+                    ++count;
+                }
+                if (count)
+                    for (auto const& ref : champion->GetMap()->GetPlayers())
+                        if (Player* player = ref.getSource())
+                            if (Active(player) && player->IsWithinDistInMap(champion, 40.0f))
+                                ReportProc(player, PROC_EFFECT, 0, champion->GetName(), "(Healer) mends %u %s for %u%% of their health.",
+                                           count, count == 1 ? "ally" : "allies", HEAL_PCT);
             }
             if (c.Has(AFFIX_COLD_ENCHANTED) && !c.novaDone && champion->GetHealth() < champion->GetMaxHealth() * NOVA_AT)
             {

@@ -34,11 +34,11 @@ class Player;
 
 namespace Arpg
 {
-    // `loot` was just made for an ARPG looter: seed its affix-taking items.
-    void SeedArpgLoot(Loot* loot, Player* looter);
+    // `loot` was just made for an ARPG looter, at dungeon tier `tier`: seed its affix-taking items.
+    void SeedArpgLoot(Loot* loot, Player* looter, uint8 tier);
 
     // `item` was stored from a loot item with `seed`: keep the seed with it, and tell the client.
-    void OnAffixedItemStored(Player* player, Item* item, uint32 seed);
+    void OnAffixedItemStored(Player* player, Item* item, uint32 seed, uint8 tier);
 
     // Add the player's worn items' affixes to `totals`.
     void AddItemTotals(Player const* player, WebTotals& totals);
@@ -50,7 +50,7 @@ namespace Arpg
     void LoadAffixes(Player* player);
 
     // The tooltip lines of an item of `entry` and `level` with `seed`.
-    std::vector<std::string> AffixLines(uint32 entry, uint32 seed);
+    std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier);
 }
 
 #endif

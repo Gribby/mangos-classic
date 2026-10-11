@@ -138,6 +138,22 @@ namespace Arpg
     // range), and never stops nearer than MISS_MIN.
     constexpr float MISS_OVERSHOOT = 6.0f;
     constexpr float MISS_MIN = 5.0f;
+
+    // Procs in the combat log. Every ARPG mechanic that fires on its own (a skill node, a rune, a
+    // keystone, a unique, a globe) tells its player in one line, the mechanic's name in gold:
+    //   SMSG_ARPG_PROC (0x346): uint8 ProcKind, uint32 amount (the health or mana a heal or mana
+    //     proc gave, floated over the player; 0 otherwise), cstring the line.
+    enum ProcKind : uint8 { PROC_HEAL = 1, PROC_MANA = 2, PROC_DAMAGE = 3, PROC_EFFECT = 4 };
+
+    // `player`'s combat log shows "<name> <format...>". Nothing for a player not on the ARPG client.
+    void ReportProc(Unit* player, ProcKind kind, uint32 amount, char const* name, char const* format, ...) ATTR_PRINTF(5, 6);
+
+    // Heal `unit` for `amount` from the proc `name`, and report what it gained (nothing at full
+    // health). Returns the health gained.
+    uint32 ProcHeal(Unit* unit, char const* name, uint32 amount);
+
+    // Give `unit` `amount` mana from the proc `name`, and report what it gained.
+    uint32 ProcMana(Unit* unit, char const* name, uint32 amount);
 }
 
 #endif
