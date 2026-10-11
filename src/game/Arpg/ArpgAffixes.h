@@ -8,8 +8,9 @@
  *     it (trash, an elite or champion, a rare, Warden or boss) and the dungeon tier; its name
  *     shows the rolled colour, whatever vanilla's colour was.
  *   - A named blue or purple (and every mechanic's item, Arpg/ArpgUniques.h) is a unique: gold,
- *     its own stats its implicits, and affixes as a rare (a vanilla blue, 3-4) or an epic (a
- *     vanilla purple, 5-6), which its border shows.
+ *     its own stats its implicits, a power (Arpg/ArpgProcs.h, or its authored mechanic), and
+ *     affixes of its own: which ones, and how many (a vanilla blue 4, a purple 6, as its border
+ *     shows), are fixed by its entry, the same on every copy; only their values roll.
  * A raid drop (item level 66+) or a Torment one rolls the top of its range. The affixes come from a
  * long list (attributes, damage by tag and by creature type, attack and cast speed, crit, spell
  * power, leech, regeneration, resistances, damage taken, thorns, movement, gold and experience),
@@ -97,7 +98,7 @@ namespace Arpg
     enum CraftResult : uint8
     {
         CRAFT_OK, CRAFT_NOT_ITEM, CRAFT_WRONG_RARITY, CRAFT_NO_AFFIXES, CRAFT_FULL, CRAFT_FORGED_OUT,
-        CRAFT_NO_FIT, CRAFT_AT_TOP,
+        CRAFT_NO_FIT, CRAFT_AT_TOP, CRAFT_UNIQUE_FIXED,
     };
 
     // How many affixes there are (ids 1 to this).

@@ -12,7 +12,8 @@
  *   Star of Invocation    one more affix, while the rarity has room
  *   Void Pearl            one affix, at random, gone
  *   Arcane Lens           every affix's value rerolled
- * Uniques take every orb but the three that raise a rarity.
+ * A unique's affixes are its own: it takes the Arcane Lens (new values) and shards that raise an
+ * affix it has, nothing that changes which affixes it has.
  *
  * Shards, Last Epoch's: salvaging an item from the bags (it is destroyed) gives shards of its
  * affixes (one, two on a blue or better) and a chance at an orb. A shard on an item adds its

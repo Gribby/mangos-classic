@@ -272,8 +272,16 @@ namespace
         Rng rng{ seed ^ (proto->ItemId * 2654435761u) };
         if (!rng.state)
             rng.state = 0x9E3779B9u;
-        uint8 const bracket = BracketOf(proto, RarityOf(proto, storedRarity));
-        uint32 const count = AffixCount(proto, tier, bracket, rng);
+        uint8 const shown = RarityOf(proto, storedRarity);
+        uint8 const bracket = BracketOf(proto, shown);
+        // A unique's affixes are its own: which ones, and how many (its bracket's top), follow its
+        // entry alone, the same on every copy; only their values roll, within their ranges.
+        bool const unique = shown == RARITY_UNIQUE;
+        Rng fixed{ (proto->ItemId * 2246822519u) ^ 0x5BD1E995u };
+        if (!fixed.state)
+            fixed.state = 0x9E3779B9u;
+        Rng& picks = unique ? fixed : rng;
+        uint32 const count = unique ? (bracket >= RARITY_PURPLE ? 6u : 4u) : AffixCount(proto, tier, bracket, rng);
         float const scale = LevelScale(proto->ItemLevel) * TIER_SCALE[tier];
         std::vector<AffixDef const*> pool;
         for (AffixDef const& def : AFFIXES)
@@ -281,7 +289,7 @@ namespace
                 pool.push_back(&def);
         for (uint32 i = 0; i < count && !pool.empty(); ++i)
         {
-            size_t const pick = rng.Next() % pool.size();
+            size_t const pick = picks.Next() % pool.size();
             AffixDef const* def = pool[pick];
             pool.erase(pool.begin() + pick);
             int32 const span = def->high - def->low;
@@ -806,6 +814,7 @@ namespace Arpg
             case CRAFT_FORGED_OUT:    return "The item has taken all the shards it can.";
             case CRAFT_NO_FIT:        return "That affix cannot go on this kind of item.";
             case CRAFT_AT_TOP:        return "That affix is already at its highest on this item.";
+            case CRAFT_UNIQUE_FIXED:  return "A unique's affixes are its own: only their values can change.";
         }
         return "";
     }
@@ -892,6 +901,8 @@ namespace Arpg
                 break;
             case ORB_FEL:
             {
+                if (unique)
+                    return CRAFT_UNIQUE_FIXED;
                 if (list.empty())
                     return CRAFT_NO_AFFIXES;
                 uint32 const count = uint32(list.size());
@@ -901,12 +912,16 @@ namespace Arpg
                 break;
             }
             case ORB_INVOCATION:
+                if (unique)
+                    return CRAFT_UNIQUE_FIXED;
                 if (list.size() >= most)
                     return CRAFT_FULL;
                 addRandom(1);
                 done = "A new affix answers the call.";
                 break;
             case ORB_VOID:
+                if (unique)
+                    return CRAFT_UNIQUE_FIXED;
                 if (list.empty())
                     return CRAFT_NO_AFFIXES;
                 list.erase(list.begin() + rng.Next() % list.size());
@@ -941,6 +956,9 @@ namespace Arpg
                     }
                 if (!found)
                 {
+                    // A shard raises a unique's own affix, but adds none.
+                    if (unique)
+                        return CRAFT_UNIQUE_FIXED;
                     if (list.size() >= most)
                         return CRAFT_FULL;
                     list.push_back({ def, rolled(def) });
