@@ -343,8 +343,8 @@ namespace
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) } },
-            { RUNE_LEECH, "Rune of Leech", "3% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 3, {} },
+            { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {} },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
@@ -1234,6 +1234,23 @@ namespace Arpg
             for (auto const& [id, rune] : runes)
                 if (id == skill.id)
                     lines.push_back(format("|cffa335ee%s|r: %s", rune->name, rune->text));
+            // A rune socketed but not working says why.
+            auto socket = s.sockets.find(skill.id);
+            if (socket != s.sockets.end())
+                if (RuneDef const* rune = FindRune(socket->second))
+                {
+                    bool active = false;
+                    for (auto const& [id, live] : runes)
+                        active = active || (id == skill.id && live == rune);
+                    if (!active)
+                    {
+                        if (SlotOf(s, skill.id) < 0)
+                            lines.push_back(format("|cffff4040%s does nothing: the skill is not in a slot.|r", rune->name));
+                        else
+                            lines.push_back(format("|cffff4040%s does nothing yet: it needs %u points in the skill (%u now).|r",
+                                                   rune->name, SOCKET_POINTS, uint32(SpentIn(s, skill.id))));
+                    }
+                }
 
             // The worn uniques that change it.
             for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -1252,6 +1269,8 @@ namespace Arpg
             }
             if (lines.size() == 2 && !total)
                 lines.push_back("|cff9d9d9dNothing adds to it yet: points in its tree, web nodes and gear with its tags all do.|r");
+            // Gear and buffs, the character's numbers, the damage it should do and what it did.
+            SkillDamageLines(player, uint8(skill.id), tags, lines);
             out.emplace_back(uint8(skill.id), std::move(lines));
         }
         return out;

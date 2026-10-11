@@ -151,6 +151,29 @@ namespace Arpg
         int32 meleeAreaPct = 0;
         int32 spellAreaPct = 0;
         int32 blockPct = 0;
+        // Item affixes' own stats (Arpg/ArpgAffixes.h); applied in Arpg/ArpgCharacter.cpp.
+        int32 attackSpeedPct = 0;    // swing speed
+        int32 castSpeedPct = 0;      // cast time cut
+        int32 meleeCritPct = 0;      // melee and ranged critical strike chance
+        int32 spellCritPct = 0;      // spell critical strike chance
+        int32 spellCritDamagePct = 0; // spell critical strike damage
+        int32 costPct = 0;           // mana cost cut
+        int32 healthPct = 0;         // maximum health
+        int32 manaPct = 0;           // maximum mana
+        int32 attackPower = 0;
+        int32 spellPower = 0;        // spell damage, every school
+        int32 resist[5] = {};        // fire, nature, frost, shadow, arcane
+        int32 lifeLeech = 0;         // of damage dealt, in thousandths
+        int32 manaLeech = 0;         // of damage dealt, in thousandths
+        int32 healthRegen = 0;       // health a second
+        int32 manaRegen = 0;         // mana a second
+        int32 damageTakenPct = 0;    // damage taken cut
+        int32 thorns = 0;            // damage back at each attacker in reach that hits
+        int32 elitePct = 0;          // damage to elites and bosses
+        int32 slaying[16] = {};      // damage to a creature type (CreatureType)
+        int32 globeHealPct = 0;      // healing from globes and the flask
+        int32 goldFindPct = 0;
+        int32 xpPct = 0;
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers

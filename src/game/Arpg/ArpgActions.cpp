@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgPacks.h"
 
@@ -12,6 +13,7 @@
 #include "Entities/GameObject.h"
 #include "Globals/ObjectMgr.h"
 #include "Maps/Map.h"
+#include "MotionGenerators/MotionMaster.h"
 #include "Maps/MapPersistentStateMgr.h"
 #include "Server/DBCStores.h"
 #include "Entities/Player.h"
@@ -36,7 +38,12 @@ namespace
     constexpr uint32 DODGE_COOLDOWN_MS = 2500;
     constexpr uint32 DODGE_EVADE_MS = 450;
     // Knockback speeds: about 0.42 s in the air (2 * 4 / 19.29) at 17 yd/s, some seven yards.
-    constexpr float DODGE_HORIZONTAL = 17.0f, DODGE_VERTICAL = 4.0f;
+    // The roll: a ground spline of DODGE_DISTANCE yards at DODGE_SPEED yards a second, along the
+    // ground (over a rise, up a stair) and stopping at a wall or a drop, the same length every
+    // time; the client rides it as it rides a Charge, standing on the ground under it.
+    constexpr float DODGE_DISTANCE = 7.5f, DODGE_SPEED = 20.0f;
+    // A roll blocked shorter than this (backed into a wall) does not move at all.
+    constexpr float DODGE_MIN = 1.0f;
 
     constexpr uint8 FLASK_MAX = 3;
     constexpr uint32 FLASK_CHARGE_POINTS = 10;
@@ -230,6 +237,12 @@ namespace Arpg
         if (player->hasUnitState(UNIT_STAT_NO_FREE_MOVE) || player->IsMounted() || player->IsTaxiFlying() ||
                 player->IsInWater() || player->IsFalling())
             return;
+        float const dx = x - player->GetPositionX(), dy = y - player->GetPositionY();
+        float const angle = (dx * dx + dy * dy) < 0.25f ? player->GetOrientation() : std::atan2(dy, dx);
+        Position end;
+        player->GetFirstCollisionPosition(end, DODGE_DISTANCE, angle);
+        if (player->GetDistance2d(end.x, end.y, DIST_CALC_NONE) < DODGE_MIN || !std::isfinite(end.z))
+            return;
         uint32 const now = WorldTimer::getMSTime();
         {
             std::lock_guard<std::mutex> guard(sActionsLock);
@@ -240,9 +253,7 @@ namespace Arpg
             s.evadeUntil = After(now, DODGE_EVADE_MS);
             s.dirty = true;
         }
-        float const dx = x - player->GetPositionX(), dy = y - player->GetPositionY();
-        float const angle = (dx * dx + dy * dy) < 0.25f ? player->GetOrientation() : std::atan2(dy, dx);
-        player->KnockBackWithAngle(angle, DODGE_HORIZONTAL, DODGE_VERTICAL);
+        player->GetMotionMaster()->MoveCharge(end.x, end.y, end.z, DODGE_SPEED);
     }
 
     bool Dodging(Unit const* unit)
@@ -267,9 +278,9 @@ namespace Arpg
             s.dirty = true;
         }
         uint32 const max = player->GetMaxHealth();
-        int32 const instant = int32(std::max<uint32>(1, max * FLASK_INSTANT_PCT / 100));
+        int32 const instant = int32(std::max<uint32>(1, uint32(float(max * FLASK_INSTANT_PCT / 100) * GlobeHealMod(player))));
         player->CastCustomSpell(player, SPELL_HEALING_POTION, &instant, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);
-        uint32 const tick = std::max<uint32>(1, max * FLASK_OVER_TIME_PCT / 100 / FLASK_TICKS);
+        uint32 const tick = std::max<uint32>(1, uint32(float(max * FLASK_OVER_TIME_PCT / 100 / FLASK_TICKS) * GlobeHealMod(player)));
         for (uint32 i = 1; i <= FLASK_TICKS; ++i)
         {
             player->m_events.AddEvent(new UnitLambdaEvent(*player, [tick](Unit& unit)
@@ -312,7 +323,7 @@ namespace Arpg
             if (!fresh)
                 return;
         }
-        ProcHeal(player, "Health Globe", std::max<uint32>(1, player->GetMaxHealth() * GLOBE_HEAL_PCT / 100));
+        ProcHeal(player, "Health Globe", std::max<uint32>(1, uint32(float(player->GetMaxHealth() * GLOBE_HEAL_PCT / 100) * GlobeHealMod(player))));
         SendGlobe(player, GLOBE_GONE, id, g);
     }
 

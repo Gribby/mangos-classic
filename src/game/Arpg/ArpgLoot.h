@@ -15,7 +15,9 @@
  * Nor does anything bind to an ARPG player, on pickup, equip or use (Arpg::ItemsBind).
  *
  *   SMSG_ARPG_LOOT: uint64 corpse, uint32 gold, uint8 item count, then per item:
- *                   uint8 loot slot, uint32 item id, uint32 display id, uint8 quality, uint8 count
+ *                   uint8 loot slot, uint32 item id, uint32 display id, uint8 quality (the rolled
+ *                   rarity, Arpg/ArpgAffixes.h: 6 a unique), uint8 count, uint8 a unique's border
+ *                   (its affixes' rarity; 0 for the rest)
  *   An empty list (no gold, no items) means nothing is left there for this player.
  */
 

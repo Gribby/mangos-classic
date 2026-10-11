@@ -25,9 +25,10 @@
  * A Warden in every vanilla dungeon: one trash spawn per instance, among those that load (each
  * eligible one at 1 in 12 as it settles, the 25th surely, so it stands in the wing the group is
  * in), is crowned a named rare with two themed affixes (a third from
- * level 30), and its players are told. It drops two blues and a 30% chance at a purple. Each final
- * boss (Arpg::Bosses) drops a Cache: gold, and for each player there a blue, a green and a 25%
- * chance at a purple.
+ * level 30), and its players are told. It drops two blue items, a 30% chance at a purple and a
+ * 35% chance at a unique. Each final boss (Arpg::Bosses) drops a Cache: gold, and for each player
+ * there a blue, a green, a 25% chance at a purple and a 50% chance at a unique (rolled rarities on
+ * base items, Arpg/ArpgAffixes.h).
  *
  * Difficulty tiers: Normal, Hard, Brutal, Torment I, II and III. A dungeon instance takes the
  * tier its first ARPG player asks for (the client's ARPG View page), as far as that player has

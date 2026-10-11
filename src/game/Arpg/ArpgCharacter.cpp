@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
@@ -30,13 +31,14 @@
 #include <cstring>
 #include <set>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <unordered_map>
 
 namespace
 {
     // Rune of Leech: this share of the damage heals.
-    constexpr uint32 RUNE_LEECH_PCT = 3;
+    constexpr uint32 RUNE_LEECH_PCT = 5;
     // Light of the Crusader: this share of a Seal hit's damage heals.
     constexpr uint32 CRUSADER_LIGHT_PCT = 10;
     // ARPG pacing: mana comes back from fighting, not from drinking, but slowly: a fight is paid
@@ -82,6 +84,17 @@ namespace
     constexpr int32 STA_PER_LIFE = 4;
     constexpr int32 INT_PER_AREA = 10;
     constexpr int32 SPI_PER_COOLDOWN = 10, COOLDOWN_CAP = 30;
+
+    // The item affixes' totals are capped where stacking them would break the game.
+    constexpr int32 ATTACK_SPEED_CAP = 50, CAST_SPEED_CAP = 40, COST_CAP = 50, CRIT_CAP = 30;
+    constexpr int32 LEECH_CAP = 100;           // thousandths of the damage dealt
+    constexpr int32 DAMAGE_TAKEN_CAP = 40;
+    constexpr float THORNS_REACH = 6.0f;
+    constexpr uint32 THORNS_VISUAL = 467;      // Thorns, for its look and its log line
+    // The sheet's record of a skill's hits: this long, at most this many.
+    constexpr uint32 HITS_WINDOW = 60000;
+    constexpr size_t HITS_MAX = 300;
+
 
     // The keystones' numbers.
     constexpr uint32 REFRESH_MS = 1000;
@@ -147,6 +160,12 @@ namespace
         uint32 combatSeen = 0;       // the last update the player was in combat
         uint32 lastRest = 0;         // the last rest tick
         float restCarry = 0.0f;      // the rest's fraction of a percent not yet given
+        // The item affixes' stat modifiers applied (ApplyCharacter).
+        int32 healthPct = 0, manaPct = 0, attackPower = 0, meleeCrit = 0;
+        int32 resist[5] = {};
+        std::vector<ObjectGuid> thornsDue;   // attackers the thorns strike at the next update
+        // Each skill's hits of the last HITS_WINDOW ms (time, damage), for the sheet's readout.
+        std::map<uint8, std::deque<std::pair<uint32, uint32>>> hits;
         uint32 sheetAt = 0;          // the last time the character sheet was built
         size_t sheetHash = 0;        // and what it said, so only a change is sent
     };
@@ -159,6 +178,14 @@ namespace
     {
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         return sRuntime[unit->GetObjectGuid()];
+    }
+
+    void RecordHit(Runtime& r, uint8 skill, uint32 damage, uint32 now)
+    {
+        std::deque<std::pair<uint32, uint32>>& hits = r.hits[skill];
+        hits.emplace_back(now, damage);
+        while (hits.size() > HITS_MAX || (!hits.empty() && WorldTimer::getMSTimeDiff(hits.front().first, now) > HITS_WINDOW))
+            hits.pop_front();
     }
 
     WebTotals const& NoTotals()
@@ -332,6 +359,43 @@ namespace
             lines.push_back(Format("%sArmour +%d%%|r", SHEET_ARPG, t.armourPct));
         if (t.blockPct)
             lines.push_back(Format("%sBlock chance +%d%%|r", SHEET_ARPG, t.blockPct));
+        // The item affixes' other stats, those the character has.
+        auto stat = [&](int32 value, char const* format)
+        {
+            if (value)
+                lines.push_back(Format(format, SHEET_ARPG, value));
+        };
+        stat(std::min(t.attackSpeedPct, ATTACK_SPEED_CAP), "%sAttack speed +%d%%|r");
+        stat(std::min(t.castSpeedPct, CAST_SPEED_CAP), "%sCast speed +%d%%|r");
+        stat(std::min(t.meleeCritPct, CRIT_CAP), "%sCritical strike chance +%d%%|r");
+        stat(std::min(t.spellCritPct, CRIT_CAP), "%sSpell critical strike chance +%d%%|r");
+        stat(t.spellCritDamagePct, "%sSpell critical strike damage +%d%%|r");
+        stat(std::min(t.costPct, COST_CAP), "%sMana costs -%d%%|r");
+        stat(t.attackPower, "%sAttack power +%d|r");
+        stat(t.spellPower, "%sSpell damage +%d|r");
+        stat(t.healthPct, "%sMaximum health +%d%%|r");
+        stat(t.manaPct, "%sMaximum mana +%d%%|r");
+        stat(t.healthRegen, "%sHealth +%d a second|r");
+        stat(t.manaRegen, "%sMana +%d a second|r");
+        if (t.lifeLeech)
+            lines.push_back(Format("%sLife leech %d.%d%% of damage|r", SHEET_ARPG, std::min(t.lifeLeech, LEECH_CAP) / 10, std::min(t.lifeLeech, LEECH_CAP) % 10));
+        if (t.manaLeech)
+            lines.push_back(Format("%sMana leech %d.%d%% of damage|r", SHEET_ARPG, std::min(t.manaLeech, LEECH_CAP) / 10, std::min(t.manaLeech, LEECH_CAP) % 10));
+        stat(std::min(t.damageTakenPct, DAMAGE_TAKEN_CAP), "%sDamage taken -%d%%|r");
+        stat(t.thorns, "%sThorns %d|r");
+        stat(t.elitePct, "%sDamage to elites and bosses +%d%%|r");
+        stat(t.globeHealPct, "%sGlobe and flask healing +%d%%|r");
+        stat(t.goldFindPct, "%sGold found +%d%%|r");
+        stat(t.xpPct, "%sExperience +%d%%|r");
+        {
+            std::string res;
+            static char const* const RES[5] = { "Fire", "Nature", "Frost", "Shadow", "Arcane" };
+            for (int i = 0; i < 5; ++i)
+                if (t.resist[i])
+                    res += Format("%s%s +%d", res.empty() ? "" : ", ", RES[i], t.resist[i]);
+            if (!res.empty())
+                lines.push_back(Format("%sResistances: %s|r", SHEET_ARPG, res.c_str()));
+        }
         std::string damage;
         for (uint8 tag = 0; tag < MAX_TAG; ++tag)
             if (tag != TAG_HEAL && t.tag[tag])
@@ -346,6 +410,21 @@ namespace
                     if (row.item == item->GetEntry())
                         lines.push_back(Format("|cffe6cc80%s|r: %s", item->GetProto()->Name1, row.text));
         return Joined(lines);
+    }
+
+    // The item affixes' leech: a share of each hit's damage back as health and mana, quietly
+    // (a stat, not a proc).
+    void Leech(Player* player, WebTotals const& t, uint32 damage)
+    {
+        if (!damage || !player->IsAlive())
+            return;
+        if (int32 const life = std::clamp(t.lifeLeech, 0, LEECH_CAP))
+            if (uint32 const heal = damage * uint32(life) / 1000)
+                player->ModifyHealth(int32(heal));
+        if (int32 const mana = std::clamp(t.manaLeech, 0, LEECH_CAP))
+            if (uint32 const gain = damage * uint32(mana) / 1000)
+                if (player->GetPowerType() == POWER_MANA)
+                    player->ModifyPower(POWER_MANA, int32(gain));
     }
 
     uint32 CrusadeStacks(Runtime const& r, uint32 now)
@@ -448,6 +527,7 @@ namespace
         haste += 4.0f * t.Rank(KEY_QUICKENED);
         if (t.Has(KEY_ZEAL) && AuraNamed(player, "Seal of the Crusader", player->GetObjectGuid()))
             haste += 10.0f * t.Rank(KEY_ZEAL);
+        haste += float(std::clamp(t.attackSpeedPct, 0, ATTACK_SPEED_CAP));
         return haste;
     }
 
@@ -523,6 +603,17 @@ namespace
     {
         UpdateTree(player);
         UpdateSheet(player, false);
+        {
+            // The item affixes' regeneration, a second's worth.
+            std::shared_ptr<WebTotals const> regen = TotalsOf(player);
+            if (regen && player->IsAlive())
+            {
+                if (regen->healthRegen > 0 && player->GetHealth() < player->GetMaxHealth())
+                    player->ModifyHealth(regen->healthRegen);
+                if (regen->manaRegen > 0 && player->GetPowerType() == POWER_MANA)
+                    player->ModifyPower(POWER_MANA, regen->manaRegen);
+            }
+        }
         SendNearbyChampions(player);
         std::shared_ptr<WebTotals const> totals = TotalsOf(player);
         WebTotals const& t = totals ? *totals : NoTotals();
@@ -582,6 +673,38 @@ namespace Arpg
             r.armourPct = t.armourPct;
         }
         player->UpdateBlockPercentage();
+        // The item affixes' stats, each as a modifier swapped for the new total.
+        auto swap = [player](UnitMods mod, UnitModifierType type, int32& applied, int32 want)
+        {
+            if (want == applied)
+                return;
+            if (applied)
+                player->HandleStatModifier(mod, type, float(applied), false);
+            if (want)
+                player->HandleStatModifier(mod, type, float(want), true);
+            applied = want;
+        };
+        swap(UNIT_MOD_HEALTH, TOTAL_PCT, r.healthPct, t.healthPct);
+        swap(UNIT_MOD_MANA, TOTAL_PCT, r.manaPct, t.manaPct);
+        {
+            int32 ranged = r.attackPower;
+            swap(UNIT_MOD_ATTACK_POWER_RANGED, TOTAL_VALUE, ranged, t.attackPower);
+            swap(UNIT_MOD_ATTACK_POWER, TOTAL_VALUE, r.attackPower, t.attackPower);
+        }
+        for (int i = 0; i < 5; ++i)
+            swap(UnitMods(UNIT_MOD_RESISTANCE_FIRE + i), TOTAL_VALUE, r.resist[i], t.resist[i]);
+        int32 const crit = std::clamp(t.meleeCritPct, 0, CRIT_CAP);
+        if (crit != r.meleeCrit)
+        {
+            for (BaseModGroup group : { CRIT_PERCENTAGE, RANGED_CRIT_PERCENTAGE })
+            {
+                if (r.meleeCrit)
+                    player->HandleBaseModValue(group, FLAT_MOD, float(r.meleeCrit), false);
+                if (crit)
+                    player->HandleBaseModValue(group, FLAT_MOD, float(crit), true);
+            }
+            r.meleeCrit = crit;
+        }
 
         SetHaste(player, r, HasteFor(player, t));
         // ARPG pacing on every class spell, beside the trees' modifiers: a 0.5 sec global
@@ -592,6 +715,15 @@ namespace Arpg
         {
             mods.push_back({ uint8(SPELLMOD_GLOBAL_COOLDOWN), uint8(SPELLMOD_PCT), ARPG_GCD_CUT_PCT, ~uint64(0) });
             mods.push_back({ uint8(SPELLMOD_CASTING_TIME), uint8(SPELLMOD_PCT), ARPG_CAST_TIME_PCT, ~uint64(0) });
+            // The item affixes' spell stats, over every class spell.
+            if (int32 const v = std::clamp(t.castSpeedPct, 0, CAST_SPEED_CAP))
+                mods.push_back({ uint8(SPELLMOD_CASTING_TIME), uint8(SPELLMOD_PCT), -v, ~uint64(0) });
+            if (int32 const v = std::clamp(t.costPct, 0, COST_CAP))
+                mods.push_back({ uint8(SPELLMOD_COST), uint8(SPELLMOD_PCT), -v, ~uint64(0) });
+            if (int32 const v = std::clamp(t.spellCritPct, 0, CRIT_CAP))
+                mods.push_back({ uint8(SPELLMOD_CRITICAL_CHANCE), uint8(SPELLMOD_FLAT), v, ~uint64(0) });
+            if (t.spellCritDamagePct > 0)
+                mods.push_back({ uint8(SPELLMOD_CRIT_DAMAGE_BONUS), uint8(SPELLMOD_PCT), t.spellCritDamagePct, ~uint64(0) });
         }
         SetSkillMods(player, r, mods);
         SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (r.stunImmune && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
@@ -635,6 +767,20 @@ namespace Arpg
         else
             r.restCarry = 0.0f;
         r.lastRest = now ? now : 1;
+
+        // Thorns: each attacker that hit since the last update.
+        if (!r.thornsDue.empty())
+        {
+            std::vector<ObjectGuid> const due = std::move(r.thornsDue);
+            r.thornsDue.clear();
+            std::shared_ptr<WebTotals const> totals = TotalsOf(player);
+            SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(THORNS_VISUAL);
+            if (totals && totals->thorns > 0 && shown && player->IsAlive())
+                for (ObjectGuid const& guid : due)
+                    if (Unit* foe = player->GetMap()->GetUnit(guid))
+                        if (foe->IsAlive() && player->IsWithinDistInMap(foe, THORNS_REACH))
+                            StrikeFoe(player, foe, shown, SPELL_SCHOOL_MASK_NATURE, uint32(totals->thorns));
+        }
 
         // Martyr: the damage taken since the last update strikes back.
         if (r.martyrPending && player->IsAlive())
@@ -691,7 +837,14 @@ namespace Arpg
     {
         // A pack follower hits for its share (ArpgPacks.h).
         if (attacker && attacker->GetTypeId() == TYPEID_UNIT)
-            return PackDamageMod(attacker);
+        {
+            float mod = PackDamageMod(attacker);
+            // Damage taken, the victim's item affixes.
+            if (victim && victim->GetTypeId() == TYPEID_PLAYER)
+                if (std::shared_ptr<WebTotals const> taken = TotalsOf(victim))
+                    mod *= 1.0f - std::clamp(taken->damageTakenPct, 0, DAMAGE_TAKEN_CAP) / 100.0f;
+            return mod;
+        }
         std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
         if (!totals)
             return 1.0f;
@@ -699,6 +852,16 @@ namespace Arpg
         Player const* player = static_cast<Player const*>(attacker);
         uint32 const tags = TagsOf(spellInfo);
         int32 pct = TagSum(t, tags & ~TagBit(TAG_HEAL));
+        // The item affixes against the target: elites and bosses, a creature type.
+        if (victim && victim->GetTypeId() == TYPEID_UNIT)
+        {
+            Creature const* foe = static_cast<Creature const*>(victim);
+            if (IsDungeonBoss(foe) || foe->IsWorldBoss() || (foe->IsElite() && !foe->GetMap()->IsDungeon()))
+                pct += t.elitePct;
+            uint32 const type = foe->GetCreatureType();
+            if (type < 16)
+                pct += t.slaying[type];
+        }
 
         if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_TWO_HANDED_MASTERY) && TwoHanded(player))
             pct += 12;
@@ -792,6 +955,14 @@ namespace Arpg
         }
         if (t.Has(KEY_CRUSADE))
             line(false, "Crusade: +4% per kill in the last 5 sec, up to 10 kills");
+        // The item affixes' bonuses against a kind of enemy.
+        if (t.elitePct)
+            line(false, Format("Gear: +%d%% to elites and bosses", t.elitePct).c_str());
+        static char const* const TYPE_NAME[16] = { "", "Beasts", "Dragonkin", "Demons", "Elementals", "Giants", "Undead",
+                                                   "Humanoids", "Critters", "Mechanicals", "", "", "", "", "", "" };
+        for (uint32 type = 1; type < 16; ++type)
+            if (t.slaying[type] && TYPE_NAME[type][0])
+                line(false, Format("Gear: +%d%% to %s", t.slaying[type], TYPE_NAME[type]).c_str());
         if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
             line(false, Format("Momentum: +%d%% per hit in a row, up to 5", int32(t.Rank(KEY_MOMENTUM))).c_str());
         if (t.Has(KEY_SENTENCE_PASSED))
@@ -804,6 +975,141 @@ namespace Arpg
             out.push_back(Format("%s%s area: %s size (%s)|r", SHEET_ARPG, melee ? "Melee" : "Spell",
                                  CappedPct(std::clamp(pct, 0, AREA_CAP), AREA_CAP).c_str(), melee ? "Strength" : "Intellect"));
         }
+    }
+
+    void SkillDamageLines(Player const* constPlayer, uint8 skill, uint32 tags, std::vector<std::string>& out)
+    {
+        Player* player = const_cast<Player*>(constPlayer);
+        // Gear and buffs: the auras that add to this skill's damage, by their spell's name.
+        // The damage tags' schools (the tags' order is not the schools').
+        static std::pair<Tag, uint32> const SCHOOL_OF[] =
+        {
+            { TAG_PHYSICAL, SPELL_SCHOOL_MASK_NORMAL }, { TAG_HOLY, SPELL_SCHOOL_MASK_HOLY },
+            { TAG_FIRE, SPELL_SCHOOL_MASK_FIRE }, { TAG_FROST, SPELL_SCHOOL_MASK_FROST },
+            { TAG_ARCANE, SPELL_SCHOOL_MASK_ARCANE }, { TAG_NATURE, SPELL_SCHOOL_MASK_NATURE },
+            { TAG_SHADOW, SPELL_SCHOOL_MASK_SHADOW },
+        };
+        uint32 schools = 0;
+        for (auto const& [tag, mask] : SCHOOL_OF)
+            if (tags & TagBit(tag))
+                schools |= mask;
+        if (!schools)
+            schools = SPELL_SCHOOL_MASK_NORMAL;
+        bool const melee = (tags & TagBit(TAG_MELEE)) != 0;
+        bool const spell = (tags & TagBit(TAG_SPELL)) != 0 || !melee;
+        auto aura = [&](AuraType type, bool use, char const* what, bool pct, bool bySchool)
+        {
+            if (!use)
+                return;
+            for (Aura* a : player->GetAurasByType(type))
+            {
+                Modifier const* m = a->GetModifier();
+                if (!m || !m->m_amount || (bySchool && !(m->m_miscvalue & schools)))
+                    continue;
+                char const* name = a->GetSpellProto()->SpellName[0];
+                bool const gear = !a->GetCastItemGuid().IsEmpty();
+                out.push_back(Format("%s  %+d%s %s|r |cff9d9d9d(%s, %s)|r", gear ? "|cffffffff" : "|cff80c0ff",
+                                     m->m_amount, pct ? "%" : "", what, name ? name : "?", gear ? "gear" : "buff"));
+            }
+        };
+        size_t const before = out.size();
+        out.push_back("|cffffd200Gear and buffs|r");
+        aura(SPELL_AURA_MOD_DAMAGE_DONE, spell, "spell damage", false, true);
+        aura(SPELL_AURA_MOD_DAMAGE_PERCENT_DONE, true, "damage", true, true);
+        aura(SPELL_AURA_MOD_ATTACK_POWER, melee, "attack power", false, false);
+        aura(SPELL_AURA_MOD_CRIT_PERCENT, melee, "critical strike chance", true, false);
+        aura(SPELL_AURA_MOD_SPELL_CRIT_CHANCE, spell, "spell critical strike chance", true, false);
+        aura(SPELL_AURA_MOD_SPELL_CRIT_CHANCE_SCHOOL, spell, "spell critical strike chance", true, true);
+        aura(SPELL_AURA_MOD_MELEE_HASTE, melee, "attack speed", true, false);
+        if (out.size() == before + 1)
+            out.back() = "|cff9d9d9dGear and buffs: nothing adds to it right now.|r";
+
+        // The character's own numbers behind it.
+        if (melee)
+            out.push_back(Format("|cffffffffAttack power %d, critical strike %.1f%%|r", int32(player->GetTotalAttackPowerValue(BASE_ATTACK)),
+                                 player->GetFloatValue(PLAYER_CRIT_PERCENTAGE)));
+        if (spell)
+            out.push_back(Format("|cffffffffSpell damage %d|r", player->SpellBaseDamageBonusDone(SpellSchoolMask(schools))));
+
+        // An estimate: the swing's, or the skill's best known rank's direct or periodic damage, with
+        // every bonus above, before the target's armour, resistances and its own modifiers.
+        if (skill == SKILL_STRIKE)
+        {
+            float const lo = player->GetFloatValue(UNIT_FIELD_MINDAMAGE), hi = player->GetFloatValue(UNIT_FIELD_MAXDAMAGE);
+            float const mod = DamageDoneMod(player, nullptr, nullptr);
+            out.push_back(Format("|cff20ff20Each swing: %d to %d, every %.2f sec|r", int32(lo * mod), int32(hi * mod),
+                                 player->GetAttackTime(BASE_ATTACK) / 1000.0f));
+        }
+        else
+        {
+            SpellEntry const* best = nullptr;
+            SpellEffectIndex effect = EFFECT_INDEX_0;
+            bool periodic = false;
+            for (auto const& [id, known] : player->GetSpellMap())
+            {
+                if (known.state == PLAYERSPELL_REMOVED || known.disabled)
+                    continue;
+                SpellEntry const* info = sSpellTemplate.LookupEntry<SpellEntry>(id);
+                if (!info || SkillOfSpell(player->getClass(), info) != SkillId(skill))
+                    continue;
+                for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+                {
+                    bool const direct = info->Effect[i] == SPELL_EFFECT_SCHOOL_DAMAGE;
+                    bool const dot = info->Effect[i] == SPELL_EFFECT_APPLY_AURA && info->EffectApplyAuraName[i] == SPELL_AURA_PERIODIC_DAMAGE;
+                    bool const ground = info->Effect[i] == SPELL_EFFECT_PERSISTENT_AREA_AURA && info->EffectApplyAuraName[i] == SPELL_AURA_PERIODIC_DAMAGE;
+                    if ((direct || dot || ground) && (!best || info->spellLevel > best->spellLevel))
+                    {
+                        best = info;
+                        effect = SpellEffectIndex(i);
+                        periodic = !direct;
+                    }
+                }
+            }
+            if (best)
+            {
+                // As SpellDamageBonusDone counts it, without its final spell modifier use: an
+                // estimate must never spend a charged modifier.
+                int32 const base = best->EffectBasePoints[effect] + 1;
+                int32 const spread = std::max(0, best->EffectDieSides[effect] - 1);
+                SpellSchoolMask const mask = GetSpellSchoolMask(best);
+                float pctMod = DamageDoneMod(player, nullptr, best);
+                for (Aura* a : player->GetAurasByType(SPELL_AURA_MOD_DAMAGE_PERCENT_DONE))
+                    if ((a->GetModifier()->m_miscvalue & mask) && a->GetSpellProto()->EquippedItemClass == -1 &&
+                            a->GetSpellProto()->EquippedItemInventoryTypeMask == 0)
+                        pctMod *= (a->GetModifier()->m_amount + 100.0f) / 100.0f;
+                int32 const bonus = player->SpellBonusWithCoeffs(best, effect, 0, player->SpellBaseDamageBonusDone(mask), 0, true);
+                auto finish = [&](int32 amount)
+                {
+                    float value = float(amount + bonus) * pctMod;
+                    player->ApplySpellMod(best->Id, periodic ? SPELLMOD_DOT : SPELLMOD_DAMAGE, value, false);
+                    return uint32(std::max(0.0f, value));
+                };
+                uint32 const lo = finish(std::max(1, base)), hi = finish(std::max(1, base + spread));
+                if (periodic)
+                    out.push_back(Format("|cff20ff20%s: about %u a tick|r", best->SpellName[0], lo));
+                else
+                    out.push_back(Format("|cff20ff20%s: about %u to %u a hit|r", best->SpellName[0], lo, hi));
+            }
+        }
+        // What it really did: the last minute's hits.
+        Runtime& r = R(player);
+        uint32 const now = WorldTimer::getMSTime();
+        auto it = r.hits.find(skill);
+        uint32 count = 0, total = 0, top = 0, last = 0;
+        if (it != r.hits.end())
+            for (auto const& [at, damage] : it->second)
+                if (WorldTimer::getMSTimeDiff(at, now) <= HITS_WINDOW)
+                {
+                    ++count;
+                    total += damage;
+                    top = std::max(top, damage);
+                    last = damage;
+                }
+        if (count)
+            out.push_back(Format("|cff20ff20Last minute: %u hits, %u on average, %u at most, the last %u|r",
+                                 count, total / count, top, last));
+        else
+            out.push_back("|cff9d9d9dLast minute: no hits yet. Use it, then look again.|r");
     }
 
     void UpdateSheet(Player* player, bool force)
@@ -847,6 +1153,28 @@ namespace Arpg
             data << uint8(id) << text;
         data << summary;
         player->GetSession()->SendPacket(data);
+    }
+
+    float XpGainMod(Unit const* gainer)
+    {
+        if (!gainer || gainer->GetTypeId() != TYPEID_PLAYER)
+            return 1.0f;
+        std::shared_ptr<WebTotals const> totals = TotalsOf(gainer);
+        return totals ? 1.0f + std::clamp(totals->xpPct, 0, 50) / 100.0f : 1.0f;
+    }
+
+    int32 SpellPowerBonus(Unit const* caster)
+    {
+        if (!caster || caster->GetTypeId() != TYPEID_PLAYER)
+            return 0;
+        std::shared_ptr<WebTotals const> totals = TotalsOf(caster);
+        return totals ? std::max(0, totals->spellPower) : 0;
+    }
+
+    float GlobeHealMod(Unit const* unit)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
+        return totals ? 1.0f + std::clamp(totals->globeHealPct, 0, 150) / 100.0f : 1.0f;
     }
 
     float HealingDoneMod(Unit const* healer, SpellEntry const* /*spellInfo*/)
@@ -951,6 +1279,17 @@ namespace Arpg
         {
             uint32 const now = WorldTimer::getMSTime();
             R(victim).combatSeen = now ? now : 1;
+            // Thorns, the item affixes': back at an attacker in reach, at the next update (not
+            // inside the attacker's own blow), once per attacker per update.
+            if (attacker && attacker->GetTypeId() == TYPEID_UNIT && victim->IsWithinDistInMap(attacker, THORNS_REACH))
+                if (std::shared_ptr<WebTotals const> totals = TotalsOf(victim))
+                    if (totals->thorns > 0)
+                    {
+                        Runtime& r = R(victim);
+                        if (std::find(r.thornsDue.begin(), r.thornsDue.end(), attacker->GetObjectGuid()) == r.thornsDue.end() &&
+                                r.thornsDue.size() < 16)
+                            r.thornsDue.push_back(attacker->GetObjectGuid());
+                    }
         }
         if (!damage || !victim || attacker == victim || !HasKeystone(victim, KEY_MARTYR))
             return;
@@ -1018,6 +1357,9 @@ namespace Arpg
         if (victim->GetTypeId() == TYPEID_UNIT)
             OnTelegraphAggro(static_cast<Creature*>(victim), attacker);
 
+        Leech(player, t, damage);
+        if (damage)
+            RecordHit(r, SKILL_STRIKE, damage, now);
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
             ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, damage * RUNE_LEECH_PCT / 100));
@@ -1088,6 +1430,8 @@ namespace Arpg
             Runtime& r = R(caster);
             uint32 const now = WorldTimer::getMSTime();
             r.combatSeen = now ? now : 1;
+            if (skill != SKILL_NONE)
+                RecordHit(r, uint8(skill), dealt, now);
             if (WorldTimer::getMSTimeDiff(r.lastManaHit, now) >= MANA_SPELL_EVERY)
             {
                 r.lastManaHit = now;
@@ -1095,6 +1439,7 @@ namespace Arpg
             }
         }
 
+        Leech(player, t, dealt);
         // Rune of Leech in the skill.
         if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
             ProcHeal(caster, "Rune of Leech", std::max<uint32>(1, dealt * RUNE_LEECH_PCT / 100));

@@ -18,6 +18,7 @@
 
 #include "Entities/Player.h"
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgAffixes.h"
@@ -2684,6 +2685,10 @@ void Player::GiveXP(uint32 xp, Creature* victim, float groupRate)
 {
     if (xp < 1)
         return;
+
+    // ARPG: a kill's experience grows with this player's own item affixes (Arpg/ArpgCharacter.h).
+    if (victim)
+        xp = std::max<uint32>(1, uint32(float(xp) * Arpg::XpGainMod(this)));
 
     if (!IsAlive())
         return;

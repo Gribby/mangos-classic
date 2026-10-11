@@ -121,8 +121,9 @@ per dungeon, a Cache at each final boss, and difficulty tiers (`character_arpg_t
 the server). Hooks: `Creature::AddToWorld` (through `Arpg::OnCreatureAdded`), `RemoveFromWorld`
 (`Arpg::OnCreatureRemoved`), the combat start in `Unit` (`OnScaledAggro`), the end of
 `Unit::CalculateMeleeDamage` and `CalculateSpellDamage` and `Aura::PeriodicTick` (`DamageCap`),
-and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a knockback; dodges
-in `Unit::RollMeleeOutcomeAgainst` and `SpellHitResult` while airborne) and the flask (kills fill
+and the corpse loot (`OnDungeonLoot`). `Arpg/ArpgActions.{h,cpp}`: the roll (a 7.5 yard ground
+charge spline to the first wall or drop; dodges in `Unit::RollMeleeOutcomeAgainst` and
+`SpellHitResult` while it runs) and the flask (kills fill
 it from `Unit::JustKilledCreature`). Design: the client's `docs/ARPG-PROGRESSION.md`.
 
 ## Threats
@@ -172,15 +173,21 @@ negative one would wrap).
 
 ## Item affixes
 
-`Arpg/ArpgAffixes.{h,cpp}`: a seed per eligible loot item (`LootItem::arpgSeed`, set after the
-corpse's loot is made), kept with the stored item (`Loot::SendItem`, `character_arpg_item`),
-added into the totals when worn (`ArpgTree.cpp` Refresh; `Player::_ApplyItemMods` refreshes),
-and sent to the client after the hello and on store (`SMSG_ARPG_ITEM_AFFIXES`, 0x343). Values grow
-with item level exponentially (a level 20 drop about a seventh of a level 60 one, Molten Core a
-third more, Blackwing Lair about double, Naxxramas three to four times) and with the dungeon tier
-the item dropped at (x1.15 Hard to x2 Torment III, kept in `character_arpg_item.tier`, added to
-an older table the first time the table is used); a raid purple and a Torment drop roll one more affix, and the tooltip
-names the tier. Capped stats (movement, block, cooldown recovery, armour) are capped per affix.
+`Arpg/ArpgAffixes.{h,cpp}`: Diablo's loot on vanilla's items. Every weapon and armour piece
+dropped for an ARPG player is a base: an ordinary item (vanilla white or green) rolls white, green
+(1-2 affixes), blue (3-4) or purple (5-6) by who dropped it and the tier; a named blue or purple
+is a unique (gold, its own stats its implicits, 3-4 or 5-6 affixes by its vanilla colour). A seed
+and the rarity per loot item (`LootItem::arpgSeed`, `arpgTier`, `arpgRarity`, set after the
+corpse's loot is made; `Arpg::AddRolledItem` for the Warden's, the Cache's and test loot), kept
+with the stored item (`Loot::SendItem`, `character_arpg_item`, columns added to an older table),
+added into the totals when worn (`ArpgTree.cpp` Refresh; `Player::_ApplyItemMods` refreshes), and
+sent after the hello and on store (`SMSG_ARPG_ITEM_AFFIXES` 0x343: guid, the colour shown, a
+unique's border, lines). `SMSG_ARPG_LOOT`'s quality is the rolled rarity, with a border byte. About
+sixty affixes (the client's `docs/ARPG-CHARACTER.md`, "Items"), applied in
+`Arpg/ArpgCharacter.cpp` (stat modifiers, spell modifiers, haste, leech, regeneration, thorns,
+damage taken and against kinds of enemy in `DamageDoneMod`), `Unit::SpellBaseDamageBonusDone`
+(spell damage), `Formulas::Gain` (experience) and the globes and flask. Values grow with item
+level exponentially and with the dungeon tier; a raid or Torment drop rolls its range's top.
 
 ## Codex pages and runes
 

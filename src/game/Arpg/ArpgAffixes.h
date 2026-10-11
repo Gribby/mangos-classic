@@ -1,22 +1,33 @@
 /*
  * ARPG item affixes, for the benilla ARPG client (the client's docs/ARPG-CHARACTER.md, "Items").
  *
- * Every green, blue and purple weapon or armour piece that drops for an ARPG player, other than a
- * named unique (Arpg/ArpgUniques.h), rolls affixes on top of its own stats: green 1, blue 2,
- * purple 3, from the passive web's vocabulary: attributes, tag damage (+% Holy, Physical, Area,
- * Melee, Spell), healing, armour, block, movement speed, cooldown recovery and life on kill. A
- * value scales with the item level, so a level 60 drop rolls up to the table's top and a level 10
- * one about a sixth of it.
+ * Loot is Diablo's, on vanilla's items. Every weapon and armour piece that drops for an ARPG
+ * player is a base, and rolls its rarity at the drop:
+ *   - An ordinary item (vanilla's whites and greens, their random "of the Bear" suffix kept as its
+ *     implicit) rolls white (no affixes), green (1-2), blue (3-4) or purple (5-6), by who dropped
+ *     it (trash, an elite or champion, a rare, Warden or boss) and the dungeon tier; its name
+ *     shows the rolled colour, whatever vanilla's colour was.
+ *   - A named blue or purple (and every mechanic's item, Arpg/ArpgUniques.h) is a unique: gold,
+ *     its own stats its implicits, and affixes as a rare (a vanilla blue, 3-4) or an epic (a
+ *     vanilla purple, 5-6), which its border shows.
+ * A raid drop (item level 66+) or a Torment one rolls the top of its range. The affixes come from a
+ * long list (attributes, damage by tag and by creature type, attack and cast speed, crit, spell
+ * power, leech, regeneration, resistances, damage taken, thorns, movement, gold and experience),
+ * some limited to weapons, armour, boots, shields or jewellery. A value scales with the item level
+ * (exponentially: a level 20 drop about a seventh of a level 60 one, Naxxramas three to four
+ * times) and the tier it dropped at.
  *
- * An item's affixes come from one seed: rolled into the loot item when the corpse's loot is made
- * (SeedArpgLoot), mixed with the looter's guid and kept with the item when it is stored
- * (character_arpg_item: item guid, entry, seed, created at runtime; loaded by the item's current
- * holder, so a trade keeps them), and derived again whenever they are needed, so they never drift.
- * Worn, they add into the player's totals beside the web's and the skill trees'.
+ * An item's affixes come from one seed: rolled into the loot item with its rarity when the corpse's
+ * loot is made (SeedArpgLoot), mixed with the looter's guid and kept with the item when it is stored
+ * (character_arpg_item: item guid, entry, seed, tier, rarity; columns added to an older table),
+ * loaded by the item's current holder, so a trade keeps them, and derived again whenever they are
+ * needed. Worn, they add into the player's totals beside the web's and the skill trees'.
  *
- *   SMSG_ARPG_ITEM_AFFIXES (0x343): uint16 count, per item: uint64 item guid, cstring lines
- *     ("\n" between them). Sent after the hello for every affixed item the character has, and
- *     when one is stored.
+ *   SMSG_ARPG_ITEM_AFFIXES (0x343): uint16 count, per item: uint64 item guid, uint8 the colour its
+ *     name shows (Rarity), uint8 a unique's border (its affixes' Rarity; 0 for the rest), cstring
+ *     lines ("\n" between). Sent after the hello for every affixed item, and when one is stored.
+ *   SMSG_ARPG_LOOT's per-item quality is the rolled rarity, and a unique's border follows it
+ *     (Arpg/ArpgLoot.h).
  */
 
 #ifndef MANGOS_ARPG_AFFIXES_H
@@ -28,17 +39,39 @@
 #include <string>
 #include <vector>
 
+class Creature;
 class Item;
 class Loot;
 class Player;
+struct LootItem;
 
 namespace Arpg
 {
-    // `loot` was just made for an ARPG looter, at dungeon tier `tier`: seed its affix-taking items.
-    void SeedArpgLoot(Loot* loot, Player* looter, uint8 tier);
+    // An item's rolled rarity: its name's colour (the item qualities' numbers) and its affix count.
+    enum Rarity : uint8
+    {
+        RARITY_NONE   = 0,    // not rolled
+        RARITY_WHITE  = 1,
+        RARITY_GREEN  = 2,
+        RARITY_BLUE   = 3,
+        RARITY_PURPLE = 4,
+        RARITY_UNIQUE = 6,    // the Artifact colour, gold
+    };
 
-    // `item` was stored from a loot item with `seed`: keep the seed with it, and tell the client.
-    void OnAffixedItemStored(Player* player, Item* item, uint32 seed, uint8 tier);
+    // `loot` was just made for an ARPG looter, at dungeon tier `tier`, dropped by `source` (for its
+    // rarity odds; nullptr: trash): seed its items and roll their rarities; gold find adds gold.
+    void SeedArpgLoot(Loot* loot, Player* looter, uint8 tier, Creature const* source, bool goldFind = true);
+
+    // Add a random base item near item level `level` at `rarity` to `loot` (RARITY_UNIQUE: a
+    // random unique). False when none was found or the loot is full.
+    bool AddRolledItem(Loot* loot, uint8 rarity, uint32 level);
+
+    // `item` was stored from a loot item with `seed`, `tier` and `rarity`: keep them with it, and
+    // tell the client.
+    void OnAffixedItemStored(Player* player, Item* item, uint32 seed, uint8 tier, uint8 rarity);
+
+    // The quality a ground loot item shows (its rolled rarity), and a unique's border.
+    uint8 LootItemQuality(LootItem const* item, uint8* border);
 
     // Add the player's worn items' affixes to `totals`.
     void AddItemTotals(Player const* player, WebTotals& totals);
@@ -49,8 +82,8 @@ namespace Arpg
     // After the hello: load the character's affixed items and send their lines.
     void LoadAffixes(Player* player);
 
-    // The tooltip lines of an item of `entry` and `level` with `seed`.
-    std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier);
+    // The tooltip lines of an item of `entry` with `seed`, `tier` and `rarity`.
+    std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier, uint8 rarity);
 }
 
 #endif

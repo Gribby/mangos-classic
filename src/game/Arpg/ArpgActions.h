@@ -1,10 +1,11 @@
 /*
  * ARPG actions: the dodge roll and the health flask, for the benilla ARPG client.
  *
- * Dodge (CMSG_ARPG_ACTION kind 17, float x, y: a WoW-space point to roll toward): a low leap of
- * about seven yards, sent to the client as a knockback (SMSG_MOVE_KNOCK_BACK, which the client
- * flies and the anticheat expects), every DODGE_COOLDOWN_MS at most. While airborne
- * (DODGE_EVADE_MS) melee blows and hostile spells aimed at the player are dodged. Not while
+ * Dodge (CMSG_ARPG_ACTION kind 17, float x, y: a WoW-space point to roll toward): a dash of 7.5
+ * yards along the ground, a charge spline (MoveCharge, which the client rides as a Charge, on the
+ * ground under it), to the first wall or drop on the way (GetFirstCollisionPosition), so a small
+ * rise never cuts it short; every DODGE_COOLDOWN_MS at most. For DODGE_EVADE_MS melee blows and
+ * hostile spells aimed at the player are dodged. Not while
  * rooted, stunned, feared, confused, mounted, on a taxi, swimming or falling.
  *
  * Flask (kind 18): a charge heals 15% of maximum health at once and 25% more over three seconds.

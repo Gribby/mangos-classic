@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgCodex.h"
@@ -242,6 +243,7 @@ namespace
     // Warden loot: two blues and a chance at a purple; a Cache's per player: a blue, a green and
     // a chance at a purple.
     constexpr uint32 WARDEN_EPIC_PCT = 30, CACHE_EPIC_PCT = 25;
+    constexpr uint32 WARDEN_UNIQUE_PCT = 35, CACHE_UNIQUE_PCT = 50;
     constexpr uint32 WARDEN_ITEM_LEVELS = 3, CACHE_ITEM_LEVELS = 5;
 
     std::mutex sWardenLock;
@@ -350,10 +352,10 @@ namespace
         TellMap(creature->GetMap(), text.c_str());
     }
 
-    void AddPick(Loot* loot, uint32 quality, uint32 level)
+    // A base item at `rarity` (a Rarity: green, blue, purple; or a unique) near `level`.
+    void AddPick(Loot* loot, uint8 rarity, uint32 level)
     {
-        if (uint32 const id = PickRandomItem(quality, level))
-            loot->AddItem(id, 1, 0, Item::GenerateItemRandomPropertyId(id));
+        (void)AddRolledItem(loot, rarity, level);
     }
 
     // --- Difficulty tiers ---
@@ -776,9 +778,11 @@ namespace Arpg
         if (warden)
         {
             for (uint32 i = 0; i < 2 + extraBlues; ++i)
-                AddPick(loot, ITEM_QUALITY_RARE, level + WARDEN_ITEM_LEVELS);
+                AddPick(loot, RARITY_BLUE, level + WARDEN_ITEM_LEVELS);
             if (roll_chance_i(int32(WARDEN_EPIC_PCT + epicBonus)))
-                AddPick(loot, ITEM_QUALITY_EPIC, level + WARDEN_ITEM_LEVELS);
+                AddPick(loot, RARITY_PURPLE, level + WARDEN_ITEM_LEVELS);
+            if (roll_chance_i(int32(WARDEN_UNIQUE_PCT + epicBonus)))
+                AddPick(loot, RARITY_UNIQUE, level + WARDEN_ITEM_LEVELS);
             std::string name = ChampionName(victim);
             if (name.empty())
                 name = victim->GetName();
@@ -793,16 +797,19 @@ namespace Arpg
             OnCodexLoot(victim, false, false, tier);
             return;
         }
-        // The Cache: gold, and for each player there a blue, a green and a chance at a purple.
+        // The Cache: gold, and for each player there a blue, a green, and chances at a purple and a
+        // unique.
         uint32 const players = std::max<uint32>(1, victim->GetMap()->GetPlayersCountExceptGMs());
         loot->AddArpgDevGold(level * level * 2 * players * (1 + tier));
         for (uint32 i = 0; i < players; ++i)
         {
             for (uint32 j = 0; j < 1 + extraBlues; ++j)
-                AddPick(loot, ITEM_QUALITY_RARE, level + CACHE_ITEM_LEVELS);
-            AddPick(loot, ITEM_QUALITY_UNCOMMON, level + CACHE_ITEM_LEVELS);
+                AddPick(loot, RARITY_BLUE, level + CACHE_ITEM_LEVELS);
+            AddPick(loot, RARITY_GREEN, level + CACHE_ITEM_LEVELS);
             if (roll_chance_i(int32(CACHE_EPIC_PCT + epicBonus)))
-                AddPick(loot, ITEM_QUALITY_EPIC, level + CACHE_ITEM_LEVELS);
+                AddPick(loot, RARITY_PURPLE, level + CACHE_ITEM_LEVELS);
+            if (roll_chance_i(int32(CACHE_UNIQUE_PCT + epicBonus)))
+                AddPick(loot, RARITY_UNIQUE, level + CACHE_ITEM_LEVELS);
         }
         // The Codex drops after the Cache's gear, so a full corpse keeps the gear.
         OnCodexLoot(victim, false, true, tier);

@@ -51,6 +51,15 @@ namespace Arpg
     // The multiplier on damage `attacker` deals with `spellInfo` (nullptr: a weapon swing).
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo);
 
+    // The item affixes' experience bonus for `gainer`, a multiplier.
+    float XpGainMod(Unit const* gainer);
+
+    // The item affixes' spell damage (every school) for `caster`.
+    int32 SpellPowerBonus(Unit const* caster);
+
+    // The multiplier on a globe's or the flask's healing for `unit`.
+    float GlobeHealMod(Unit const* unit);
+
     // The multiplier on healing `healer` does with `spellInfo`.
     float HealingDoneMod(Unit const* healer, SpellEntry const* spellInfo);
 
@@ -122,6 +131,11 @@ namespace Arpg
     // The sheet's lines for the conditional damage bonuses DamageDoneMod adds to a spell of
     // `tags` in `skill` (keystones that depend on the weapon, the enemies around, a kill streak).
     void ConditionalDamageLines(Player const* player, uint32 tags, uint8 skill, std::vector<std::string>& out);
+
+    // The sheet's lines for `skill` (of `tags`) beyond the tags: the gear and buff auras that add
+    // to it, the character's attack power or spell damage, an estimate of its damage, and its
+    // hits of the last minute.
+    void SkillDamageLines(Player const* player, uint8 skill, uint32 tags, std::vector<std::string>& out);
 
     // Send `player` its sheet if it changed (`force`: now, whatever it last sent).
     void UpdateSheet(Player* player, bool force);

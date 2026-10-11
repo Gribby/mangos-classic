@@ -1448,7 +1448,7 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         // ARPG: a Warden's drops and a final boss's Cache (Arpg/ArpgDungeons.h).
         Arpg::OnDungeonLoot(victim);
         // ARPG: the drops' affix seeds (Arpg/ArpgAffixes.h).
-        Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient(), Arpg::LootTier(victim->GetMap()));
+        Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient(), Arpg::LootTier(victim->GetMap()), victim);
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.
         Arpg::OnCorpseLoot(victim);
     }
@@ -7236,6 +7236,9 @@ int32 Unit::SpellBaseDamageBonusDone(SpellSchoolMask schoolMask)
             i->GetSpellProto()->EquippedItemInventoryTypeMask == 0)          //  0 == any inventory type (not wand then)
             DoneAdvertisedBenefit += i->GetModifier()->m_amount;
     }
+
+    // ARPG: the item affixes' spell damage (Arpg/ArpgCharacter.h).
+    DoneAdvertisedBenefit += Arpg::SpellPowerBonus(this);
 
     if (GetTypeId() == TYPEID_PLAYER)
     {

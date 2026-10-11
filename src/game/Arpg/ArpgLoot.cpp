@@ -137,8 +137,10 @@ namespace Arpg
             data << uint8(item->lootSlot);
             data << uint32(item->itemId);
             data << uint32(item->itemProto->DisplayInfoID);
-            data << uint8(item->itemProto->Quality);
+            uint8 border = 0;
+            data << uint8(LootItemQuality(item, &border));
             data << uint8(item->count);
+            data << uint8(border);
         }
         player->GetSession()->SendPacket(data);
     }
@@ -309,18 +311,26 @@ namespace Arpg
             chat.PSendSysMessage("ARPG test loot: %u Codex items.", added);
             return;
         }
+        // The quality asked for is the rarity rolled: grey is junk, white to purple a random base
+        // item at that rarity, and orange (legendary) a unique.
         for (uint8 i = 0; i < count; ++i)
         {
             uint32 const q = quality == DEV_LOOT_MIXED ? MixedQuality() : quality;
-            if (uint32 const id = PickDevItem(q, ilvl))
+            if (q == ITEM_QUALITY_POOR)
             {
-                loot->AddItem(id, 1, 0, Item::GenerateItemRandomPropertyId(id));
-                ++added;
+                if (uint32 const id = PickDevItem(q, ilvl))
+                {
+                    loot->AddItem(id, 1, 0, 0);
+                    ++added;
+                }
+                continue;
             }
+            if (AddRolledItem(loot, q >= ITEM_QUALITY_LEGENDARY ? RARITY_UNIQUE : uint8(q), ilvl))
+                ++added;
         }
         loot->AddArpgDevGold(urand(ilvl * 10, ilvl * 60));
         uint8 const tier = WantedTier(player);
-        SeedArpgLoot(loot, player, tier);
+        SeedArpgLoot(loot, player, tier, nullptr, false);
         // Lootable again, whatever the kill decided for an empty corpse.
         corpse->SetFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE);
         OnCorpseLoot(corpse);
