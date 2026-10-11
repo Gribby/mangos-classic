@@ -1289,7 +1289,7 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         // ARPG: Lightforged's bolt, Blessed Recovery's cooldowns.
         Arpg::OnCharacterHeal(this, affectiveCaster, unitTarget, addhealth);
         // ARPG: a critical heal may ready another skill (Arpg/ArpgProcs.h).
-        Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, target->isCrit, true);
+        Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, target->isCrit, true, addhealth);
 
         if (affectiveCaster)
             unitTarget->getHostileRefManager().threatAssist(affectiveCaster, float(gain) * 0.5f * sSpellMgr.GetSpellThreatMultiplier(m_spellInfo), m_spellInfo, false, m_IsTriggeredSpell);
@@ -1350,7 +1350,8 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         {
             Arpg::OnSpellDamage(this, affectiveCaster, unitTarget, spellDamageInfo.damage + spellDamageInfo.absorb);
             // ARPG: a hit or a crit may ready another skill (Arpg/ArpgProcs.h).
-            Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, (spellDamageInfo.HitInfo & SPELL_HIT_TYPE_CRIT) != 0, false);
+            Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, (spellDamageInfo.HitInfo & SPELL_HIT_TYPE_CRIT) != 0, false,
+                                 spellDamageInfo.damage);
         }
 
         // Bloodthirst

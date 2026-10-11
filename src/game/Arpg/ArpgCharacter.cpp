@@ -1310,6 +1310,9 @@ namespace Arpg
     void OnDamageTaken(Unit* victim, Unit* attacker, uint32 damage)
     {
         OnPackDamage(attacker, victim, damage);
+        // A heavy blow may set off a unique's power (Arpg/ArpgProcs.h).
+        if (attacker && attacker != victim)
+            OnProcStruck(victim, attacker, damage);
         // Leech, the item affixes': every hit an ARPG player deals, whatever dealt it (a swing, a
         // spell, a tick, an added hit, thorns).
         // Only from an enemy, and no more than the health it had left.
@@ -1406,7 +1409,7 @@ namespace Arpg
             RecordHit(r, SKILL_STRIKE, damage, now);
         // A critical swing may ready another skill (Arpg/ArpgProcs.h).
         if (damage)
-            OnProcSwing(attacker, victim, crit);
+            OnProcSwing(attacker, victim, crit, damage);
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
             ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, damage * RUNE_LEECH_PCT / 100));

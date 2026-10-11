@@ -5,6 +5,10 @@
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgSkills.h"
+#include "Arpg/ArpgUniques.h"
+
+#include "Globals/ObjectMgr.h"
+#include "Maps/Map.h"
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
@@ -32,6 +36,7 @@ namespace
         TRIG_HEAL_CRIT,       // a heal crits
         TRIG_LANDED,          // a spell lands on an enemy (its auras applied)
         TRIG_KILL,            // a kill
+        TRIG_STRUCK,          // a blow of a fifth of the player's health or more lands on them
     };
 
     enum Effect : uint8
@@ -41,7 +46,16 @@ namespace
         EFFECT_CRIT,          // ... is sure to critically strike
         EFFECT_FREE,          // ... costs nothing
         EFFECT_RESET,         // the targets' cooldowns end now
+        // Done at once, not readied:
+        EFFECT_HEAL,          // heal `value`% of maximum health
+        EFFECT_MANA,          // restore `value`% of maximum mana
+        EFFECT_EXPLODE,       // the slain foe bursts: `value`% of its maximum health as Fire nearby
+        EFFECT_ARC,           // `value`% of the hit leaps to up to 3 enemies near the struck one
+        EFFECT_NOVA,          // `value`% of the hit (or blow) strikes every enemy around the player
     };
+
+    // Which uniques a pool power may fall on (POOL_NONE: an authored row, not in the pool).
+    enum Pool : uint8 { POOL_NONE, POOL_ANY, POOL_WEAPON, POOL_ARMOUR };
 
     struct ProcDef
     {
@@ -58,7 +72,15 @@ namespace
         uint32 lasts;                         // ms a readied cast waits
         char const* targetWords;              // "Holy Light or Flash of Light", for the lines
         char const* text;                     // the rune's or the item's line
+        Pool pool = POOL_NONE;                // a power any unique may carry (Arpg::UniquePowerText)
     };
+
+    // The stock spells whose hits stand for the powers' damage: Fire, Nature, Holy.
+    constexpr uint32 EXPLODE_LOOK = 133, ARC_LOOK = 403, NOVA_LOOK = 2812;
+    constexpr float EXPLODE_RANGE = 8.0f, ARC_RANGE = 10.0f, NOVA_RANGE = 8.0f;
+    constexpr uint32 ARC_COUNT = 3;
+    // A burst never deals more than this share of the player's own health (a boss's corpse).
+    constexpr uint32 EXPLODE_CAP_PCT = 60;
 
     // A readied cast spent by a spell lasts until that spell is done, or this long at most.
     constexpr uint32 SPENT_GRACE = 10000;
@@ -103,6 +125,40 @@ namespace
             { 0, 6220, "Meteor Shard", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_FREE,
               { "Sinister Strike", "Eviscerate", "Heroic Strike", "Mortal Strike" }, 0, 8000, 8000, "finishing strike",
               "A critical swing makes your next Sinister Strike, Eviscerate, Heroic Strike or Mortal Strike cost nothing (once every 8 sec)." },
+
+            // --- The unique power pool: every other named unique carries one (by its entry) ---
+            { 0, 0, "Edge of Ruin", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_DAMAGE, { "*" }, 40, 6000, 8000, "spell",
+              "A critical swing makes your next spell deal 40% more (once every 6 sec).", POOL_WEAPON },
+            { 0, 0, "Reaper's Haste", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_INSTANT, { "*" }, 0, 15000, 10000, "spell",
+              "A kill makes your next spell instant (once every 15 sec).", POOL_ANY },
+            { 0, 0, "Font of Power", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_FREE, { "*" }, 0, 8000, 10000, "spell",
+              "A critical spell makes your next spell cost nothing (once every 8 sec).", POOL_ANY },
+            { 0, 0, "Bloodthirst", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 6, 1000, 0, "",
+              "Each kill heals you for 6% of your maximum health.", POOL_WEAPON },
+            { 0, 0, "Soul Siphon", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 4, 1000, 0, "",
+              "Each kill restores 4% of your maximum mana.", POOL_ANY },
+            { 0, 0, "Pyre", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_EXPLODE, {}, 15, 500, 0, "",
+              "Enemies you slay explode for 15% of their maximum health as Fire damage to enemies within 8 yards.", POOL_ANY },
+            { 0, 0, "Thunder Edge", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_ARC, {}, 35, 1000, 0, "",
+              "A critical swing arcs lightning to 3 nearby enemies for 35% of the hit.", POOL_WEAPON },
+            { 0, 0, "Storm Conduit", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_ARC, {}, 30, 1000, 0, "",
+              "A critical spell arcs lightning to 3 nearby enemies for 30% of the hit.", POOL_ANY },
+            { 0, 0, "Second Wind", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 15, 30000, 0, "",
+              "A heavy blow (a fifth of your health) heals you for 15% of your maximum health (once every 30 sec).", POOL_ARMOUR },
+            { 0, 0, "Mender's Grace", TRIG_HEAL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_INSTANT, { "*" }, 0, 10000, 10000, "spell",
+              "A critical heal makes your next spell instant (once every 10 sec).", POOL_ANY },
+            { 0, 0, "Executioner", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_CRIT, { "*" }, 0, 8000, 10000, "spell",
+              "A kill makes your next spell a sure critical strike (once every 8 sec).", POOL_WEAPON },
+            { 0, 0, "Wellspring", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 3, 2000, 0, "",
+              "A critical swing restores 3% of your maximum mana.", POOL_WEAPON },
+            { 0, 0, "Bastion", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_NOVA, {}, 50, 8000, 0, "",
+              "A heavy blow makes you strike back with holy fire: 50% of it to every enemy within 8 yards (once every 8 sec).", POOL_ARMOUR },
+            { 0, 0, "Wrathstorm", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_NOVA, {}, 25, 3000, 0, "",
+              "A critical spell bursts with holy fire: 25% of the hit to every enemy within 8 yards (once every 3 sec).", POOL_ANY },
+            { 0, 0, "Vampiric Edge", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 3, 1500, 0, "",
+              "A critical swing heals you for 3% of your maximum health.", POOL_WEAPON },
+            { 0, 0, "Ironskin", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 10, 15000, 0, "",
+              "A heavy blow restores 10% of your maximum mana (once every 15 sec).", POOL_ARMOUR },
         };
         return procs;
     }
@@ -191,6 +247,73 @@ namespace
         return false;
     }
 
+    // An authored unique (a mechanic of Arpg/ArpgUniques.h, or an item row above) keeps its own.
+    bool Authored(uint32 item)
+    {
+        for (UniqueMechanic const& u : Uniques())
+            if (u.item == item)
+                return true;
+        for (ProcDef const& def : Procs())
+            if (def.item == item)
+                return true;
+        return false;
+    }
+
+    // The pool row unique `item` carries, or -1: a named blue or purple weapon or armour piece
+    // that is not authored takes one, the same one always (by its entry), fitting its kind.
+    int PowerRow(uint32 item)
+    {
+        static std::mutex lock;
+        static std::unordered_map<uint32, int> cache;
+        {
+            std::lock_guard<std::mutex> guard(lock);
+            auto it = cache.find(item);
+            if (it != cache.end())
+                return it->second;
+        }
+        int row = -1;
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(item);
+        bool const equips = proto && proto->Quality >= ITEM_QUALITY_RARE && proto->Quality <= ITEM_QUALITY_EPIC &&
+                            (proto->Class == ITEM_CLASS_WEAPON || proto->Class == ITEM_CLASS_ARMOR) &&
+                            proto->InventoryType != INVTYPE_NON_EQUIP && proto->InventoryType != INVTYPE_BODY &&
+                            proto->InventoryType != INVTYPE_TABARD && proto->InventoryType != INVTYPE_BAG &&
+                            proto->InventoryType != INVTYPE_QUIVER && proto->InventoryType != INVTYPE_AMMO;
+        if (equips && !Authored(item))
+        {
+            bool const weapon = proto->Class == ITEM_CLASS_WEAPON;
+            uint32 const type = proto->InventoryType;
+            bool const jewel = type == INVTYPE_NECK || type == INVTYPE_FINGER || type == INVTYPE_TRINKET;
+            std::vector<int> fits;
+            std::vector<ProcDef> const& procs = Procs();
+            for (size_t i = 0; i < procs.size(); ++i)
+            {
+                Pool const pool = procs[i].pool;
+                if (pool == POOL_ANY || (pool == POOL_WEAPON && weapon) || (pool == POOL_ARMOUR && !weapon && !jewel))
+                    fits.push_back(int(i));
+            }
+            if (!fits.empty())
+                row = fits[(item * 2654435761u >> 7) % fits.size()];
+        }
+        std::lock_guard<std::mutex> guard(lock);
+        cache[item] = row;
+        return row;
+    }
+
+    // The pool rows the player's worn uniques carry.
+    std::vector<size_t> WornPowers(Player const* player)
+    {
+        std::vector<size_t> out;
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            if (Item* it = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                if (!it->IsBroken())
+                {
+                    int const row = PowerRow(it->GetEntry());
+                    if (row >= 0)
+                        out.push_back(size_t(row));
+                }
+        return out;
+    }
+
     using Sockets = std::vector<std::pair<SkillId, uint8>>;
 
     bool Socketed(Sockets const& sockets, SkillId skill, uint8 rune)
@@ -201,9 +324,13 @@ namespace
         return false;
     }
 
-    // Whether `player` has proc `def`: the rune socketed in a skill, or the item worn.
-    bool Has(Player const* player, ProcDef const& def, Sockets const& sockets)
+    // Whether `player` has proc row `row`: the rune socketed in a skill, the item worn, or a worn
+    // unique carrying the pool power.
+    bool Has(Player const* player, size_t row, Sockets const& sockets, std::vector<size_t> const& worn)
     {
+        ProcDef const& def = Procs()[row];
+        if (def.pool != POOL_NONE)
+            return std::find(worn.begin(), worn.end(), row) != worn.end();
         if (def.item)
             return Wears(player, def.item);
         return Socketed(sockets, Arpg::SKILL_NONE, def.rune);
@@ -227,6 +354,70 @@ namespace
         return true;
     }
 
+    // The effects done at once (heal, mana, damage): outside the lock, as a kill they cause trips
+    // procs again (its row's cooldown, already set, stops a chain).
+    void Act(Player* player, ProcDef const& def, Unit* victim, uint32 amount)
+    {
+        auto foes = [&](WorldObject* centre, float range, Unit const* skip)
+        {
+            std::vector<Unit*> out;
+            for (Unit* unit : EnemiesNear(centre, range))
+                if (unit != skip && unit->IsAlive() && MayCatchUnit(player, unit, nullptr))
+                    out.push_back(unit);
+            return out;
+        };
+        auto strike = [&](std::vector<Unit*> const& units, uint32 look, uint32 school, uint32 dealt, char const* verb)
+        {
+            SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(look);
+            if (!spell || units.empty() || !dealt)
+                return;
+            for (Unit* unit : units)
+                StrikeFoe(player, unit, spell, school, dealt);
+            ReportProc(player, PROC_DAMAGE, 0, def.name, "%s %u %s for %u.", verb, uint32(units.size()),
+                       units.size() == 1 ? "enemy" : "enemies", dealt);
+        };
+        switch (def.effect)
+        {
+            case EFFECT_HEAL:
+                ProcHeal(player, def.name, std::max<uint32>(1, player->GetMaxHealth() * uint32(def.value) / 100));
+                break;
+            case EFFECT_MANA:
+                ProcMana(player, def.name, std::max<uint32>(1, player->GetMaxPower(POWER_MANA) * uint32(def.value) / 100));
+                break;
+            case EFFECT_EXPLODE:
+            {
+                if (!victim)
+                    break;
+                uint32 const cap = player->GetMaxHealth() * EXPLODE_CAP_PCT / 100;
+                uint32 const dealt = std::min(cap, victim->GetMaxHealth() * uint32(def.value) / 100);
+                strike(foes(victim, EXPLODE_RANGE, victim), EXPLODE_LOOK, SPELL_SCHOOL_MASK_FIRE, dealt, "bursts onto");
+                break;
+            }
+            case EFFECT_ARC:
+            {
+                if (!victim)
+                    break;
+                std::vector<Unit*> near = foes(victim, ARC_RANGE, victim);
+                std::sort(near.begin(), near.end(), [victim](Unit* a, Unit* b) { return victim->GetDistance(a) < victim->GetDistance(b); });
+                if (near.size() > ARC_COUNT)
+                    near.resize(ARC_COUNT);
+                strike(near, ARC_LOOK, SPELL_SCHOOL_MASK_NATURE, amount * uint32(def.value) / 100, "arcs to");
+                break;
+            }
+            case EFFECT_NOVA:
+                strike(foes(player, NOVA_RANGE, nullptr), NOVA_LOOK, SPELL_SCHOOL_MASK_HOLY, amount * uint32(def.value) / 100, "strikes");
+                break;
+            default:
+                break;
+        }
+    }
+
+    bool Readies(Effect effect)
+    {
+        return effect == EFFECT_INSTANT || effect == EFFECT_DAMAGE || effect == EFFECT_CRIT || effect == EFFECT_FREE;
+    }
+
+    // A readying effect, or a cooldown reset; the caller holds sLock.
     void Fire(Player* player, size_t row, uint32 now)
     {
         ProcDef const& def = Procs()[row];
@@ -291,8 +482,9 @@ namespace
             ReportProc(player, PROC_EFFECT, 0, def.name, "readies your next %s: %s.", def.targetWords, words);
     }
 
-    // Something that may set procs off happened: `spell` (nullptr: the swing) with `trigger`.
-    void Trip(Unit* unit, Trigger trigger, SpellEntry const* spell)
+    // Something that may set procs off happened: `spell` (nullptr: the swing) with `trigger`, on
+    // `victim` (the struck or slain unit), for `amount` (the hit, the heal, the blow).
+    void Trip(Unit* unit, Trigger trigger, SpellEntry const* spell, Unit* victim = nullptr, uint32 amount = 0)
     {
         if (!unit || unit->GetTypeId() != TYPEID_PLAYER || !Active(unit))
             return;
@@ -300,21 +492,31 @@ namespace
         uint32 const now = WorldTimer::getMSTime();
         std::vector<ProcDef> const& procs = Procs();
         Sockets const sockets = SocketedRunes(player);
-        std::lock_guard<std::mutex> guard(sLock);
-        PlayerProcs& pp = sProcs[player->GetObjectGuid()];
-        for (size_t i = 0; i < procs.size(); ++i)
+        std::vector<size_t> const worn = WornPowers(player);
+        std::vector<size_t> acts;
         {
-            ProcDef const& def = procs[i];
-            if (def.trigger != trigger)
-                continue;
-            auto ready = pp.readyAt.find(i);
-            if (ready != pp.readyAt.end() && Later(ready->second, now))
-                continue;
-            if (!Has(player, def, sockets) || !Fires(player, def, spell, sockets))
-                continue;
-            pp.readyAt[i] = now + def.icd;
-            Fire(player, i, now);
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerProcs& pp = sProcs[player->GetObjectGuid()];
+            for (size_t i = 0; i < procs.size(); ++i)
+            {
+                ProcDef const& def = procs[i];
+                if (def.trigger != trigger)
+                    continue;
+                auto ready = pp.readyAt.find(i);
+                if (ready != pp.readyAt.end() && Later(ready->second, now))
+                    continue;
+                if (!Has(player, i, sockets, worn) || !Fires(player, def, spell, sockets))
+                    continue;
+                pp.readyAt[i] = now + def.icd;
+                if (Readies(def.effect) || def.effect == EFFECT_RESET)
+                    Fire(player, i, now);
+                else
+                    acts.push_back(i);
+            }
         }
+        for (size_t i : acts)
+            if (player->IsAlive())
+                Act(player, procs[i], victim, amount);
     }
 
     void Drop(Player* player, PlayerProcs& pp, size_t at)
@@ -322,6 +524,37 @@ namespace
         if (pp.readied[at].mod)
             player->AddSpellMod(pp.readied[at].mod, false); // deletes it
         pp.readied.erase(pp.readied.begin() + at);
+    }
+
+    // Whether `info` deals damage or heals (directly, by weapon, or over time).
+    bool HitsOrHeals(SpellEntry const* info)
+    {
+        for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
+        {
+            switch (info->Effect[i])
+            {
+                case SPELL_EFFECT_SCHOOL_DAMAGE: case SPELL_EFFECT_HEAL: case SPELL_EFFECT_WEAPON_DAMAGE:
+                case SPELL_EFFECT_WEAPON_DAMAGE_NOSCHOOL: case SPELL_EFFECT_NORMALIZED_WEAPON_DMG:
+                case SPELL_EFFECT_WEAPON_PERCENT_DAMAGE: case SPELL_EFFECT_HEALTH_LEECH:
+                    return true;
+                case SPELL_EFFECT_APPLY_AURA: case SPELL_EFFECT_PERSISTENT_AREA_AURA:
+                    switch (info->EffectApplyAuraName[i])
+                    {
+                        case SPELL_AURA_PERIODIC_DAMAGE: case SPELL_AURA_PERIODIC_HEAL: case SPELL_AURA_PERIODIC_LEECH:
+                        case SPELL_AURA_PERIODIC_TRIGGER_SPELL:
+                            return true;
+                        default:
+                            break;
+                    }
+                    break;
+                // A Judgement's damage comes from the Seal it releases.
+                case SPELL_EFFECT_DUMMY: case SPELL_EFFECT_TRIGGER_SPELL:
+                    return true;
+                default:
+                    break;
+            }
+        }
+        return false;
     }
 
     // A spell a proc's own readied mod should not count: added hits, triggered spells.
@@ -350,13 +583,40 @@ namespace Arpg
         return out;
     }
 
-    void OnProcSwing(Unit* attacker, Unit* victim, bool crit)
+    char const* UniquePowerText(uint32 item)
     {
-        if (crit && victim)
-            Trip(attacker, TRIG_SWING_CRIT, nullptr);
+        int const row = PowerRow(item);
+        return row < 0 ? nullptr : Procs()[size_t(row)].text;
     }
 
-    void OnProcSpellHit(Spell* spell, Unit* caster, Unit* target, bool crit, bool heal)
+    char const* UniquePowerName(uint32 item)
+    {
+        int const row = PowerRow(item);
+        return row < 0 ? nullptr : Procs()[size_t(row)].name;
+    }
+
+    void OnProcSwing(Unit* attacker, Unit* victim, bool crit, uint32 damage)
+    {
+        if (crit && victim)
+            Trip(attacker, TRIG_SWING_CRIT, nullptr, victim, damage);
+    }
+
+    void OnProcStruck(Unit* victim, Unit* attacker, uint32 damage)
+    {
+        if (!victim || !attacker || victim == attacker || !victim->IsAlive() || damage * 5 < victim->GetMaxHealth() ||
+                victim->GetTypeId() != TYPEID_PLAYER || !Active(victim))
+            return;
+        // The blow is not dealt yet (Unit::DealDamage asks first): a moment later, so a heal
+        // lands after it, and only if the player lived through it.
+        ObjectGuid const from = attacker->GetObjectGuid();
+        victim->m_events.AddEvent(new UnitLambdaEvent(*victim, [from, damage](Unit& unit)
+        {
+            if (unit.IsInWorld() && unit.IsAlive())
+                Trip(&unit, TRIG_STRUCK, nullptr, unit.GetMap()->GetUnit(from), damage);
+        }), victim->m_events.CalculateTime(1));
+    }
+
+    void OnProcSpellHit(Spell* spell, Unit* caster, Unit* target, bool crit, bool heal, uint32 amount)
     {
         // A triggered spell counts here (a Seal's hit, a Judgement's), an added hit does not.
         if (!spell || spell->IsArpgSecondary() || !target)
@@ -365,12 +625,12 @@ namespace Arpg
         if (heal)
         {
             if (crit)
-                Trip(caster, TRIG_HEAL_CRIT, info);
+                Trip(caster, TRIG_HEAL_CRIT, info, target, amount);
             return;
         }
-        Trip(caster, TRIG_SPELL_HIT, info);
+        Trip(caster, TRIG_SPELL_HIT, info, target, amount);
         if (crit)
-            Trip(caster, TRIG_SPELL_CRIT, info);
+            Trip(caster, TRIG_SPELL_CRIT, info, target, amount);
     }
 
     void OnProcLanded(Spell* spell, Unit* caster, Unit* target)
@@ -383,7 +643,7 @@ namespace Arpg
     void OnProcKill(Player* killer, Unit* victim)
     {
         if (killer && victim && victim != killer)
-            Trip(killer, TRIG_KILL, nullptr);
+            Trip(killer, TRIG_KILL, nullptr, victim, 0);
     }
 
     void OnProcCast(Spell* spell)
@@ -429,7 +689,10 @@ namespace Arpg
                 Drop(player, pp, i);
                 continue;
             }
-            // Damage and crit wait for the hit: they go when the spell is done.
+            // Damage and crit wait for the hit: they go when the spell is done. A spell that neither
+            // hits nor heals (a Seal, a blessing) does not spend them.
+            if (!HitsOrHeals(info))
+                continue;
             r.spentBy = spell;
             r.spentAt = now;
         }
@@ -464,12 +727,13 @@ namespace Arpg
         if (pp.readied.empty())
             return;
         Sockets const sockets = SocketedRunes(player);
+        std::vector<size_t> const worn = WornPowers(player);
         for (size_t i = pp.readied.size(); i-- > 0;)
         {
             Readied const& r = pp.readied[i];
             bool const stale = r.spentBy ? !Later(r.spentAt + SPENT_GRACE, now) : !Later(r.expires, now);
             // Gone with what readied it: the rune unsocketed, the item taken off.
-            if (stale || !Has(player, Procs()[r.proc], sockets))
+            if (stale || !Has(player, r.proc, sockets, worn))
                 Drop(player, pp, i);
         }
     }

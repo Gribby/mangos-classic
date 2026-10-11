@@ -8,11 +8,13 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgUniques.h"
 
 #include "Database/DatabaseEnv.h"
 #include "Entities/Creature.h"
+#include "Entities/Bag.h"
 #include "Entities/Item.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
@@ -512,6 +514,11 @@ namespace
             std::snprintf(buf, sizeof(buf), "%sUnique|r %s(%s: %u affixes)|r", RARITY_COLOUR[RARITY_UNIQUE],
                           RARITY_COLOUR[bracket], RARITY_NAME[bracket], uint32(rolled.size()));
             lines.emplace_back(buf);
+            // Its power, when it carries one from the pool (an authored one's comes with the
+            // mechanics table, Arpg/ArpgUniques.h).
+            if (char const* power = UniquePowerText(proto->ItemId))
+                lines.push_back(std::string(RARITY_COLOUR[RARITY_UNIQUE]) + UniquePowerName(proto->ItemId) + ":|r " +
+                                RARITY_COLOUR[RARITY_UNIQUE] + power + "|r");
         }
         tier = std::min<uint8>(tier, MAX_TIER);
         if (!rolled.empty() && tier)
@@ -727,6 +734,26 @@ namespace Arpg
             }
             while (result->NextRow());
         }
+        // A unique the character came by another way (a quest reward, from before the ARPG) has
+        // no row: it still shows that it is one, and its power.
+        std::unordered_set<ObjectGuid> sent;
+        for (Shown const& shown : lines)
+            sent.insert(shown.guid);
+        auto addUnseeded = [&](Item* item)
+        {
+            if (!item || sent.count(item->GetObjectGuid()) || !Takes(item->GetProto()) || !UniqueBase(item->GetProto()))
+                return;
+            Seeded s;
+            s.entry = item->GetEntry();
+            lines.push_back(ShownOf(item, s));
+            sent.insert(item->GetObjectGuid());
+        };
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+            addUnseeded(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
+        for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+            if (Bag* container = dynamic_cast<Bag*>(player->GetItemByPos(INVENTORY_SLOT_BAG_0, bag)))
+                for (uint32 i = 0; i < container->GetBagSize(); ++i)
+                    addUnseeded(container->GetItemByPos(uint8(i)));
         SendLines(player, lines);
         RefreshTotals(player);
     }
