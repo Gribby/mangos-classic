@@ -936,9 +936,16 @@ namespace Arpg
         return NearestTo(caster, center, radius, count);
     }
 
-    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount)
+    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount,
+                   SpellEntry const* look)
     {
-        DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount);
+        if (look && unit->IsAlive())
+        {
+            ShowImpact(unit, look, SpellSchoolMask(look->GetSchoolMask()));
+            DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount, false);
+        }
+        else
+            DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount);
     }
 
     void SendHolyBolt(Player* player, Unit* to, uint32 amount)

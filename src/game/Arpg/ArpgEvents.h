@@ -21,11 +21,14 @@
  *     uint16 need, uint32 ms left, cstring title, cstring objective. To the zone's ARPG players
  *     on a change and every few seconds.
  *
- * Bounties. Each ARPG character holds three, for zones and dungeons near its level: complete
- * events in a zone, slay its creatures, slay its champions and rares, or defeat a dungeon's final
- * boss. A finished bounty pays at once (a share of a level's XP, gold, orbs, a rolled item) and a
- * new one takes its slot; one can be abandoned for another (CMSG_ARPG_ACTION kind 25, uint8
- * slot). Saved in character_arpg_bounty (guid, slot, kind, target, have, need), made if missing.
+ * Bounties belong to the zone the character is in: three for it (complete its events, slay its
+ * creatures, slay its champions and rares; the third now and then a dungeon of its level), kept
+ * per zone so going back finds them as left. A city or a zone the character has outlevelled by
+ * more than 5 has none; a dungeon keeps the zone's it was entered from. Nothing is handed in: a
+ * finished bounty pays at once (a share of a level's XP, gold, orbs, a rolled item) and a new one
+ * of its kind takes its slot; one can be abandoned for another (CMSG_ARPG_ACTION kind 25, uint8
+ * slot). Saved in character_arpg_zone_bounty (guid, zone, slot, kind, target, have, need), made if
+ * missing.
  *
  *   SMSG_ARPG_BOUNTIES (0x34A): uint8 count, per bounty: uint8 slot, uint8 kind, uint16 have,
  *     uint16 need, cstring title, cstring reward.

@@ -504,11 +504,21 @@ namespace
         uint16 have = 0, need = 0;
     };
 
+    // A character's bounties belong to the zone it is in: three for that zone (complete its
+    // events, slay its creatures, slay its champions and rares, or now and then defeat a dungeon of
+    // its level), kept per zone, so going back finds them as they were left. A city, or a zone the
+    // character has outlevelled, has none; a dungeon keeps the zone's it was entered from.
     struct PlayerBounties
     {
         bool loaded = false;
+        uint32 zone = 0;        // the zone they are for; 0: none here
         Bounty slot[BOUNTY_SLOTS];
     };
+
+    // A zone this far below the character has no bounties (its creatures give no XP).
+    constexpr int32 OUTLEVELLED = 5;
+    // The chance the third bounty is a dungeon's, when one suits the zone.
+    constexpr uint32 DUNGEON_BOUNTY_PCT = 35;
 
     std::mutex sBountyLock;
     std::unordered_map<ObjectGuid, PlayerBounties> sBounties;
@@ -518,19 +528,21 @@ namespace
         static bool const created = []()
         {
             CharacterDatabase.DirectExecute(
-                "CREATE TABLE IF NOT EXISTS character_arpg_bounty ("
-                "guid INT UNSIGNED NOT NULL, slot TINYINT UNSIGNED NOT NULL, kind TINYINT UNSIGNED NOT NULL, "
-                "target INT UNSIGNED NOT NULL, have SMALLINT UNSIGNED NOT NULL, need SMALLINT UNSIGNED NOT NULL, "
-                "PRIMARY KEY (guid, slot)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG bounties (Arpg/ArpgEvents.h)'");
+                "CREATE TABLE IF NOT EXISTS character_arpg_zone_bounty ("
+                "guid INT UNSIGNED NOT NULL, zone INT UNSIGNED NOT NULL, slot TINYINT UNSIGNED NOT NULL, "
+                "kind TINYINT UNSIGNED NOT NULL, target INT UNSIGNED NOT NULL, have SMALLINT UNSIGNED NOT NULL, "
+                "need SMALLINT UNSIGNED NOT NULL, PRIMARY KEY (guid, zone, slot)) "
+                "ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG bounties, per zone (Arpg/ArpgEvents.h)'");
             return true;
         }();
         (void)created;
     }
 
-    void SaveBounty(Player* player, uint8 slot, Bounty const& b)
+    void SaveBounty(Player* player, uint32 zone, uint8 slot, Bounty const& b)
     {
-        CharacterDatabase.PExecute("REPLACE INTO character_arpg_bounty (guid, slot, kind, target, have, need) VALUES (%u, %u, %u, %u, %u, %u)",
-                                   player->GetGUIDLow(), uint32(slot), uint32(b.kind), b.target, uint32(b.have), uint32(b.need));
+        CharacterDatabase.PExecute("REPLACE INTO character_arpg_zone_bounty (guid, zone, slot, kind, target, have, need) "
+                                   "VALUES (%u, %u, %u, %u, %u, %u, %u)", player->GetGUIDLow(), zone, uint32(slot),
+                                   uint32(b.kind), b.target, uint32(b.have), uint32(b.need));
     }
 
     std::string ZoneName(uint32 zone)
@@ -546,57 +558,104 @@ namespace
         return "a dungeon";
     }
 
-    // A new bounty for `player`, unlike the ones it holds.
-    Bounty Generate(Player* player, PlayerBounties const& held)
+    ZoneRange const* FindZone(uint32 map, uint32 zone)
     {
-        uint32 const level = player->GetLevel();
-        auto fits = [level](uint8 low, uint8 high) { return int32(low) <= int32(level) + 3 && int32(high) >= int32(level) - 2; };
-        auto taken = [&](uint8 kind, uint32 target)
-        {
-            for (Bounty const& b : held.slot)
-                if (b.kind == kind && b.target == target)
-                    return true;
-            return false;
-        };
-        std::vector<uint32> zones;
         for (ZoneRange const& z : ZONES)
-            if (fits(z.low, z.high))
-                zones.push_back(z.zone);
-        // The player's own zone first, when it suits.
-        uint32 const here = player->GetZoneId();
-        bool hereFits = std::find(zones.begin(), zones.end(), here) != zones.end();
-        std::vector<uint32> dungeons;
-        for (DungeonRange const& d : DUNGEONS)
-            if (fits(d.low, d.high))
-                dungeons.push_back(d.map);
-        for (int tries = 0; tries < 20; ++tries)
+            if (z.map == map && z.zone == zone)
+                return &z;
+        return nullptr;
+    }
+
+    // The zone `player`'s bounties should be for now; `keep` when they stay as they are (a
+    // dungeon, a flight).
+    uint32 BountyZoneFor(Player* player, bool& keep)
+    {
+        keep = false;
+        uint32 const map = player->GetMapId();
+        if ((map != 0 && map != 1) || player->IsTaxiFlying())
         {
-            Bounty b;
-            uint32 const roll = urand(1, 100);
-            b.kind = roll <= 30 ? BOUNTY_EVENTS : roll <= 60 ? BOUNTY_SLAY : roll <= 80 ? BOUNTY_CHAMPIONS : BOUNTY_DUNGEON;
-            if (b.kind == BOUNTY_DUNGEON)
-            {
-                if (dungeons.empty())
-                    continue;
-                b.target = dungeons[urand(0, uint32(dungeons.size() - 1))];
-                b.need = 1;
-            }
-            else
-            {
-                if (zones.empty())
-                    continue;
-                b.target = hereFits && tries < 6 ? here : zones[urand(0, uint32(zones.size() - 1))];
-                b.need = uint16(b.kind == BOUNTY_EVENTS ? 2 : b.kind == BOUNTY_SLAY ? urand(20, 30) : urand(2, 4));
-            }
-            if (!taken(b.kind, b.target))
-                return b;
+            keep = true;
+            return 0;
         }
-        // Nothing new left: slay anywhere near.
+        ZoneRange const* z = FindZone(map, player->GetZoneId());
+        if (!z || int32(z->high) + OUTLEVELLED < int32(player->GetLevel()))
+            return 0;
+        return z->zone;
+    }
+
+    // A new bounty for `slot` of `zone`'s: slot 0 its events, 1 its creatures, 2 its champions
+    // and rares, or a dungeon of its level.
+    Bounty Generate(uint32 zone, uint8 slot)
+    {
         Bounty b;
-        b.kind = BOUNTY_SLAY;
-        b.target = zones.empty() ? here : zones.front();
-        b.need = 25;
+        b.target = zone;
+        switch (slot)
+        {
+            case 0:
+                b.kind = BOUNTY_EVENTS;
+                b.need = 2;
+                return b;
+            case 1:
+                b.kind = BOUNTY_SLAY;
+                b.need = uint16(urand(20, 30));
+                return b;
+            default:
+                break;
+        }
+        ZoneRange const* z = nullptr;
+        for (ZoneRange const& range : ZONES)
+            if (range.zone == zone)
+                z = &range;
+        std::vector<uint32> dungeons;
+        if (z)
+            for (DungeonRange const& d : DUNGEONS)
+                if (int32(d.low) <= int32(z->high) + 2 && int32(d.high) >= int32(z->low) + 2)
+                    dungeons.push_back(d.map);
+        if (!dungeons.empty() && roll_chance_i(int32(DUNGEON_BOUNTY_PCT)))
+        {
+            b.kind = BOUNTY_DUNGEON;
+            b.target = dungeons[urand(0, uint32(dungeons.size() - 1))];
+            b.need = 1;
+            return b;
+        }
+        b.kind = BOUNTY_CHAMPIONS;
+        b.need = uint16(urand(2, 4));
         return b;
+    }
+
+    // `zone`'s bounties for `player`, as saved, the missing ones made.
+    PlayerBounties LoadZone(Player* player, uint32 zone)
+    {
+        PlayerBounties pb;
+        pb.loaded = true;
+        pb.zone = zone;
+        if (!zone)
+            return pb;
+        EnsureBountyTable();
+        if (auto result = CharacterDatabase.PQuery("SELECT slot, kind, target, have, need FROM character_arpg_zone_bounty "
+                                                   "WHERE guid = %u AND zone = %u", player->GetGUIDLow(), zone))
+        {
+            do
+            {
+                Field* f = result->Fetch();
+                uint32 const slot = f[0].GetUInt32();
+                if (slot >= BOUNTY_SLOTS)
+                    continue;
+                Bounty& b = pb.slot[slot];
+                b.kind = uint8(f[1].GetUInt32());
+                b.target = f[2].GetUInt32();
+                b.have = uint16(f[3].GetUInt32());
+                b.need = uint16(f[4].GetUInt32());
+            }
+            while (result->NextRow());
+        }
+        for (uint8 i = 0; i < BOUNTY_SLOTS; ++i)
+            if (!pb.slot[i].kind || pb.slot[i].kind > BOUNTY_DUNGEON || !pb.slot[i].need)
+            {
+                pb.slot[i] = Generate(zone, i);
+                SaveBounty(player, zone, i, pb.slot[i]);
+            }
+        return pb;
     }
 
     std::string Title(Bounty const& b)
@@ -604,10 +663,11 @@ namespace
         char buf[128];
         switch (b.kind)
         {
-            case BOUNTY_EVENTS:    std::snprintf(buf, sizeof(buf), "%s: complete %u events", ZoneName(b.target).c_str(), uint32(b.need)); break;
-            case BOUNTY_SLAY:      std::snprintf(buf, sizeof(buf), "%s: slay %u enemies", ZoneName(b.target).c_str(), uint32(b.need)); break;
-            case BOUNTY_CHAMPIONS: std::snprintf(buf, sizeof(buf), "%s: slay %u champions or rares", ZoneName(b.target).c_str(), uint32(b.need)); break;
-            case BOUNTY_DUNGEON:   std::snprintf(buf, sizeof(buf), "%s: defeat its final boss", DungeonName(b.target)); break;
+            // The tracker heads them with the zone's name, so they need not say it.
+            case BOUNTY_EVENTS:    std::snprintf(buf, sizeof(buf), "Complete %u events", uint32(b.need)); break;
+            case BOUNTY_SLAY:      std::snprintf(buf, sizeof(buf), "Slay %u enemies", uint32(b.need)); break;
+            case BOUNTY_CHAMPIONS: std::snprintf(buf, sizeof(buf), "Slay %u champions or rares", uint32(b.need)); break;
+            case BOUNTY_DUNGEON:   std::snprintf(buf, sizeof(buf), "Defeat the final boss of %s", DungeonName(b.target)); break;
             default:               std::snprintf(buf, sizeof(buf), "?"); break;
         }
         return buf;
@@ -636,9 +696,11 @@ namespace
             std::lock_guard<std::mutex> guard(sBountyLock);
             copy = sBounties[player->GetObjectGuid()];
         }
+        // None here (a city, an outlevelled zone): the board is empty.
+        uint8 const count = copy.zone ? BOUNTY_SLOTS : 0;
         WorldPacket data(SMSG_ARPG_BOUNTIES, 1 + BOUNTY_SLOTS * 80);
-        data << uint8(BOUNTY_SLOTS);
-        for (uint8 i = 0; i < BOUNTY_SLOTS; ++i)
+        data << uint8(count);
+        for (uint8 i = 0; i < count; ++i)
         {
             Bounty const& b = copy.slot[i];
             data << uint8(i) << uint8(b.kind) << uint16(b.have) << uint16(b.need);
@@ -652,7 +714,7 @@ namespace
     {
         ChatHandler chat(player);
         uint32 const level = player->GetLevel();
-        std::string const title = Title(b);
+        std::string const title = b.kind == BOUNTY_DUNGEON ? Title(b) : ZoneName(b.target) + ": " + Title(b);
         if (level < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL))
         {
             uint32 const xp = std::max<uint32>(1, player->GetUInt32Value(PLAYER_NEXT_LEVEL_XP) * BOUNTY_XP_PERMILLE[b.kind] / 1000);
@@ -674,12 +736,14 @@ namespace
             return;
         std::vector<std::pair<uint8, Bounty>> done;
         std::vector<std::pair<uint8, Bounty>> changed;
+        uint32 zone;
         {
             std::lock_guard<std::mutex> guard(sBountyLock);
             auto it = sBounties.find(player->GetObjectGuid());
-            if (it == sBounties.end() || !it->second.loaded)
+            if (it == sBounties.end() || !it->second.loaded || !it->second.zone)
                 return;
             PlayerBounties& pb = it->second;
+            zone = pb.zone;
             for (uint8 i = 0; i < BOUNTY_SLOTS; ++i)
             {
                 Bounty& b = pb.slot[i];
@@ -689,7 +753,7 @@ namespace
                 if (b.have >= b.need)
                 {
                     done.emplace_back(i, b);
-                    b = Generate(player, pb);
+                    b = Generate(pb.zone, i);
                 }
                 changed.emplace_back(i, b);
             }
@@ -699,7 +763,35 @@ namespace
         for (auto const& [slot, b] : done)
             Pay(player, slot, b);
         for (auto const& [slot, b] : changed)
-            SaveBounty(player, slot, b);
+            SaveBounty(player, zone, slot, b);
+        SendBounties(player);
+    }
+
+    // The character moved: its bounties follow the zone it is in (see PlayerBounties).
+    void CheckBountyZone(Player* player, bool force = false)
+    {
+        bool keep;
+        uint32 const want = BountyZoneFor(player, keep);
+        {
+            std::lock_guard<std::mutex> guard(sBountyLock);
+            auto it = sBounties.find(player->GetObjectGuid());
+            if (it == sBounties.end() || !it->second.loaded)
+            {
+                if (!force)
+                    return;
+            }
+            else if (keep || it->second.zone == want)
+            {
+                if (!force)
+                    return;
+            }
+        }
+        // In a dungeon at login: nothing to keep yet, none until the world.
+        PlayerBounties const pb = LoadZone(player, keep ? 0 : want);
+        {
+            std::lock_guard<std::mutex> guard(sBountyLock);
+            sBounties[player->GetObjectGuid()] = pb;
+        }
         SendBounties(player);
     }
 
@@ -735,6 +827,8 @@ namespace Arpg
                 return;
             last = now;
         }
+        // The bounties follow the zone (their own lock, and the database on a change).
+        CheckBountyZone(player);
         std::lock_guard<std::recursive_mutex> held(sEventsLock);
         // Caches no corpse's loot claimed (it had none to make) are let go.
         for (auto it = sCacheLevel.begin(); it != sCacheLevel.end();)
@@ -916,37 +1010,7 @@ namespace Arpg
     {
         if (!player || !Active(player))
             return;
-        EnsureBountyTable();
-        PlayerBounties pb;
-        if (auto result = CharacterDatabase.PQuery("SELECT slot, kind, target, have, need FROM character_arpg_bounty WHERE guid = %u",
-                                                   player->GetGUIDLow()))
-        {
-            do
-            {
-                Field* f = result->Fetch();
-                uint32 const slot = f[0].GetUInt32();
-                if (slot >= BOUNTY_SLOTS)
-                    continue;
-                Bounty& b = pb.slot[slot];
-                b.kind = uint8(f[1].GetUInt32());
-                b.target = f[2].GetUInt32();
-                b.have = uint16(f[3].GetUInt32());
-                b.need = uint16(f[4].GetUInt32());
-            }
-            while (result->NextRow());
-        }
-        pb.loaded = true;
-        for (uint8 i = 0; i < BOUNTY_SLOTS; ++i)
-            if (!pb.slot[i].kind || pb.slot[i].kind > BOUNTY_DUNGEON || !pb.slot[i].need)
-            {
-                pb.slot[i] = Generate(player, pb);
-                SaveBounty(player, i, pb.slot[i]);
-            }
-        {
-            std::lock_guard<std::mutex> guard(sBountyLock);
-            sBounties[player->GetObjectGuid()] = pb;
-        }
-        SendBounties(player);
+        CheckBountyZone(player, true);
         {
             // A fresh hello: the tracker clears, and the zone's event (if any) is sent anew.
             std::lock_guard<std::recursive_mutex> guard(sEventsLock);
@@ -959,15 +1023,18 @@ namespace Arpg
         if (!player || !Active(player) || slot >= BOUNTY_SLOTS)
             return;
         Bounty b;
+        uint32 zone;
         {
             std::lock_guard<std::mutex> guard(sBountyLock);
             auto it = sBounties.find(player->GetObjectGuid());
-            if (it == sBounties.end() || !it->second.loaded)
+            if (it == sBounties.end() || !it->second.loaded || !it->second.zone)
                 return;
             PlayerBounties& pb = it->second;
-            b = pb.slot[slot] = Generate(player, pb);
+            zone = pb.zone;
+            // Another of the same slot's kind (the third may turn into a dungeon's, or back).
+            b = pb.slot[slot] = Generate(zone, slot);
         }
-        SaveBounty(player, slot, b);
+        SaveBounty(player, zone, slot, b);
         SendBounties(player);
     }
 

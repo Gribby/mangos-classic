@@ -129,6 +129,13 @@ namespace
     constexpr float SHOCKWAVE_REACH = 10.0f;
     constexpr uint32 SHOCKWAVE_PCT = 40;
     constexpr uint32 DAZED = 1604, CLEAVE = 845, WHIRLWIND = 1680, WAR_STOMP = 20549;
+    // A paladin's extra swings look holy, not like a warrior's Cleave: Smite's hit.
+    constexpr uint32 HOLY_LOOK = 585;
+
+    SpellEntry const* SwingLook(Unit const* attacker)
+    {
+        return attacker->getClass() == CLASS_PALADIN ? sSpellTemplate.LookupEntry<SpellEntry>(HOLY_LOOK) : nullptr;
+    }
     constexpr uint32 CONSECRATION = 26573, JUDGEMENT = 20271;
     constexpr float SANCTIFIED_RANGE = 8.0f;
     constexpr uint32 SANCTIFIED_PCT = 50;
@@ -1430,7 +1437,7 @@ namespace Arpg
                             attacker->CanReachWithMeleeAttack(unit, extra) &&
                             (whirl || SWING_ARC * area >= 2.0f * float(M_PI) || attacker->HasInArc(unit, SWING_ARC * area)))
                     {
-                        StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share);
+                        StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share, SwingLook(attacker));
                         ++struck;
                     }
                 if (struck)
@@ -1449,7 +1456,7 @@ namespace Arpg
                 uint32 const share = std::max<uint32>(1, damage * SHOCKWAVE_PCT / 100);
                 std::vector<Unit*> const foes = FoesAlongLine(player, attacker->GetOrientation(), 0.0f, SHOCKWAVE_REACH * area, victim);
                 for (Unit* unit : foes)
-                    StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share);
+                    StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share, SwingLook(attacker));
                 if (!foes.empty())
                     ReportProc(attacker, PROC_DAMAGE, 0, "Shockwave", "rolls out from the critical strike, hitting %u %s for %u.",
                            uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies", share);

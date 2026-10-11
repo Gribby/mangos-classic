@@ -141,7 +141,10 @@ namespace Arpg
     // The `count` fair enemies nearest `center` within `radius` yards, in sight, nearest first.
     std::vector<Unit*> NearestFoes(Unit* caster, Unit* center, float radius, size_t count);
     // `amount` of `spellInfo`'s school `schoolMask` to `unit` as `caster`'s, through the spell damage path.
-    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount);
+    // `look`: another spell whose hit visual plays instead of `spellInfo`'s (nullptr: its own),
+    // e.g. a paladin's extra swings, which deal Cleave's physical damage but look holy.
+    void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount,
+                   SpellEntry const* look = nullptr);
     // A holy bolt (Holy Shock's missile) from `player` at `to`, landing for `amount`.
     void SendHolyBolt(Player* player, Unit* to, uint32 amount);
     // A bolt drawn as `visual` from `player` at `to`, landing for `amount` of `schoolMask`.
