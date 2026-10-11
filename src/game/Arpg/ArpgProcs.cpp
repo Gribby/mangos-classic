@@ -397,11 +397,11 @@ namespace
             {
                 if (!victim)
                     break;
-                std::vector<Unit*> near = foes(victim, ARC_RANGE, victim);
-                std::sort(near.begin(), near.end(), [victim](Unit* a, Unit* b) { return victim->GetDistance(a) < victim->GetDistance(b); });
-                if (near.size() > ARC_COUNT)
-                    near.resize(ARC_COUNT);
-                strike(near, ARC_LOOK, SPELL_SCHOOL_MASK_NATURE, amount * uint32(def.value) / 100, "arcs to");
+                std::vector<Unit*> closest = foes(victim, ARC_RANGE, victim);
+                std::sort(closest.begin(), closest.end(), [victim](Unit* a, Unit* b) { return victim->GetDistance(a) < victim->GetDistance(b); });
+                if (closest.size() > ARC_COUNT)
+                    closest.resize(ARC_COUNT);
+                strike(closest, ARC_LOOK, SPELL_SCHOOL_MASK_NATURE, amount * uint32(def.value) / 100, "arcs to");
                 break;
             }
             case EFFECT_NOVA:
