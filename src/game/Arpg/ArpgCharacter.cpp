@@ -4,6 +4,8 @@
 
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
@@ -739,6 +741,8 @@ namespace Arpg
         // The player is going; its cooldown modifier stays in its spell modifier list, which
         // Player never frees, as an aura's stays until the aura goes.
         ForgetChampionsSent(player);
+        ForgetEvents(player);
+        ForgetProcs(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
     }
@@ -747,6 +751,8 @@ namespace Arpg
     {
         Runtime& r = R(player);
         uint32 const now = WorldTimer::getMSTime();
+        // A readied proc that waited too long goes (Arpg/ArpgProcs.h).
+        UpdateProcs(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)
@@ -1342,6 +1348,8 @@ namespace Arpg
             return;
         if (static_cast<Creature*>(victim)->GetCreatureInfo()->CreatureType == CREATURE_TYPE_CRITTER)
             return;
+        // A kill may ready another skill (Arpg/ArpgProcs.h).
+        OnProcKill(killer, victim);
         std::shared_ptr<WebTotals const> totals = TotalsOf(killer);
         WebTotals const& t = totals ? *totals : NoTotals();
         int32 const life = int32(killer->GetStat(STAT_STAMINA)) / STA_PER_LIFE + t.lifeOnKill;
@@ -1389,6 +1397,9 @@ namespace Arpg
 
         if (damage)
             RecordHit(r, SKILL_STRIKE, damage, now);
+        // A critical swing may ready another skill (Arpg/ArpgProcs.h).
+        if (damage)
+            OnProcSwing(attacker, victim, crit);
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
             ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, damage * RUNE_LEECH_PCT / 100));

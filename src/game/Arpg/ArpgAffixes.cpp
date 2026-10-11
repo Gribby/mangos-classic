@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgPacks.h"
@@ -16,6 +17,8 @@
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
 #include "Loot/LootMgr.h"
+#include "Mails/Mail.h"
+#include "Chat/Chat.h"
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
@@ -24,6 +27,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cctype>
+#include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -289,11 +294,66 @@ namespace
 
     struct Seeded
     {
-        uint32 seed;
-        uint32 entry;             // the item it was rolled for, so a reused guid never takes it
-        uint8 tier;               // the dungeon tier it dropped at
-        uint8 rarity;             // its rolled rarity (0: from before rarities)
+        uint32 seed = 0;
+        uint32 entry = 0;         // the item it was rolled for, so a reused guid never takes it
+        uint8 tier = 0;           // the dungeon tier it dropped at
+        uint8 rarity = 0;         // its rolled rarity (0: from before rarities)
+        std::string affixes;      // a crafted item's own list (Crafted), else empty: the seed's
+        uint8 forged = 0;         // the shard crafts it has taken
     };
+
+    // A crafted item's affixes are kept as a list, not a seed: "v1|" then "id:value" by ";", an
+    // affix's id its place in AFFIXES from 1 (the list only ever grows at its end).
+    constexpr char const* CRAFTED = "v1|";
+    constexpr uint16 AFFIX_COUNT = uint16(sizeof(AFFIXES) / sizeof(AFFIXES[0]));
+
+    uint16 IdOf(AffixDef const* def) { return uint16(def - AFFIXES + 1); }
+
+    std::vector<Rolled> Parsed(std::string const& text)
+    {
+        std::vector<Rolled> out;
+        size_t at = std::strlen(CRAFTED);
+        while (at < text.size())
+        {
+            size_t const end = std::min(text.find(';', at), text.size());
+            unsigned id = 0;
+            int value = 0;
+            if (std::sscanf(text.c_str() + at, "%u:%d", &id, &value) == 2 && id >= 1 && id <= AFFIX_COUNT)
+            {
+                AffixDef const* def = &AFFIXES[id - 1];
+                value = std::max(1, value);
+                if (def->cap)
+                    value = std::min<int>(value, def->cap);
+                out.push_back({ def, int32(value) });
+            }
+            at = end + 1;
+        }
+        return out;
+    }
+
+    std::string Encoded(std::vector<Rolled> const& list)
+    {
+        std::string out = CRAFTED;
+        char buf[24];
+        for (size_t i = 0; i < list.size(); ++i)
+        {
+            std::snprintf(buf, sizeof(buf), "%s%u:%d", i ? ";" : "", uint32(IdOf(list[i].def)), int(list[i].value));
+            out += buf;
+        }
+        return out;
+    }
+
+    bool IsCrafted(std::string const& affixes) { return affixes.compare(0, std::strlen(CRAFTED), CRAFTED) == 0; }
+
+    // An item's affixes: its crafted list, else what its seed rolls.
+    std::vector<Rolled> AffixesOf(ItemPrototype const* proto, Seeded const& s)
+    {
+        if (!Takes(proto) || !s.seed)
+            return {};
+        if (IsCrafted(s.affixes))
+            return Parsed(s.affixes);
+        return Roll(proto, s.seed, s.tier, s.rarity);
+    }
 
     std::mutex sSeedsLock;
     std::unordered_map<uint32, Seeded> sSeeds;      // item guid low -> its seed
@@ -303,7 +363,7 @@ namespace
         std::lock_guard<std::mutex> guard(sSeedsLock);
         auto it = sSeeds.find(item->GetGUIDLow());
         if (it == sSeeds.end() || it->second.entry != item->GetEntry())
-            return { 0, 0, 0, 0 };
+            return Seeded();
         return it->second;
     }
 
@@ -315,15 +375,36 @@ namespace
                 "CREATE TABLE IF NOT EXISTS character_arpg_item ("
                 "item INT UNSIGNED NOT NULL, entry MEDIUMINT UNSIGNED NOT NULL, seed INT UNSIGNED NOT NULL, "
                 "tier TINYINT UNSIGNED NOT NULL DEFAULT 0, rarity TINYINT UNSIGNED NOT NULL DEFAULT 0, "
+                "affixes VARCHAR(255) NOT NULL DEFAULT '', forged TINYINT UNSIGNED NOT NULL DEFAULT 0, "
                 "PRIMARY KEY (item)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG item affix seeds (Arpg/ArpgAffixes.h)'");
             // A table from before tiers or rarities: add the columns.
             for (char const* column : { "tier", "rarity" })
                 if (!CharacterDatabase.PQuery("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
                                               "AND TABLE_NAME = 'character_arpg_item' AND COLUMN_NAME = '%s'", column))
                     CharacterDatabase.DirectPExecute("ALTER TABLE character_arpg_item ADD COLUMN %s TINYINT UNSIGNED NOT NULL DEFAULT 0", column);
+            // And from before crafting.
+            if (!CharacterDatabase.PQuery("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                                          "AND TABLE_NAME = 'character_arpg_item' AND COLUMN_NAME = 'affixes'"))
+                CharacterDatabase.DirectExecute("ALTER TABLE character_arpg_item ADD COLUMN affixes VARCHAR(255) NOT NULL DEFAULT '', "
+                                                "ADD COLUMN forged TINYINT UNSIGNED NOT NULL DEFAULT 0");
             return true;
         }();
         (void)created;
+    }
+
+    // Keep `s` as `item`'s, in memory and in the table.
+    void Store(Item const* item, Seeded const& s)
+    {
+        EnsureTable();
+        {
+            std::lock_guard<std::mutex> guard(sSeedsLock);
+            sSeeds[item->GetGUIDLow()] = s;
+        }
+        std::string affixes = s.affixes;
+        CharacterDatabase.escape_string(affixes);
+        CharacterDatabase.PExecute("REPLACE INTO character_arpg_item (item, entry, seed, tier, rarity, affixes, forged) "
+                                   "VALUES (%u, %u, %u, %u, %u, '%s', %u)", item->GetGUIDLow(), s.entry, s.seed,
+                                   uint32(s.tier), uint32(s.rarity), affixes.c_str(), uint32(s.forged));
     }
 
     std::string Joined(std::vector<std::string> const& lines)
@@ -346,12 +427,14 @@ namespace
         std::string lines;
     };
 
-    Shown ShownOf(Item const* item, uint32 seed, uint8 tier, uint8 rarity)
+    std::vector<std::string> LinesOf(ItemPrototype const* proto, Seeded const& s);
+
+    Shown ShownOf(Item const* item, Seeded const& s)
     {
         ItemPrototype const* proto = item->GetProto();
-        uint8 const shown = RarityOf(proto, rarity);
+        uint8 const shown = RarityOf(proto, s.rarity);
         return { item->GetObjectGuid(), shown, uint8(shown == RARITY_UNIQUE ? BracketOf(proto, shown) : 0),
-                 Joined(AffixLines(item->GetEntry(), seed, tier, rarity)) };
+                 Joined(LinesOf(proto, s)) };
     }
 
     void SendLines(Player* player, std::vector<Shown> const& items)
@@ -411,16 +494,16 @@ namespace
     }
 }
 
-namespace Arpg
+namespace
 {
-    std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier, uint8 rarity)
+    std::vector<std::string> LinesOf(ItemPrototype const* proto, Seeded const& s)
     {
         std::vector<std::string> lines;
-        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(entry);
         if (!proto || !Takes(proto))
             return lines;
-        std::vector<Rolled> const rolled = Roll(proto, seed, tier, rarity);
-        uint8 const shown = RarityOf(proto, rarity);
+        uint8 tier = s.tier;
+        std::vector<Rolled> const rolled = AffixesOf(proto, s);
+        uint8 const shown = RarityOf(proto, s.rarity);
         // A unique says so, with its affixes' rarity in that rarity's colour (its border).
         if (shown == RARITY_UNIQUE)
         {
@@ -435,7 +518,26 @@ namespace Arpg
             lines.push_back(std::string(TIER_COLOUR[tier]) + TierName(tier) + "|r");
         for (Rolled const& r : rolled)
             lines.push_back(FormatAffix(r));
+        if (s.forged)
+        {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "|cff808080Forged %u/%u|r", uint32(s.forged), uint32(FORGE_LIMIT));
+            lines.emplace_back(buf);
+        }
         return lines;
+    }
+}
+
+namespace Arpg
+{
+    std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier, uint8 rarity)
+    {
+        Seeded s;
+        s.seed = seed;
+        s.entry = entry;
+        s.tier = tier;
+        s.rarity = rarity;
+        return LinesOf(sObjectMgr.GetItemPrototype(entry), s);
     }
 
     uint8 LootItemQuality(LootItem const* item, uint8* border)
@@ -513,13 +615,13 @@ namespace Arpg
         if (!seed)
             seed = 1;
         EnsureTable();
-        {
-            std::lock_guard<std::mutex> guard(sSeedsLock);
-            sSeeds[item->GetGUIDLow()] = { seed, item->GetEntry(), tier, rarity };
-        }
-        CharacterDatabase.PExecute("REPLACE INTO character_arpg_item (item, entry, seed, tier, rarity) VALUES (%u, %u, %u, %u, %u)",
-                                   item->GetGUIDLow(), item->GetEntry(), seed, uint32(tier), uint32(rarity));
-        SendLines(player, { ShownOf(item, seed, tier, rarity) });
+        Seeded s;
+        s.seed = seed;
+        s.entry = item->GetEntry();
+        s.tier = tier;
+        s.rarity = rarity;
+        Store(item, s);
+        SendLines(player, { ShownOf(item, s) });
     }
 
     void AddItemTotals(Player const* player, WebTotals& totals)
@@ -532,7 +634,7 @@ namespace Arpg
             Seeded const seeded = SeedOf(item);
             if (!seeded.seed)
                 continue;
-            for (Rolled const& r : Roll(item->GetProto(), seeded.seed, seeded.tier, seeded.rarity))
+            for (Rolled const& r : AffixesOf(item->GetProto(), seeded))
             {
                 int32 const v = r.value;
                 uint8 const p = r.def->param;
@@ -599,7 +701,7 @@ namespace Arpg
         // By the item's holder now (a trade or the mail moves it), and only for the item the seed
         // was rolled for: a guid reused after a crash, or a row left by a sold item, takes none.
         if (auto result = CharacterDatabase.PQuery(
-                    "SELECT a.item, a.seed, a.entry, a.tier, a.rarity FROM character_arpg_item a JOIN item_instance i ON i.guid = a.item "
+                    "SELECT a.item, a.seed, a.entry, a.tier, a.rarity, a.affixes, a.forged FROM character_arpg_item a JOIN item_instance i ON i.guid = a.item "
                     "WHERE i.owner_guid = %u AND i.itemEntry = a.entry", player->GetGUIDLow()))
         {
             do
@@ -609,17 +711,296 @@ namespace Arpg
                 uint32 const seed = fields[1].GetUInt32();
                 uint32 const entry = fields[2].GetUInt32();
                 uint8 const tier = uint8(std::min<uint32>(fields[3].GetUInt32(), MAX_TIER));
-                uint8 const rarity = uint8(std::min<uint32>(fields[4].GetUInt32(), RARITY_UNIQUE));
+                Seeded s;
+                s.seed = seed;
+                s.entry = entry;
+                s.tier = tier;
+                s.rarity = uint8(std::min<uint32>(fields[4].GetUInt32(), RARITY_UNIQUE));
+                s.affixes = fields[5].GetCppString();
+                s.forged = uint8(fields[6].GetUInt32());
                 {
                     std::lock_guard<std::mutex> guard(sSeedsLock);
-                    sSeeds[low] = { seed, entry, tier, rarity };
+                    sSeeds[low] = s;
                 }
                 if (Item* item = player->GetItemByGuid(ObjectGuid(HIGHGUID_ITEM, low)))
-                    lines.push_back(ShownOf(item, seed, tier, rarity));
+                    lines.push_back(ShownOf(item, s));
             }
             while (result->NextRow());
         }
         SendLines(player, lines);
         RefreshTotals(player);
+    }
+
+    // --- Crafting (Arpg/ArpgCraft.h) ---
+
+    uint16 AffixTotal() { return AFFIX_COUNT; }
+
+    std::string ShardName(uint16 affix)
+    {
+        if (!affix || affix > AFFIX_COUNT)
+            return "Shard";
+        AffixDef const& def = AFFIXES[affix - 1];
+        switch (def.kind)
+        {
+            case AK_LIFE_LEECH:   return "Shard of Life Leech";
+            case AK_MANA_LEECH:   return "Shard of Mana Leech";
+            case AK_THORNS:       return "Shard of Thorns";
+            case AK_COST:         return "Shard of Thrift";
+            case AK_DAMAGE_TAKEN: return "Shard of Warding";
+            default: break;
+        }
+        // The line without its number: "+%d%% Holy damage" is a Shard of Holy damage.
+        std::string name = def.format;
+        for (char const* token : { "+%d%% ", "+%d ", "%d%% ", "%s%% " })
+        {
+            size_t const at = name.find(token);
+            if (at != std::string::npos)
+                name.erase(at, std::strlen(token));
+        }
+        if (!name.empty())
+            name[0] = char(std::toupper(static_cast<unsigned char>(name[0])));
+        return "Shard of " + name;
+    }
+
+    bool Craftable(Item const* item)
+    {
+        return item && Takes(item->GetProto());
+    }
+
+    char const* CraftError(CraftResult result)
+    {
+        switch (result)
+        {
+            case CRAFT_OK:            return "";
+            case CRAFT_NOT_ITEM:      return "Only weapons and armour take crafting.";
+            case CRAFT_WRONG_RARITY:  return "That orb does not work on an item of this rarity.";
+            case CRAFT_NO_AFFIXES:    return "The item has no affixes for that.";
+            case CRAFT_FULL:          return "The item has no room for another affix.";
+            case CRAFT_FORGED_OUT:    return "The item has taken all the shards it can.";
+            case CRAFT_NO_FIT:        return "That affix cannot go on this kind of item.";
+            case CRAFT_AT_TOP:        return "That affix is already at its highest on this item.";
+        }
+        return "";
+    }
+
+    CraftResult CraftItem(Player* player, Item* item, uint8 op, uint16 affix, std::string& done)
+    {
+        if (!player || !Craftable(item))
+            return CRAFT_NOT_ITEM;
+        ItemPrototype const* proto = item->GetProto();
+        Seeded s = SeedOf(item);
+        if (!s.seed)
+        {
+            // An item from before the ARPG (a quest reward, a vendor's): a seed of its own, and no
+            // affixes yet, as it shows.
+            s.seed = urand(1, 0x7FFFFFFF);
+            s.entry = item->GetEntry();
+            s.affixes = CRAFTED;
+        }
+        std::vector<Rolled> list = AffixesOf(proto, s);
+        uint8 const shown = RarityOf(proto, s.rarity);
+        bool const unique = shown == RARITY_UNIQUE;
+        uint8 const bracket = BracketOf(proto, shown);
+        uint32 const most = bracket == RARITY_GREEN ? 2 : bracket == RARITY_BLUE ? 4 : bracket == RARITY_PURPLE ? 6 : 0;
+        float const scale = LevelScale(proto->ItemLevel) * TIER_SCALE[std::min<uint8>(s.tier, MAX_TIER)];
+        Rng rng{ urand(1, 0x7FFFFFFF) };
+
+        auto value = [&](AffixDef const* def, int32 raw)
+        {
+            int32 v = std::max<int32>(1, int32(float(raw) * scale + 0.5f));
+            return def->cap ? std::min(v, def->cap) : v;
+        };
+        auto rolled = [&](AffixDef const* def)
+        {
+            return value(def, def->low + int32(rng.Next() % uint32(def->high - def->low + 1)));
+        };
+        auto has = [&](AffixDef const* def)
+        {
+            for (Rolled const& r : list)
+                if (r.def == def)
+                    return true;
+            return false;
+        };
+        auto addRandom = [&](uint32 count)
+        {
+            std::vector<AffixDef const*> pool;
+            for (AffixDef const& def : AFFIXES)
+                if (Fits(def, proto) && !has(&def))
+                    pool.push_back(&def);
+            for (uint32 i = 0; i < count && !pool.empty(); ++i)
+            {
+                size_t const pick = rng.Next() % pool.size();
+                list.push_back({ pool[pick], rolled(pool[pick]) });
+                pool.erase(pool.begin() + pick);
+            }
+        };
+        auto raise = [&](uint8 to, uint32 low)
+        {
+            s.rarity = to;
+            uint32 const want = low + rng.Next() % 2;
+            if (list.size() < want)
+                addRandom(uint32(want - list.size()));
+        };
+
+        switch (op)
+        {
+            case ORB_AWAKENING:
+                if (unique || shown != RARITY_WHITE)
+                    return CRAFT_WRONG_RARITY;
+                list.clear();
+                raise(RARITY_GREEN, 1);
+                done = "The item awakens: it is Magic now.";
+                break;
+            case ORB_REFINEMENT:
+                if (unique || shown != RARITY_GREEN)
+                    return CRAFT_WRONG_RARITY;
+                raise(RARITY_BLUE, 3);
+                done = "The item is refined: it is Rare now.";
+                break;
+            case ORB_ASCENSION:
+                if (unique || shown != RARITY_BLUE)
+                    return CRAFT_WRONG_RARITY;
+                raise(RARITY_PURPLE, 5);
+                done = "The item ascends: it is Epic now.";
+                break;
+            case ORB_FEL:
+            {
+                if (list.empty())
+                    return CRAFT_NO_AFFIXES;
+                uint32 const count = uint32(list.size());
+                list.clear();
+                addRandom(count);
+                done = "Fel fire remakes every affix.";
+                break;
+            }
+            case ORB_INVOCATION:
+                if (list.size() >= most)
+                    return CRAFT_FULL;
+                addRandom(1);
+                done = "A new affix answers the call.";
+                break;
+            case ORB_VOID:
+                if (list.empty())
+                    return CRAFT_NO_AFFIXES;
+                list.erase(list.begin() + rng.Next() % list.size());
+                done = "The void takes an affix.";
+                break;
+            case ORB_LENS:
+                if (list.empty())
+                    return CRAFT_NO_AFFIXES;
+                for (Rolled& r : list)
+                    r.value = rolled(r.def);
+                done = "The lens refocuses every value.";
+                break;
+            case CRAFT_SHARD:
+            {
+                if (!affix || affix > AFFIX_COUNT)
+                    return CRAFT_NO_FIT;
+                AffixDef const* def = &AFFIXES[affix - 1];
+                if (!Fits(*def, proto))
+                    return CRAFT_NO_FIT;
+                if (s.forged >= FORGE_LIMIT)
+                    return CRAFT_FORGED_OUT;
+                int32 const top = value(def, def->high);
+                bool found = false;
+                for (Rolled& r : list)
+                    if (r.def == def)
+                    {
+                        if (r.value >= top)
+                            return CRAFT_AT_TOP;
+                        // A third of the way to the top again, at least one.
+                        r.value = std::min(top, r.value + std::max<int32>(1, (top - r.value + 2) / 3));
+                        found = true;
+                    }
+                if (!found)
+                {
+                    if (list.size() >= most)
+                        return CRAFT_FULL;
+                    list.push_back({ def, rolled(def) });
+                }
+                ++s.forged;
+                done = found ? "The shard strengthens its affix." : "The shard binds a new affix.";
+                break;
+            }
+            default:
+                return CRAFT_NOT_ITEM;
+        }
+        if (!s.rarity)
+            s.rarity = shown;
+        s.affixes = Encoded(list);
+        Store(item, s);
+        SendLines(player, { ShownOf(item, s) });
+        if (item->IsEquipped())
+            RefreshTotals(player);
+        return CRAFT_OK;
+    }
+
+    std::vector<uint16> SalvageShards(Item const* item)
+    {
+        std::vector<uint16> out;
+        if (!Craftable(item))
+            return out;
+        ItemPrototype const* proto = item->GetProto();
+        Seeded const s = SeedOf(item);
+        std::vector<Rolled> list = AffixesOf(proto, s);
+        uint8 const bracket = BracketOf(proto, RarityOf(proto, s.rarity));
+        uint32 const take = bracket >= RARITY_BLUE ? 2 : 1;
+        for (uint32 i = 0; i < take && !list.empty(); ++i)
+        {
+            size_t const pick = urand(0, uint32(list.size() - 1));
+            out.push_back(IdOf(list[pick].def));
+            list.erase(list.begin() + pick);
+        }
+        return out;
+    }
+
+    uint8 ShownRarity(Item const* item)
+    {
+        if (!Craftable(item))
+            return 0;
+        return RarityOf(item->GetProto(), SeedOf(item).rarity);
+    }
+
+    bool GiveRolledItem(Player* player, uint8 rarity, uint32 level)
+    {
+        if (!player)
+            return false;
+        uint32 id = 0;
+        for (int tries = 0; tries < 8 && !id; ++tries)
+        {
+            uint32 const quality = rarity == RARITY_UNIQUE ? (roll_chance_i(30) ? ITEM_QUALITY_EPIC : ITEM_QUALITY_RARE)
+                                   : (roll_chance_i(50) ? ITEM_QUALITY_NORMAL : ITEM_QUALITY_UNCOMMON);
+            uint32 const pick = PickRandomItem(quality, level);
+            if (pick && Takes(sObjectMgr.GetItemPrototype(pick)))
+                id = pick;
+        }
+        if (!id)
+            return false;
+        uint8 const stored = rarity == RARITY_UNIQUE ? uint8(RARITY_UNIQUE)
+                             : std::max<uint8>(RARITY_WHITE, std::min<uint8>(rarity, RARITY_PURPLE));
+        uint32 const seed = urand(1, 0x7FFFFFFF);
+        ItemPosCountVec dest;
+        if (player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, id, 1) == EQUIP_ERR_OK)
+        {
+            Item* item = player->StoreNewItem(dest, id, true, Item::GenerateItemRandomPropertyId(id));
+            if (!item)
+                return false;
+            player->SendNewItem(item, 1, true, false);
+            OnAffixedItemStored(player, item, seed, 0, stored);
+            return true;
+        }
+        // The bags full: it comes by mail.
+        Item* item = Item::CreateItem(id, 1, player);
+        if (!item)
+            return false;
+        if (int32 const random = Item::GenerateItemRandomPropertyId(id))
+            item->SetItemRandomProperties(random);
+        item->SaveToDB();
+        OnAffixedItemStored(player, item, seed, 0, stored);
+        MailDraft draft("Bounty reward", "Your bags were full, so your reward was sent here.");
+        draft.AddItem(item);
+        draft.SendMailTo(player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_RETURNED);
+        ChatHandler(player).PSendSysMessage("|cffffd200Your bags are full: the reward was sent by mail.|r");
+        return true;
     }
 }

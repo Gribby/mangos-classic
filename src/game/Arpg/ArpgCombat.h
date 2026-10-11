@@ -62,6 +62,8 @@ namespace Arpg
         ACTION_SOCKET       = 21,                           // uint8 skill, uint8 rune: socket a rune
         ACTION_TOWN_PORTAL  = 22,                           // -: open a town portal, or go back through it
         ACTION_GLOBE        = 23,                           // uint32 globe: take a health globe
+        ACTION_CRAFT        = 24,                           // uint8 op, bag, slot, uint16 affix (Arpg/ArpgCraft.h)
+        ACTION_BOUNTY_ABANDON = 25,                         // uint8 slot: a new bounty for it (Arpg/ArpgEvents.h)
     };
 
     // What the client's cast aims at, by the spell's own target word.

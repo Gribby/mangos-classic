@@ -866,4 +866,7 @@ OpcodeHandler opcodeTable[NUM_MSG_TYPES] =
     /*0x346*/ { "SMSG_ARPG_PROC",                   STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x347*/ { "SMSG_ARPG_SHEET",                  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x348*/ { "SMSG_ARPG_IMPACT",                 STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x349*/ { "SMSG_ARPG_EVENT",                  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x34A*/ { "SMSG_ARPG_BOUNTIES",               STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x34B*/ { "SMSG_ARPG_PURSE",                  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
 };

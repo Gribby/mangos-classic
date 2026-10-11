@@ -22,6 +22,7 @@
 
 #include "World/World.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgCraft.h"
 #include "Database/DatabaseEnv.h"
 #include "Config/Config.h"
 #include "Platform/Define.h"
@@ -1018,6 +1019,8 @@ void World::SetInitialWorldSettings()
 
     // ARPG: the Codex pages, fragments and runes write their own item rows first (Arpg/ArpgCodex.h).
     Arpg::EnsureCodexItems();
+    // ARPG: and the crafting orbs (Arpg/ArpgCraft.h).
+    Arpg::EnsureCraftItems();
     sLog.outString("Loading Item Templates...");            // must be after LoadRandomEnchantmentsTable and LoadPageTexts
     sObjectMgr.LoadItemPrototypes();
 

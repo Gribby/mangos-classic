@@ -101,6 +101,12 @@ namespace Arpg
         RUNE_COMMAND    = 7,
         RUNE_SANCTITY   = 8,
         RUNE_FURY       = 9,
+        // Cross-skill procs (Arpg/ArpgProcs.h): the skill they sit in sets another skill up.
+        RUNE_GRACE      = 10,
+        RUNE_VERDICT    = 11,
+        RUNE_ANVIL      = 12,
+        RUNE_FERVOUR    = 13,
+        RUNE_ZEAL       = 14,
     };
 
     // Codex fragments that make one page, and what a page already read tears into.
@@ -155,6 +161,9 @@ namespace Arpg
 
     // Whether `rune` is socketed, and in effect, in `player`'s `skill`.
     bool HasRune(Player const* player, SkillId skill, uint8 rune);
+
+    // Every rune `player` has working, with the skill it sits in.
+    std::vector<std::pair<SkillId, uint8>> SocketedRunes(Player const* player);
 
     // The capstones whose Codex page `bossEntry` drops; every page; every rune.
     std::vector<uint16> PagesFrom(uint32 bossEntry);

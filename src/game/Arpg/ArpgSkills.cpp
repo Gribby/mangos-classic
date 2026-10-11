@@ -6,6 +6,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgTags.h"
+#include "Arpg/ArpgProcs.h"
 
 #include "Chat/Chat.h"
 
@@ -352,6 +353,17 @@ namespace
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) } },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
+            // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
+            { RUNE_GRACE, "Rune of Grace", ProcRuneText(RUNE_GRACE), 19750,
+              uint8(FIT(SKILL_STRIKE)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+            { RUNE_VERDICT, "Rune of Verdict", ProcRuneText(RUNE_VERDICT), 20271,
+              uint8(FIT(SKILL_JUDGEMENT)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+            { RUNE_ANVIL, "Rune of the Anvil", ProcRuneText(RUNE_ANVIL), 853,
+              uint8(FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+            { RUNE_FERVOUR, "Rune of Fervour", ProcRuneText(RUNE_FERVOUR), 2812,
+              uint8(FIT(SKILL_HOLY_WRATH) | FIT(SKILL_EXORCISM)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+            { RUNE_ZEAL, "Rune of Zeal", ProcRuneText(RUNE_ZEAL), 20154,
+              uint8(FIT(SKILL_SEALS)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
         };
         return runes;
     }
@@ -997,6 +1009,15 @@ namespace Arpg
             if (id == skill && def->id == rune)
                 return true;
         return false;
+    }
+
+    std::vector<std::pair<SkillId, uint8>> SocketedRunes(Player const* player)
+    {
+        std::vector<std::pair<SkillId, uint8>> out;
+        PlayerSkills const s = SkillsFor(player);
+        for (auto const& [id, def] : ActiveRunes(s))
+            out.emplace_back(id, def->id);
+        return out;
     }
 
     std::vector<uint16> PagesFrom(uint32 bossEntry)

@@ -29,6 +29,7 @@
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgThreats.h"
+#include "Arpg/ArpgProcs.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -1287,6 +1288,8 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
         Arpg::OnHeal(this, affectiveCaster, unitTarget, addhealth);
         // ARPG: Lightforged's bolt, Blessed Recovery's cooldowns.
         Arpg::OnCharacterHeal(this, affectiveCaster, unitTarget, addhealth);
+        // ARPG: a critical heal may ready another skill (Arpg/ArpgProcs.h).
+        Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, target->isCrit, true);
 
         if (affectiveCaster)
             unitTarget->getHostileRefManager().threatAssist(affectiveCaster, float(gain) * 0.5f * sSpellMgr.GetSpellThreatMultiplier(m_spellInfo), m_spellInfo, false, m_IsTriggeredSpell);
@@ -1344,7 +1347,11 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
 
         // ARPG: a unique's on-hit mechanic (fragments) off this hit.
         if (!reflectTarget && affectiveCaster)
+        {
             Arpg::OnSpellDamage(this, affectiveCaster, unitTarget, spellDamageInfo.damage + spellDamageInfo.absorb);
+            // ARPG: a hit or a crit may ready another skill (Arpg/ArpgProcs.h).
+            Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, (spellDamageInfo.HitInfo & SPELL_HIT_TYPE_CRIT) != 0, false);
+        }
 
         // Bloodthirst
         if (m_spellInfo->SpellFamilyName == SPELLFAMILY_WARRIOR && m_spellInfo->SpellFamilyFlags & uint64(0x0000000002000000))
@@ -1383,7 +1390,10 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
 
     // ARPG: a unique's on-land mechanic (an aura that spreads to the enemies near its target).
     if (missInfo == SPELL_MISS_NONE && !reflectTarget && affectiveCaster)
+    {
         Arpg::OnSpellLanded(this, affectiveCaster, unitTarget);
+        Arpg::OnProcLanded(this, affectiveCaster, unitTarget);
+    }
 
     OnAfterHit();
 
@@ -3318,6 +3328,8 @@ SpellCastResult Spell::cast(bool skipCheck)
             TakeAmmo();
             SendCastResult(SPELL_CAST_OK);
             SendSpellGo();
+            // ARPG: a readied cast this fits is spent (Arpg/ArpgProcs.h).
+            Arpg::OnProcCast(this);
             // A missed shot still breaks what any cast breaks (stealth, Feign Death).
             if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION))
                 m_caster->RemoveAurasOnCast(AURA_INTERRUPT_FLAG_ACTION_LATE, m_spellInfo);
@@ -3423,6 +3435,8 @@ SpellCastResult Spell::cast(bool skipCheck)
 
     SendCastResult(castResult);
     SendSpellGo();                                          // we must send smsg_spell_go packet before m_castItem delete in TakeCastItem()...
+    // ARPG: a readied cast this fits is spent (Arpg/ArpgProcs.h).
+    Arpg::OnProcCast(this);
 
     InitializeDamageMultipliers();
 
@@ -3879,6 +3893,9 @@ void Spell::finish(bool ok)
     bool channeledChannel = m_spellState == SPELL_STATE_CHANNELING;
 
     m_spellState = SPELL_STATE_FINISHED;
+
+    // ARPG: what this cast spent of a readied proc goes now (Arpg/ArpgProcs.h).
+    Arpg::OnProcFinish(this);
 
     if (m_notifyAI && m_caster && m_caster->AI())
         m_caster->AI()->OnSpellCastStateChange(this, false);

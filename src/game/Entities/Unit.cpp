@@ -60,6 +60,8 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgAffixes.h"
+#include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgEvents.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -1437,6 +1439,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     Arpg::OnCharacterKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
     // ARPG: the kill fills the killer's flask (Arpg/ArpgActions.h).
     Arpg::OnFlaskKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
+    // ARPG: zone event and bounty progress (Arpg/ArpgEvents.h).
+    Arpg::OnEventKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
 
     /* ******************************** Prepare loot if can ************************************ */
     // only lootable if it has loot or can drop gold, must be done before threat list is cleared
@@ -1447,6 +1451,9 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         Arpg::ThinPackLoot(victim);
         // ARPG: a Warden's drops and a final boss's Cache (Arpg/ArpgDungeons.h).
         Arpg::OnDungeonLoot(victim);
+        // ARPG: a finished zone event's cache, and crafting orbs (Arpg/ArpgEvents.h, ArpgCraft.h).
+        Arpg::OnEventLoot(victim);
+        Arpg::OnCraftLoot(victim);
         // ARPG: the drops' affix seeds (Arpg/ArpgAffixes.h).
         Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient(), Arpg::LootTier(victim->GetMap()), victim);
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.

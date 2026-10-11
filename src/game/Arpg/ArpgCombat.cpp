@@ -6,6 +6,7 @@
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgEvents.h"
 
 #include "Entities/Unit.h"
 #include "Entities/Creature.h"
@@ -208,6 +209,8 @@ namespace Arpg
             UpdateKeystones(player);
             UpdateCharacter(player);
             UpdateActions(player);
+            // The zone's event (Arpg/ArpgEvents.h).
+            UpdateEvents(player);
         }
 
         if (!Active(player))

@@ -84,6 +84,37 @@ namespace Arpg
 
     // The tooltip lines of an item of `entry` with `seed`, `tier` and `rarity`.
     std::vector<std::string> AffixLines(uint32 entry, uint32 seed, uint8 tier, uint8 rarity);
+
+    // Make a random base item (as AddRolledItem) and give it to `player`: into the bags, or by
+    // mail when they are full.
+    bool GiveRolledItem(Player* player, uint8 rarity, uint32 level);
+
+    // --- Crafting (Arpg/ArpgCraft.h) ---
+    // A crafted item keeps its affixes as a list (character_arpg_item.affixes) in place of its
+    // seed's, and counts its shard crafts (forged). An affix's id is its place in the affix list,
+    // from 1; the list only grows at its end, so an id always names the same affix.
+
+    enum CraftResult : uint8
+    {
+        CRAFT_OK, CRAFT_NOT_ITEM, CRAFT_WRONG_RARITY, CRAFT_NO_AFFIXES, CRAFT_FULL, CRAFT_FORGED_OUT,
+        CRAFT_NO_FIT, CRAFT_AT_TOP,
+    };
+
+    // How many affixes there are (ids 1 to this).
+    uint16 AffixTotal();
+    // A shard's name, by its affix id.
+    std::string ShardName(uint16 affix);
+    // Whether `item` takes crafting: a weapon or armour piece.
+    bool Craftable(Item const* item);
+    // The rarity `item` shows (0: not craftable).
+    uint8 ShownRarity(Item const* item);
+    // Why a craft was refused, for the player.
+    char const* CraftError(CraftResult result);
+    // Apply orb `op` (Orb) or CRAFT_SHARD with `affix` to `item`: store it, send its lines, and
+    // say in `done` what happened. The caller takes the orb or shard on CRAFT_OK.
+    CraftResult CraftItem(Player* player, Item* item, uint8 op, uint16 affix, std::string& done);
+    // The shards salvaging `item` gives (its affixes': one, two from a blue or better).
+    std::vector<uint16> SalvageShards(Item const* item);
 }
 
 #endif

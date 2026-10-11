@@ -34,6 +34,9 @@
  *     ACTION_SOCKET       uint8 skill, uint8 rune (0 empties): socket a rune
  *     ACTION_TOWN_PORTAL  -: open a town portal, or go back through it (Arpg/ArpgActions.h)
  *     ACTION_GLOBE        uint32 globe: take a health globe the player walked onto
+ *     ACTION_CRAFT        uint8 op, uint8 bag, uint8 slot, uint16 affix: an orb, a salvage or a
+ *                         shard on an item (Arpg/ArpgCraft.h)
+ *     ACTION_BOUNTY_ABANDON uint8 slot: abandon a bounty for a new one (Arpg/ArpgEvents.h)
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:
  * a split of gold reaches group members on other maps).
@@ -49,6 +52,8 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgEvents.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -96,6 +101,9 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                         Arpg::OnTreeHello(arpg);
                         // The rolled affixes of the character's items (Arpg/ArpgAffixes.h).
                         Arpg::LoadAffixes(arpg);
+                        // The bounties, the zone's event and the crafting purse.
+                        Arpg::LoadBounties(arpg);
+                        Arpg::SendPurse(arpg);
                         // The character sheet, at once (then whenever it changes).
                         Arpg::UpdateSheet(arpg, true);
                     }
@@ -317,6 +325,33 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
                 if (Player* arpg = session->GetPlayer())
                     if (arpg->IsInWorld())
                         Arpg::TakeGlobe(arpg, globe);
+            });
+            break;
+        }
+        case Arpg::ACTION_CRAFT:
+        {
+            uint8 op, bag, slot;
+            uint16 affix;
+            recvPacket >> op >> bag >> slot >> affix;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([op, bag, slot, affix](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::Craft(arpg, op, bag, slot, affix);
+            });
+            break;
+        }
+        case Arpg::ACTION_BOUNTY_ABANDON:
+        {
+            uint8 slot;
+            recvPacket >> slot;
+            Arpg::OnHello(player);
+            GetMessager().AddMessage([slot](WorldSession* session)
+            {
+                if (Player* arpg = session->GetPlayer())
+                    if (arpg->IsInWorld())
+                        Arpg::AbandonBounty(arpg, slot);
             });
             break;
         }

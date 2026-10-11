@@ -889,10 +889,16 @@ enum Opcodes
     SMSG_ARPG_SHEET                                 = 0x347,
     // ARPG: a share hit's impact visual on its unit (Arpg/ArpgUniques.h)
     SMSG_ARPG_IMPACT                                = 0x348,
+    // ARPG: the zone's event, live, done, failed or gone (Arpg/ArpgEvents.h)
+    SMSG_ARPG_EVENT                                 = 0x349,
+    // ARPG: the character's bounties (Arpg/ArpgEvents.h)
+    SMSG_ARPG_BOUNTIES                              = 0x34A,
+    // ARPG: the crafting purse: orbs and shards (Arpg/ArpgCraft.h)
+    SMSG_ARPG_PURSE                                 = 0x34B,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x349
+#define NUM_MSG_TYPES 0x34C
 
 /// Player state
 enum SessionStatus
