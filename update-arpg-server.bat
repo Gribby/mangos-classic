@@ -1,6 +1,12 @@
 @echo off
-rem Pull the latest ARPG server code, rebuild mangosd, put it in the run folder and start it.
-rem Close the ARPG mangosd window first: Windows will not overwrite a running exe.
+rem Pull the latest ARPG server code, re-run CMake, rebuild mangosd, put it in the run folder and
+rem start it.
+rem   update-arpg-server.bat         pull, configure, build what changed, copy, start
+rem   update-arpg-server.bat full    the same, but rebuild everything from clean (after a big
+rem                                  update, or when a build acts strangely)
+rem   update-arpg-server.bat nopull  skip the git pull (build your own local changes)
+rem The ARPG mangosd must not be running while the new exe is copied: if it is, this asks to
+rem stop it. Only the mangosd in RUN_DIR is touched, never another server's.
 setlocal
 cd /d "%~dp0"
 rem Load (and on first run create) arpg-local.bat: this machine's paths, which git ignores.
@@ -20,12 +26,47 @@ if not exist "%RUN_DIR%\mangosd.conf" (
     goto :fail
 )
 
-echo Pulling the latest code...
-git pull || goto :fail
+set "PULL=1"
+set "CLEAN="
+for %%A in (%*) do (
+    if /i "%%~A"=="full" set "CLEAN=--clean-first"
+    if /i "%%~A"=="nopull" set "PULL="
+)
+
+rem Stop the ARPG mangosd first (it would lock mangosd.exe), with a yes from you.
+set "RUNNING="
+for /f %%P in ('powershell -NoProfile -Command "(Get-Process mangosd -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '%RUN_DIR%\mangosd.exe' }).Id"') do set "RUNNING=%%P"
+if defined RUNNING (
+    echo The ARPG mangosd is running ^(process %RUNNING%^).
+    choice /c YN /m "Stop it now? Unsaved progress from the last few minutes may be lost"
+    if errorlevel 2 (
+        echo Close it yourself ^(type "server shutdown 0" in its window^), then run this again.
+        goto :fail
+    )
+    taskkill /pid %RUNNING% >nul 2>&1
+    timeout /t 3 /nobreak >nul
+    taskkill /f /pid %RUNNING% >nul 2>&1
+)
+
+if defined PULL (
+    echo Pulling the latest code...
+    git pull || goto :fail
+)
+
 rem Re-run the configure step: new source files are only picked up by it.
-cmake -S . -B build >nul || goto :fail
-echo Building mangosd (a big change can take a while)...
-cmake --build build --config Release --target mangosd || goto :fail
+echo Configuring with CMake...
+cmake -S . -B build > "%TEMP%\arpg-cmake.log" 2>&1 || (
+    type "%TEMP%\arpg-cmake.log"
+    goto :fail
+)
+
+if defined CLEAN (
+    echo Rebuilding mangosd from clean ^(this takes a while^)...
+) else (
+    echo Building mangosd ^(a big change can take a while^)...
+)
+cmake --build build --config Release --target mangosd %CLEAN% --parallel || goto :fail
+
 copy /y "build\bin\x64_Release\mangosd.exe" "%RUN_DIR%\" >nul || (
     echo Could not copy mangosd.exe. Is the ARPG mangosd still running?
     goto :fail
