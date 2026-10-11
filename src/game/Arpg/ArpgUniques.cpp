@@ -25,6 +25,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
 #include <unordered_map>
 
 namespace
@@ -370,27 +373,144 @@ namespace Arpg
         return table;
     }
 
-    UniqueMechanic const* WornMechanic(Player const* player, UniqueKit kit, SpellEntry const* spellInfo)
+    // Several sources of one kit on one spell (a unique, a skill node, a rune) stack into one row:
+    // counts add, shares add (to at most a whole hit; three quarters for what multiplies hits),
+    // reach takes the widest, an echo comes as often as its most frequent source. Combined rows
+    // live as long as the server.
+    UniqueMechanic const* Stacked(std::vector<UniqueMechanic const*> rows)
+    {
+        if (rows.empty())
+            return nullptr;
+        std::sort(rows.begin(), rows.end());
+        rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+        if (rows.size() == 1)
+            return rows.front();
+        UniqueKit const kit = rows.front()->kit;
+        // One of a kind: a step or a raise does not grow.
+        if (kit == KIT_STEP || kit == KIT_RAISE)
+            return rows.front();
+        static std::mutex lock;
+        static std::map<std::vector<UniqueMechanic const*>, std::pair<UniqueMechanic, std::string>> cache;
+        std::lock_guard<std::mutex> guard(lock);
+        auto it = cache.find(rows);
+        if (it != cache.end())
+            return &it->second.first;
+        UniqueMechanic out = *rows.front();
+        std::string name;
+        uint32 n = 0, pct = 0, echoEvery = 0, bestN = 0, bestPct = 0;
+        bool all = false;
+        for (UniqueMechanic const* row : rows)
+        {
+            name += (name.empty() ? "" : " + ") + std::string(MechanicName(row));
+            out.value = std::max(out.value, row->value);
+            pct += row->pct;
+            bestPct = std::max<uint32>(bestPct, row->pct);
+            bestN = std::max<uint32>(bestN, row->n);
+            if (row->n == 0)
+                all = true;
+            n += row->n;
+            if (row->n && (!echoEvery || row->n < echoEvery))
+                echoEvery = row->n;
+        }
+        bool const multiplies = kit == KIT_CHAIN || kit == KIT_FRAGMENTS || kit == KIT_EXTRA_PROJECTILES || kit == KIT_ECHO;
+        // Never weaker than the strongest source alone.
+        out.pct = std::max(bestPct, std::min<uint32>(pct, multiplies ? 75 : 100));
+        auto count = [&](uint32 cap) { return uint8(std::max(bestN, std::min(n, cap))); };
+        switch (kit)
+        {
+            case KIT_CHAIN:             out.n = count(6); break;
+            case KIT_FRAGMENTS:         out.n = count(10); break;
+            case KIT_EXTRA_PROJECTILES: out.n = count(8); break;
+            case KIT_SPREAD:            out.n = count(6); out.pct = 100; break;
+            case KIT_PIERCE:            out.n = all ? 0 : count(10); break;
+            case KIT_ECHO:              out.n = uint8(std::max<uint32>(echoEvery, 2)); break;
+            default:                    out.n = 0; break;    // arcs, bursts, shockwaves take everyone
+        }
+        auto& slot = cache[rows];
+        slot.second = name;
+        slot.first = out;
+        slot.first.name = slot.second.c_str();
+        return &slot.first;
+    }
+
+    UniqueMechanic const* WornMechanic(Player const* player, UniqueKit kit, SpellEntry const* spellInfo, bool onDeath)
     {
         if (!player || !spellInfo)
             return nullptr;
-        UniqueMechanic const* best = nullptr;
+        return WornMechanicFrom(player, kit, spellInfo, LearnedModifiers(player), onDeath);
+    }
+
+    UniqueMechanic const* WornMechanicFrom(Player const* player, UniqueKit kit, SpellEntry const* spellInfo,
+                                           std::vector<UniqueMechanic const*> const& learned, bool onDeath)
+    {
+        if (!player || !spellInfo)
+            return nullptr;
+        // A spread on landing (n > 0) and one from a corpse (n 0) are two mechanics: never mixed.
+        auto mode = [&](UniqueMechanic const* row) { return kit != KIT_SPREAD || (row->n == 0) == onDeath; };
+        std::vector<UniqueMechanic const*> rows;
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         {
             Item const* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
             if (!item)
                 continue;
             for (UniqueMechanic const& row : Uniques())
-                if (row.item == item->GetEntry() && row.kit == kit && SpellMatches(row.spell, spellInfo) &&
-                        (!best || row.n > best->n || (row.n == best->n && row.pct > best->pct)))
-                    best = &row;
+                if (row.item == item->GetEntry() && row.kit == kit && mode(&row) && SpellMatches(row.spell, spellInfo))
+                    rows.push_back(&row);
         }
-        // The skill trees' nodes, by the same rule: the larger count applies, then the larger share.
+        // The skill trees' nodes and runes too: they all stack.
+        for (UniqueMechanic const* row : learned)
+            if (row->kit == kit && mode(row) && SpellMatches(row->spell, spellInfo))
+                rows.push_back(row);
+        return Stacked(rows);
+    }
+
+    std::vector<std::string> StackedKitLines(Player const* player, uint8 skill)
+    {
+        std::vector<std::string> out;
+        uint8 const classId = player->getClass();
+        // Every kit row on a spell of this skill, by kit and spell.
+        std::map<std::pair<uint8, uint32>, std::vector<UniqueMechanic const*>> groups;
+        auto take = [&](UniqueMechanic const* row)
+        {
+            if (row->kit == KIT_RAISE || row->kit == KIT_STEP)
+                return;
+            SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(row->spell);
+            // A corpse's spread groups apart from a landing one.
+            uint8 const kind = row->kit == KIT_SPREAD && row->n == 0 ? 0 : uint8(row->kit);
+            if (spell && SkillOfSpell(classId, spell) == SkillId(skill))
+                groups[{ kind, row->spell }].push_back(row);
+        };
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            if (Item const* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                for (UniqueMechanic const& row : Uniques())
+                    if (row.item == item->GetEntry())
+                        take(&row);
         for (UniqueMechanic const* row : LearnedModifiers(player))
-            if (row->kit == kit && SpellMatches(row->spell, spellInfo) &&
-                    (!best || row->n > best->n || (row->n == best->n && row->pct > best->pct)))
-                best = row;
-        return best;
+            take(row);
+        char buf[256];
+        for (auto const& [key, rows] : groups)
+        {
+            if (rows.size() < 2)
+                continue;
+            UniqueMechanic const* m = Stacked(rows);
+            SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(key.second);
+            char const* what = spell ? spell->SpellName[0] : "it";
+            switch (m->kit)
+            {
+                case KIT_ARC:       std::snprintf(buf, sizeof(buf), "%s: every other enemy in front takes %u%%", what, m->pct); break;
+                case KIT_BURST:     std::snprintf(buf, sizeof(buf), "%s bursts within %.0f yards for %u%%", what, m->value, m->pct); break;
+                case KIT_CHAIN:     std::snprintf(buf, sizeof(buf), "%s chains %u times within %.0f yards for %u%%", what, uint32(m->n), m->value, m->pct); break;
+                case KIT_FRAGMENTS: std::snprintf(buf, sizeof(buf), "%s shatters into %u shards within %.0f yards for %u%% each", what, uint32(m->n), m->value, m->pct); break;
+                case KIT_PIERCE:    std::snprintf(buf, sizeof(buf), "%s pierces %s for %u%%", what, m->n ? "several enemies" : "every enemy", m->pct); break;
+                case KIT_EXTRA_PROJECTILES: std::snprintf(buf, sizeof(buf), "%s fires %u extra at %u%%", what, uint32(m->n), m->pct); break;
+                case KIT_SPREAD:    std::snprintf(buf, sizeof(buf), "%s spreads to %u more within %.0f yards", what, uint32(m->n), m->value); break;
+                case KIT_ECHO:      std::snprintf(buf, sizeof(buf), "every %u casts %s echoes at %u%%", uint32(m->n), what, m->pct); break;
+                case KIT_SHOCKWAVE: std::snprintf(buf, sizeof(buf), "%s sends a shockwave %.0f yards for %u%%", what, m->value, m->pct); break;
+                default:            std::snprintf(buf, sizeof(buf), "%s", what); break;
+            }
+            out.push_back(std::string("|cffe6cc80Stacked (") + m->name + "):|r " + buf);
+        }
+        return out;
     }
 
     // The `kit` row worn by `player` whatever the spell (kit J), if any.
@@ -429,9 +549,10 @@ namespace Arpg
         SpellEntry const* spellInfo = spell->m_spellInfo;
         float const aim = spell->GetArpgAim();
         float const aimDist = spell->GetArpgAimDist();
+        std::vector<UniqueMechanic const*> const learned = LearnedModifiers(player);
 
         // Extra projectiles (A), alternating sides of the aim, stepping out: +1, -1, +2, -2 lines.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_EXTRA_PROJECTILES, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_EXTRA_PROJECTILES, spellInfo, learned))
         {
             float const step = row->value * float(M_PI) / 180.0f;
             // No target is left out: up close the fan lands on one enemy (a shotgun), farther out
@@ -453,7 +574,7 @@ namespace Arpg
         }
 
         // Echo (I): every `n`th cast flies again along the same aim a moment later.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_ECHO, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_ECHO, spellInfo, learned))
         {
             uint32& count = sEchoCounts[player->GetObjectGuid()];
             if (++count >= std::max<uint8>(row->n, 1))
@@ -479,26 +600,37 @@ namespace Arpg
 
     void OnSpellDamage(Spell* spell, Unit* caster, Unit* victim, uint32 dealt)
     {
-        if (!spell || spell->IsArpgSecondary() || !victim || !dealt || !Active(caster))
+        if (!spell || !victim || !dealt || !Active(caster))
             return;
-        // The skill trees' on-hit nodes (Seals, Judgement), before the kit's.
-        OnSkillSpellDamage(spell, caster, victim, dealt);
+        // The skill trees' on-hit nodes (Seals, Judgement), before the kits': the main hit only.
+        // An extra projectile or an echo (a secondary) still sets off the on-hit kits below, which
+        // only relay damage and never cast again, so nothing multiplies without end.
+        if (!spell->IsArpgSecondary())
+            OnSkillSpellDamage(spell, caster, victim, dealt);
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
         SpellSchoolMask const mask = spell->GetSchoolMask();
+        // The caster's areas: melee (Strength, gear) widens arcs and shockwaves, spell (Intellect,
+        // gear) bursts and shatters.
+        float areaAt = -1.0f, spellAreaAt = -1.0f;
+        auto area = [&]() { return areaAt < 0.0f ? (areaAt = MeleeAreaScale(caster)) : areaAt; };
+        auto spellArea = [&]() { return spellAreaAt < 0.0f ? (spellAreaAt = SpellAreaScale(caster)) : spellAreaAt; };
+        // The skill rows once for every kit below.
+        std::vector<UniqueMechanic const*> const learned = LearnedModifiers(player);
 
         // Fragments (D): the hit shatters, `n` shards flying out from the target to the nearest
         // enemies around it within `value` yards; shards with no enemy to find scatter on the
         // ground, so a shatter always shows.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_FRAGMENTS, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_FRAGMENTS, spellInfo, learned))
         {
             std::vector<std::pair<float, Unit*>> struckBy;
-            for (Unit* unit : EnemiesNear(victim, row->value + 5.0f))
+            float const reach = row->value * spellArea();
+            for (Unit* unit : EnemiesNear(victim, reach + 5.0f))
             {
                 if (unit == victim || !unit->IsAlive() || !MayCatchUnit(caster, unit, nullptr))
                     continue;
                 float const dist = victim->GetDistance(unit);
-                if (dist > row->value || !victim->IsWithinLOSInMap(unit))
+                if (dist > reach || !victim->IsWithinLOSInMap(unit))
                     continue;
                 struckBy.emplace_back(dist, unit);
             }
@@ -519,8 +651,8 @@ namespace Arpg
             for (uint32 k = 0; k < spare; ++k)
             {
                 float const fan = away + (float(k) - float(spare - 1) * 0.5f) * (float(M_PI) / 4.0f);
-                float x = victim->GetPositionX() + std::cos(fan) * row->value * SHARD_SCATTER;
-                float y = victim->GetPositionY() + std::sin(fan) * row->value * SHARD_SCATTER;
+                float x = victim->GetPositionX() + std::cos(fan) * reach * SHARD_SCATTER;
+                float y = victim->GetPositionY() + std::sin(fan) * reach * SHARD_SCATTER;
                 float z = victim->GetPositionZ();
                 victim->UpdateAllowedPositionZ(x, y, z);
                 SendGroundVisual(victim, x, y, z, spellInfo);
@@ -528,7 +660,7 @@ namespace Arpg
         }
 
         // Chain (C): leaps from the target to the nearest enemy not yet hit, `n` times.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_CHAIN, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_CHAIN, spellInfo, learned))
         {
             GuidVector hit{ victim->GetObjectGuid() };
             if (Unit* first = NextInChain(caster, victim, row->value, hit))
@@ -543,17 +675,18 @@ namespace Arpg
         }
 
         // Burst (E): everything within `value` yards of the target, at once.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_BURST, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_BURST, spellInfo, learned))
         {
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
             size_t done = 0;
-            for (Unit* unit : EnemiesNear(victim, row->value + 5.0f))
+            float const reach = row->value * spellArea();
+            for (Unit* unit : EnemiesNear(victim, reach + 5.0f))
             {
                 if (done >= BURST_MAX)
                     break;
                 if (unit == victim || !unit->IsAlive() || !MayCatchUnit(caster, unit, nullptr))
                     continue;
-                if (victim->GetDistance(unit) > row->value || !victim->IsWithinLOSInMap(unit))
+                if (victim->GetDistance(unit) > reach || !victim->IsWithinLOSInMap(unit))
                     continue;
                 DealShare(caster, unit, spellInfo, mask, share);
                 ++done;
@@ -564,15 +697,17 @@ namespace Arpg
         }
 
         // Arc (G): a melee ability strikes every other enemy in the swing's arc and reach too.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_ARC, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_ARC, spellInfo, learned))
         {
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
             size_t done = 0;
-            for (Unit* unit : EnemiesNear(caster, 10.0f))
+            for (Unit* unit : EnemiesNear(caster, 10.0f + (area() - 1.0f) * 5.0f))
             {
                 if (unit == victim || !unit->IsAlive() || !MayCatchUnit(caster, unit, nullptr))
                     continue;
-                if (!caster->CanReachWithMeleeAttack(unit) || !caster->HasInArc(unit, ARC_WIDTH))
+                float const width = ARC_WIDTH * area();
+                if (!caster->CanReachWithMeleeAttack(unit, (area() - 1.0f) * 5.0f) ||
+                        (width < 2.0f * float(M_PI) && !caster->HasInArc(unit, width)))
                     continue;
                 DealShare(caster, unit, spellInfo, mask, share);
                 ++done;
@@ -583,7 +718,7 @@ namespace Arpg
         }
 
         // Pierce (B): on along the line past the target, out to the spell's range.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_PIERCE, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_PIERCE, spellInfo, learned))
         {
             float const bearing = spell->IsArpgLine() ? spell->GetArpgAim() : caster->GetAngle(victim);
             float maxRange = GetSpellMaxRange(sSpellRangeStore.LookupEntry(spellInfo->rangeIndex));
@@ -608,10 +743,10 @@ namespace Arpg
         }
 
         // Shockwave (H): along the caster's facing, past the target too.
-        if (UniqueMechanic const* row = WornMechanic(player, KIT_SHOCKWAVE, spellInfo))
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_SHOCKWAVE, spellInfo, learned))
         {
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
-            std::vector<Unit*> const line = UnitsAlongLine(caster, caster->GetOrientation(), 0.0f, row->value, victim);
+            std::vector<Unit*> const line = UnitsAlongLine(caster, caster->GetOrientation(), 0.0f, row->value * area(), victim);
             for (Unit* unit : line)
                 DealShare(caster, unit, spellInfo, mask, share);
             if (!line.empty())
@@ -620,9 +755,9 @@ namespace Arpg
         }
 
         // Step (K): a kill moves the player behind the nearest enemy, just after the hit.
-        if (!victim->IsAlive())
+        if (!victim->IsAlive() && !spell->IsArpgSecondary())
         {
-            if (UniqueMechanic const* row = WornMechanic(player, KIT_STEP, spellInfo))
+            if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_STEP, spellInfo, learned))
             {
                 std::vector<Unit*> next = NearestTo(caster, caster, row->value, 1);
                 if (!next.empty())
@@ -683,14 +818,14 @@ namespace Arpg
             Unit* auraCaster = holder->GetCaster();
             if (!Active(auraCaster) || !auraCaster->IsInMap(victim))
                 continue;
-            UniqueMechanic const* row = WornMechanic(static_cast<Player*>(auraCaster), KIT_SPREAD, holder->GetSpellProto());
+            UniqueMechanic const* row = WornMechanic(static_cast<Player*>(auraCaster), KIT_SPREAD, holder->GetSpellProto(), true);
             if (row && !row->n)
                 spreads.emplace_back(auraCaster->GetObjectGuid(), holder->GetSpellProto());
         }
         for (auto const& [guid, spellInfo] : spreads)
         {
             Player* caster = victim->GetMap()->GetPlayer(guid);
-            UniqueMechanic const* row = caster ? WornMechanic(caster, KIT_SPREAD, spellInfo) : nullptr;
+            UniqueMechanic const* row = caster ? WornMechanic(caster, KIT_SPREAD, spellInfo, true) : nullptr;
             if (!row)
                 continue;
             std::vector<Unit*> const more = NearestTo(caster, victim, row->value, BURST_MAX);

@@ -116,6 +116,9 @@ namespace
 
     // The skill trees' numbers.
     constexpr float SWING_ARC = 2.0f * float(M_PI) / 3.0f;
+    // Melee area's reach: each +100% of melee area would add this many yards to the swing's added
+    // hits (the cap, +40%, gives 2).
+    constexpr float MELEE_AREA_YARDS = 5.0f;
     constexpr uint32 WIDE_SWING_PCT[3] = { 20, 35, 50 };
     constexpr uint32 WHIRL_EVERY = 4, WHIRL_PCT = 75;
     constexpr uint32 MOMENTUM_WINDOW = 3000, MOMENTUM_MAX = 5;
@@ -1190,6 +1193,26 @@ namespace Arpg
         return HasKeystone(target, KEY_MARTYR) ? 0.5f : 1.0f;
     }
 
+    float MeleeAreaScale(Unit const* unit)
+    {
+        if (!Active(unit))
+            return 1.0f;
+        std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
+        WebTotals const& t = totals ? *totals : NoTotals();
+        int32 const pct = int32(unit->GetStat(STAT_STRENGTH)) / STR_PER_AREA + t.meleeAreaPct;
+        return 1.0f + std::clamp(pct, 0, AREA_CAP) / 100.0f;
+    }
+
+    float SpellAreaScale(Unit const* unit)
+    {
+        if (!Active(unit))
+            return 1.0f;
+        std::shared_ptr<WebTotals const> totals = TotalsOf(unit);
+        WebTotals const& t = totals ? *totals : NoTotals();
+        int32 const pct = int32(unit->GetStat(STAT_INTELLECT)) / INT_PER_AREA + t.spellAreaPct;
+        return 1.0f + std::clamp(pct, 0, AREA_CAP) / 100.0f;
+    }
+
     float AreaScale(Unit const* caster, SpellEntry const* spellInfo)
     {
         if (!spellInfo || !Active(caster))
@@ -1274,6 +1297,13 @@ namespace Arpg
     void OnDamageTaken(Unit* victim, Unit* attacker, uint32 damage)
     {
         OnPackDamage(attacker, victim, damage);
+        // Leech, the item affixes': every hit an ARPG player deals, whatever dealt it (a swing, a
+        // spell, a tick, an added hit, thorns).
+        // Only from an enemy, and no more than the health it had left.
+        if (damage && attacker && victim && attacker != victim && attacker->GetTypeId() == TYPEID_PLAYER && Active(attacker))
+            if (std::shared_ptr<WebTotals const> dealt = TotalsOf(attacker))
+                if ((dealt->lifeLeech > 0 || dealt->manaLeech > 0) && attacker->CanAttack(victim) && victim->IsAlive())
+                    Leech(static_cast<Player*>(attacker), *dealt, std::min<uint32>(damage, victim->GetHealth()));
         // A hit taken is fighting: the rest waits.
         if (damage && victim && attacker != victim && Active(victim))
         {
@@ -1357,7 +1387,6 @@ namespace Arpg
         if (victim->GetTypeId() == TYPEID_UNIT)
             OnTelegraphAggro(static_cast<Creature*>(victim), attacker);
 
-        Leech(player, t, damage);
         if (damage)
             RecordHit(r, SKILL_STRIKE, damage, now);
         // Rune of Leech in Strike.
@@ -1372,6 +1401,8 @@ namespace Arpg
         if (!damage)
             return;
         float const reach = ExtraMeleeReach(attacker);
+        // Melee area (Strength, gear) widens the swing's added hits.
+        float const area = MeleeAreaScale(attacker);
         bool const whirl = t.Has(KEY_WHIRLING_STRIKES) && ++r.swings % WHIRL_EVERY == 0;
         uint8 const wide = t.Rank(KEY_WIDE_SWING);
         if (whirl || wide)
@@ -1382,9 +1413,11 @@ namespace Arpg
             {
                 uint32 struck = 0;
                 uint32 const share = std::max<uint32>(1, damage * pct / 100);
-                for (Unit* unit : EnemiesNear(attacker, 8.0f + reach))
+                float const extra = reach + (area - 1.0f) * MELEE_AREA_YARDS;
+                for (Unit* unit : EnemiesNear(attacker, 8.0f + extra))
                     if (unit != victim && unit->IsAlive() && MayCatchUnit(attacker, unit, nullptr) &&
-                            attacker->CanReachWithMeleeAttack(unit, reach) && (whirl || attacker->HasInArc(unit, SWING_ARC)))
+                            attacker->CanReachWithMeleeAttack(unit, extra) &&
+                            (whirl || SWING_ARC * area >= 2.0f * float(M_PI) || attacker->HasInArc(unit, SWING_ARC * area)))
                     {
                         StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share);
                         ++struck;
@@ -1403,7 +1436,7 @@ namespace Arpg
             if (SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(WAR_STOMP))
             {
                 uint32 const share = std::max<uint32>(1, damage * SHOCKWAVE_PCT / 100);
-                std::vector<Unit*> const foes = FoesAlongLine(player, attacker->GetOrientation(), 0.0f, SHOCKWAVE_REACH, victim);
+                std::vector<Unit*> const foes = FoesAlongLine(player, attacker->GetOrientation(), 0.0f, SHOCKWAVE_REACH * area, victim);
                 for (Unit* unit : foes)
                     StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share);
                 if (!foes.empty())
@@ -1439,7 +1472,6 @@ namespace Arpg
             }
         }
 
-        Leech(player, t, dealt);
         // Rune of Leech in the skill.
         if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
             ProcHeal(caster, "Rune of Leech", std::max<uint32>(1, dealt * RUNE_LEECH_PCT / 100));

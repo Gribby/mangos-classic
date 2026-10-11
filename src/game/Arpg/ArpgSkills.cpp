@@ -1267,6 +1267,9 @@ namespace Arpg
                         lines.push_back(format("|cffe6cc80%s|r: %s", item->GetProto()->Name1, row.text));
                 }
             }
+            // Kits from several sources on one spell stack: the combined numbers.
+            for (std::string const& line : StackedKitLines(player, uint8(skill.id)))
+                lines.push_back(line);
             if (lines.size() == 2 && !total)
                 lines.push_back("|cff9d9d9dNothing adds to it yet: points in its tree, web nodes and gear with its tags all do.|r");
             // Gear and buffs, the character's numbers, the damage it should do and what it did.

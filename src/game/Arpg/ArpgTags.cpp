@@ -141,6 +141,14 @@ namespace Arpg
             for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
                 if (SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id))
                     out[id] = Derive(spell);
+            // What a channel fires each tick (Arcane Missiles' missiles) is the channel's damage.
+            for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
+                if (SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id))
+                    if (IsChanneledSpell(spell))
+                        for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
+                            if (uint32 const fired = spell->EffectTriggerSpell[i])
+                                if (fired < out.size())
+                                    out[fired] |= TagBit(TAG_CHANNEL);
             return out;
         }();
         return spellInfo->Id < table.size() ? table[spellInfo->Id] : Derive(spellInfo);

@@ -69,6 +69,11 @@ namespace Arpg
     // The multiplier on `spellInfo`'s radius cast by `caster`.
     float AreaScale(Unit const* caster, SpellEntry const* spellInfo);
 
+    // The melee area (Strength, gear) and spell area (Intellect, gear) multipliers of `unit`, for the
+    // ARPG's own areas: swing cleaves, arcs, shockwaves, bursts and shards.
+    float MeleeAreaScale(Unit const* unit);
+    float SpellAreaScale(Unit const* unit);
+
     // The multiplier on `unit`'s run speed.
     float MoveSpeedMod(Unit const* unit);
 

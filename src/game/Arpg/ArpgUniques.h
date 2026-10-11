@@ -39,8 +39,8 @@
  * to the one they reach draws the missile, and the hit lands when it arrives.
  * A row's spell covers every rank of it and any spell named after it ("Judgement of
  * Righteousness" under Judgement, each missile under Arcane Missiles).
- * If two sources (worn items, skill nodes) change the same spell with the same kit, the one with
- * the larger `n` applies, then the one with the larger `pct`.
+ * Several sources (worn items, skill nodes, runes) of the same kit on the same spell stack into one
+ * (WornMechanic): counts and shares add, to caps, never below the strongest source alone.
  *
  *   SMSG_ARPG_ITEM_MECHANICS: uint8 count, then per row: uint32 item id, cstring tooltip line.
  *   Sent in answer to every hello, so the client can show the lines.
@@ -52,6 +52,7 @@
 #include "Common.h"
 #include "Entities/ObjectGuid.h"
 
+#include <string>
 #include <vector>
 
 class Player;
@@ -92,8 +93,19 @@ namespace Arpg
     // Every unique, in table order.
     std::vector<UniqueMechanic> const& Uniques();
 
-    // The mechanic of `kit` that `player`'s worn items give `spellInfo`, if any.
-    UniqueMechanic const* WornMechanic(Player const* player, UniqueKit kit, SpellEntry const* spellInfo);
+    // The character sheet's lines for the kits that stack on `skill`'s spells, with the combined
+    // numbers.
+    std::vector<std::string> StackedKitLines(Player const* player, uint8 skill);
+
+    // The mechanic of `kit` that `player`'s worn items, skill nodes and runes give `spellInfo`, if
+    // any: several sources stack into one row (counts add, shares add to at most 100%, reach
+    // takes the widest; an echo as often as its most frequent source).
+    // `onDeath` asks for a spread from a corpse (n 0), else one on landing; other kits ignore it.
+    UniqueMechanic const* WornMechanic(Player const* player, UniqueKit kit, SpellEntry const* spellInfo, bool onDeath = false);
+
+    // As WornMechanic, with the player's skill rows (LearnedModifiers) already in hand.
+    UniqueMechanic const* WornMechanicFrom(Player const* player, UniqueKit kit, SpellEntry const* spellInfo,
+                                           std::vector<UniqueMechanic const*> const& learned, bool onDeath = false);
 
     // Send `player` the uniques' tooltip lines (SMSG_ARPG_ITEM_MECHANICS).
     void SendUniques(Player* player);
@@ -103,7 +115,8 @@ namespace Arpg
     void OnLineLaunch(Spell* spell, Unit* struck);
 
     // `spell` hit `victim` for `dealt` (after mitigation, absorbs included): apply the caster's
-    // on-hit uniques (fragments). Added hits set off none.
+    // on-hit kits (fragments, chain, burst, arc, pierce, shockwave, step). Extra projectiles and
+    // echoes set them off too; the kits' own added hits set off none.
     void OnSpellDamage(Spell* spell, Unit* caster, Unit* victim, uint32 dealt);
 
     // `spell` landed on `target` (hit, not missed or resisted): the caster's on-land uniques
