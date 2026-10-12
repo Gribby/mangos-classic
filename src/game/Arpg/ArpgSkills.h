@@ -69,14 +69,13 @@ namespace Arpg
     enum SkillId : uint8
     {
         SKILL_NONE         = 0,
-        SKILL_STRIKE       = 1,
-        SKILL_SEALS        = 2,
+        SKILL_STRIKE       = 1,   // Crusader: the swing and the Seals
+        SKILL_HOLY_LIGHT   = 2,   // Holy Light and Flash of Light (was the Seals before revision 2)
         SKILL_JUDGEMENT    = 3,
         SKILL_CONSECRATION = 4,
-        SKILL_HAMMER       = 5,
-        SKILL_EXORCISM     = 6,
-        SKILL_HOLY_WRATH   = 7,
-        SKILL_HAMMER_OF_WRATH = 8,
+        SKILL_HAMMER       = 5,   // Hammers: Hammer of Justice and Hammer of Wrath
+        SKILL_WRATH        = 6,   // Exorcism and Holy Wrath
+        // 7 and 8 (Holy Wrath, Hammer of Wrath alone) are folded into Wrath and Hammers.
     };
 
     enum SkillNodeKind : uint8
@@ -178,6 +177,9 @@ namespace Arpg
     // The capstones whose Codex page `bossEntry` drops; every page; every rune.
     std::vector<uint16> PagesFrom(uint32 bossEntry);
     std::vector<uint16> AllPages();
+    // The page an item of node `node`'s page reads today: itself, its renumbered capstone for a page
+    // item from before the trees' revision 2, or 0.
+    uint16 CurrentPage(uint16 node);
     std::vector<uint8> AllRunes();
     char const* PageName(uint16 node);
     char const* RuneName(uint8 rune);

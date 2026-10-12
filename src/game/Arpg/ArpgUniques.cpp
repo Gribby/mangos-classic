@@ -882,7 +882,7 @@ namespace Arpg
         Player const* player = static_cast<Player const*>(caster);
         // The web's Purifying Light, or the skill specialised (Arpg/ArpgSkills.h).
         return HasKeystone(player, KEY_PURIFYING_LIGHT) ||
-               IsSpecialised(player, exorcism ? SKILL_EXORCISM : SKILL_HOLY_WRATH);
+               IsSpecialised(player, SKILL_WRATH);
     }
 
     void OnHeal(Spell* spell, Unit* caster, Unit* target, uint32 amount)

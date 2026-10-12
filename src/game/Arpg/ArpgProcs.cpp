@@ -106,7 +106,7 @@ namespace
             { RUNE_FERVOUR, 0, "Rune of Fervour", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_CRIT,
               { "Judgement", "Judgement of Righteousness", "Judgement of Command" }, 0, 8000, 10000, "Judgement",
               "A critical hit with the skill makes your next Judgement a sure critical strike (once every 8 sec)." },
-            { RUNE_ZEAL, 0, "Rune of Zeal", TRIG_SPELL_CRIT, SKILL_SEALS, {}, EFFECT_FREE,
+            { RUNE_ZEAL, 0, "Rune of Zeal", TRIG_SPELL_CRIT, SKILL_STRIKE, {}, EFFECT_FREE,
               { "Holy Light", "Flash of Light" }, 0, 10000, 12000, "Holy Light or Flash of Light",
               "A critical Seal hit makes your next Holy Light or Flash of Light cost no mana (once every 10 sec)." },
 

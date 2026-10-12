@@ -122,6 +122,11 @@ namespace Arpg
         KEY_SENTENCE_PASSED,   // +15% damage to stunned enemies
         KEY_WRATHFUL,          // Holy Wrath fires on its own when 4 or more enemies are near
         KEY_EXECUTIONER,       // Hammer of Wrath deals double damage below 20% health
+        // Holy Light's tree (revision 2)
+        KEY_LIGHT_STRIKE,      // heals strike the nearest enemy for 15% per rank
+        KEY_JUDGING_LIGHT,     // heals Judge enemies within 8 yd, a hit of 25% per rank
+        KEY_AVENGING_LIGHT,    // healing yourself: 5% more damage per rank for 5 sec
+        KEY_HOLY_NOVA,         // heals burst for 50% as Holy around you
         MAX_KEYSTONE
     };
 
@@ -183,6 +188,9 @@ namespace Arpg
         // Skill levels from gear (Arpg/ArpgSkills.h, GearSkillLevels): to all Melee, Spell, Holy,
         // and elemental (Fire, Frost, Nature, Arcane or Shadow) skills.
         int32 skillLevel[4] = {};
+        // The skill trees' ailment nodes: by skill id, the % chance its hits inflict each damage
+        // tag's ailment, whatever their own type.
+        int32 skillAilment[16][7] = {};
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers

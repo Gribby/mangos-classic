@@ -5,6 +5,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgUniques.h"
@@ -247,15 +248,19 @@ namespace
         }
     }
 
-    // Roll and inflict the ailments of a hit of `tags`.
-    void RollAilments(Player* player, WebTotals const& t, Unit* victim, uint32 tags, uint32 dealt, bool crit)
+    // Roll and inflict the ailments of a hit of `tags`: its own types' (sure on a critical strike,
+    // else the gear's chance), and the skill tree's ailment nodes for `skill`'s hits, whatever
+    // their type (SKILL_NONE: an added hit, which has none).
+    void RollAilments(Player* player, WebTotals const& t, Unit* victim, uint32 tags, uint32 dealt, bool crit, uint8 skill)
     {
         for (uint8 tag = 0; tag < DAMAGE_TAGS; ++tag)
         {
-            if (!(tags & TagBit(Tag(tag))))
-                continue;
-            if (crit || roll_chance_i(std::clamp(t.ailmentChance[tag], 0, 100)))
-                Inflict(player, t, victim, tag, dealt, crit);
+            bool const own = (tags & TagBit(Tag(tag))) != 0;
+            int32 chance = own ? t.ailmentChance[tag] : 0;
+            if (skill && skill < 16)
+                chance += t.skillAilment[skill][tag];
+            if ((own && crit) || (chance > 0 && roll_chance_i(std::clamp(chance, 0, 100))))
+                Inflict(player, t, victim, tag, dealt, own && crit);
         }
     }
 
@@ -355,9 +360,9 @@ namespace Arpg
         WebTotals const& t = *totals;
         Player* player = static_cast<Player*>(attacker);
 
-        // The main hit's own ailments (a dead target takes none).
+        // The main hit's own ailments, and its skill tree's (a dead target takes none).
         if (victim->IsAlive())
-            RollAilments(player, t, victim, tags, dealt, crit);
+            RollAilments(player, t, victim, tags, dealt, crit, uint8(SkillOfSpell(player->getClass(), spellInfo)));
 
         // Added damage: attacks take the attack affixes, spells the spell ones. A Seal's hit rides
         // on a swing, which has its added damage already.
@@ -393,7 +398,7 @@ namespace Arpg
             uint32 const hit = std::max<uint32>(1, uint32(amount));
             StrikeFoe(attacker, victim, look, SCHOOL_OF_TAG[tag], hit);
             if (victim->IsAlive())
-                RollAilments(player, t, victim, TagBit(Tag(tag)), hit, crit);
+                RollAilments(player, t, victim, TagBit(Tag(tag)), hit, crit, 0);
         }
     }
 

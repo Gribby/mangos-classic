@@ -64,6 +64,13 @@ namespace
     // The longest gap one rest tick covers: after a loading screen, no lump of healing.
     constexpr uint32 REST_GAP_MAX_MS = 1000;
 
+    // A Seal's damage: by name, as the hits a Seal deals (Seal of Righteousness's and Seal of
+    // Command's procs) carry none of the Seal auras' family flags.
+    bool IsSealHit(SpellEntry const* spellInfo)
+    {
+        return spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of ", 8) == 0;
+    }
+
     // Give `unit` `permille` thousandths of its maximum mana and `flat` more.
     void GiveManaPermille(Unit* unit, uint32 permille, int32 flat = 0)
     {
@@ -116,6 +123,17 @@ namespace
     constexpr uint32 RECOVERY_MS = 4000;
     constexpr int32 RECOVERY_PCT = 10;
     constexpr float FURY_RANGE = 8.0f;
+    // Holy Light's tree: Searing Radiance's reach and share per rank, Judging Light's reach, share
+    // per rank and cooldown, Avenging Light's more damage per rank and time, Holy Nova's share and reach.
+    constexpr float LIGHT_STRIKE_RANGE = 20.0f;
+    constexpr uint32 LIGHT_STRIKE_PCT = 15;
+    constexpr float JUDGING_LIGHT_RANGE = 8.0f;
+    constexpr uint32 JUDGING_LIGHT_PCT = 25, JUDGING_LIGHT_EVERY = 3000;
+    constexpr int32 AVENGING_LIGHT_PCT = 5;
+    constexpr uint32 AVENGING_LIGHT_MS = 5000;
+    constexpr uint32 HOLY_NOVA_PCT = 50;
+    constexpr float HOLY_NOVA_RANGE = 8.0f;
+    constexpr uint32 HOLY_NOVA_LOOK = 2812;     // Holy Wrath's hit
     constexpr size_t FURY_COUNT = 3;
 
     // The skill trees' numbers.
@@ -170,6 +188,8 @@ namespace
         uint32 favourReady = 0;      // Divine Favour: the time it is ready again
         uint32 recoveryUntil = 0;    // Blessed Recovery: the time its bonus ends
         uint32 lastWrath = 0;        // Wrathful: the last time Holy Wrath fired on its own
+        uint32 avengeUntil = 0;      // Avenging Light: the time its more damage ends
+        uint32 lastJudgingLight = 0; // Judging Light: the last time a heal judged
         uint32 lastManaHit = 0;      // the last skill hit that returned mana
         uint32 combatSeen = 0;       // the last update the player was in combat
         uint32 lastRest = 0;         // the last rest tick
@@ -763,10 +783,10 @@ namespace
         }
         if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
             more(5 * t.Rank(KEY_HEAVY_HAND), "Heavy Hand");
-        if (skill == SKILL_SEALS)
+        if (IsSealHit(spellInfo))
         {
             more(6 * t.Rank(KEY_HOLY_EDGE), "Holy Edge");
-            if (spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) == 0)
+            if (std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) == 0)
                 more(10 * t.Rank(KEY_COMMANDING_SEAL), "Commanding Seal");
         }
         if (skill == SKILL_JUDGEMENT)
@@ -784,8 +804,12 @@ namespace
             more(5 * t.Rank(KEY_SEARING_LIGHT), "Searing Light");
         // A unique's power's fury (Arpg/ArpgProcs.h).
         more(UniqueFuryPct(player), "a unique's power");
+        // Avenging Light: healing yourself, more damage a while.
+        if (t.Has(KEY_AVENGING_LIGHT) && int32(R(player).avengeUntil - now) > 0)
+            more(AVENGING_LIGHT_PCT * t.Rank(KEY_AVENGING_LIGHT), "Avenging Light");
         // Executioner: Hammer of Wrath doubles on an enemy below 20% health.
-        if (skill == SKILL_HAMMER_OF_WRATH && t.Has(KEY_EXECUTIONER) && victim &&
+        if (spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Hammer of Wrath", 15) == 0 &&
+                t.Has(KEY_EXECUTIONER) && victim &&
                 victim->GetHealth() < victim->GetMaxHealth() * EXECUTE_BELOW)
             more(100, "Executioner");
         return p;
@@ -1403,6 +1427,52 @@ namespace Arpg
             r.recoveryUntil = WorldTimer::getMSTime() + RECOVERY_MS;
             r.lastRefresh = 0;
         }
+        // Holy Light's tree: heals that hurt.
+        if (SkillOfSpell(player->getClass(), spell->m_spellInfo) == SKILL_HOLY_LIGHT)
+            if (std::shared_ptr<WebTotals const> totals = TotalsOf(caster))
+            {
+                WebTotals const& t = *totals;
+                uint32 const now = WorldTimer::getMSTime();
+                float const area = SpellAreaScale(player);
+                if (uint8 const rank = t.Rank(KEY_LIGHT_STRIKE))
+                {
+                    std::vector<Unit*> const foes = NearestFoes(player, player, LIGHT_STRIKE_RANGE, 1);
+                    if (!foes.empty())
+                    {
+                        uint32 const dealt = ToDamage(player, foes.front(), amount * LIGHT_STRIKE_PCT * rank / 100);
+                        SendHolyBolt(player, foes.front(), std::max<uint32>(1, dealt));
+                        ReportProc(player, PROC_DAMAGE, 0, "Searing Radiance", "strikes %s for %u.", foes.front()->GetName(), dealt);
+                    }
+                }
+                if (uint8 const rank = t.Rank(KEY_JUDGING_LIGHT))
+                {
+                    Runtime& r = R(player);
+                    if (WorldTimer::getMSTimeDiff(r.lastJudgingLight, now) >= JUDGING_LIGHT_EVERY)
+                    {
+                        std::vector<Unit*> const foes = NearestFoes(player, player, JUDGING_LIGHT_RANGE * area, 10);
+                        if (!foes.empty())
+                        {
+                            r.lastJudgingLight = now ? now : 1;
+                            for (Unit* unit : foes)
+                                InflictAilment(player, unit, TAG_HOLY, ToDamage(player, unit, amount * JUDGING_LIGHT_PCT * rank / 100), false);
+                            ReportProc(player, PROC_EFFECT, 0, "Judging Light", "judges %u %s.", uint32(foes.size()),
+                                       foes.size() == 1 ? "enemy" : "enemies");
+                        }
+                    }
+                }
+                if (caster == target && t.Has(KEY_AVENGING_LIGHT))
+                    R(player).avengeUntil = now + AVENGING_LIGHT_MS;
+                if (t.Has(KEY_HOLY_NOVA))
+                    if (SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(HOLY_NOVA_LOOK))
+                    {
+                        std::vector<Unit*> const foes = NearestFoes(player, player, HOLY_NOVA_RANGE * area, 10);
+                        for (Unit* unit : foes)
+                            StrikeFoe(player, unit, look, SPELL_SCHOOL_MASK_HOLY, std::max<uint32>(1, ToDamage(player, unit, amount * HOLY_NOVA_PCT / 100)));
+                        if (!foes.empty())
+                            ReportProc(player, PROC_DAMAGE, 0, "Holy Nova", "bursts onto %u %s.", uint32(foes.size()),
+                                       foes.size() == 1 ? "enemy" : "enemies");
+                    }
+            }
         if (HasKeystone(caster, KEY_LIGHTFORGED))
         {
             std::vector<Unit*> foes = NearestFoes(player, player, LIGHTFORGED_RANGE, 1);
@@ -1607,7 +1677,7 @@ namespace Arpg
         if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
             ProcHeal(caster, "Rune of Leech", std::max<uint32>(1, FromDamage(caster, victim, dealt) * RUNE_LEECH_PCT / 100));
 
-        if (skill == SKILL_SEALS)
+        if (IsSealHit(spellInfo))
         {
             if (t.Has(KEY_MANA_STRIKE))
                 ProcMana(player, "Mana Strike", player->GetMaxPower(POWER_MANA) * t.Rank(KEY_MANA_STRIKE) / 100);
@@ -1648,7 +1718,9 @@ namespace Arpg
         WebTotals const& t = *totals;
         Player* player = static_cast<Player*>(caster);
         SpellEntry const* spellInfo = spell->m_spellInfo;
-        if (SkillOfSpell(player->getClass(), spellInfo) != SKILL_HAMMER)
+        // Hammer of Justice's nodes (Hammer of Wrath shares the skill, not these).
+        if (SkillOfSpell(player->getClass(), spellInfo) != SKILL_HAMMER || !spellInfo->SpellName[0] ||
+                std::strncmp(spellInfo->SpellName[0], "Hammer of Justice", 17) != 0)
             return;
         float const ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
         if (t.Has(KEY_HOLY_HAMMER) && target->IsAlive())

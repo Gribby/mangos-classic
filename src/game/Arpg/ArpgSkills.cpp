@@ -58,6 +58,9 @@ namespace
         uint8 n[4] = {};
         float value[4] = {};
         uint32 pct[4] = {};
+        char const* only = nullptr; // a spell modifier over this spell (by name) alone, not the skill's every spell
+        int8 ailTag = -1;         // an ailment node: its damage tag, and the chance per rank
+        uint8 ailPerRank = 0;
     };
 
     struct SkillDef
@@ -81,12 +84,24 @@ namespace
     }
 
     SkillNode Mod(uint16 id, uint8 col, uint8 row, uint16 parent, uint8 max, char const* name, char const* text,
-                  uint32 icon, SpellModOp op, SpellModType type, int32 perRank)
+                  uint32 icon, SpellModOp op, SpellModType type, int32 perRank, char const* only = nullptr)
     {
         SkillNode n{ id, SKILL_NODE_MODIFIER, col, row, parent, max, name, text, icon };
         n.modOp = int8(op);
         n.modType = uint8(type);
         n.modPerRank = perRank;
+        n.only = only;
+        return n;
+    }
+
+    // An ailment node: the skill's hits have `perRank`% per rank to inflict `tag`'s ailment
+    // (Arpg/ArpgDamage.h), whatever their own damage type.
+    SkillNode Ail(uint16 id, uint8 col, uint8 row, uint16 parent, uint8 max, char const* name, char const* text,
+                  uint32 icon, Tag tag, uint8 perRank)
+    {
+        SkillNode n{ id, SKILL_NODE_MODIFIER, col, row, parent, max, name, text, icon };
+        n.ailTag = int8(tag);
+        n.ailPerRank = perRank;
         return n;
     }
 
@@ -115,127 +130,119 @@ namespace
         return node;
     }
 
-    // The paladin's specialisable skills (docs/ARPG-CHARACTER.md, "The paladin, in full").
+    // The paladin's specialisable skills (docs/ARPG-CHARACTER.md, "The paladin, in full"): six,
+    // for five slots. A tree is three branches (two for Holy Light) of four or five tiers.
     std::vector<SkillDef> const& Skills()
     {
         static std::vector<SkillDef> const skills =
         {
-            { SKILL_STRIKE, CLASS_PALADIN, "Strike", "Your held swing: the left click.", 6603, {},
-              { "Reach", "Rhythm", "Weight" },
+            { SKILL_STRIKE, CLASS_PALADIN, "Crusader", "Your held swing and your Seals, as one: the Seal is the swing's damage.", 20154, { "Seal of" },
+              { "Reach", "Righteous", "Zeal" },
               {
                   Key(101, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Wide Swing", "Your swings also strike every other enemy in front of you, for 20/35/50% of the hit.", 845, KEY_WIDE_SWING),
                   Key(102, SKILL_NODE_MODIFIER, 0, 2, 101, 2, "Long Arm", "+1 yard melee reach per rank.", 12292, KEY_LONG_ARM),
-                  Key(103, SKILL_NODE_CAPSTONE, 0, 3, 102, 1, "Whirling Strikes", "Every 4th swing also strikes every enemy around you, for 75% of the hit.", 1680, KEY_WHIRLING_STRIKES),
-                  Key(104, SKILL_NODE_MODIFIER, 1, 1, 0, 4, "Quickened", "+4% attack speed per rank.", 19740, KEY_QUICKENED),
-                  Key(105, SKILL_NODE_MODIFIER, 1, 2, 104, 3, "Momentum", "Each swing that hits within 3 sec of the last gives 1% more swing damage per rank, up to 5 hits.", 12294, KEY_MOMENTUM),
-                  Key(106, SKILL_NODE_CAPSTONE, 1, 3, 105, 1, "Crusader's Pace", "Your kills give +30% movement speed for 3 sec.", 2983, KEY_CRUSADERS_PACE),
-                  Key(107, SKILL_NODE_MODIFIER, 2, 1, 0, 4, "Heavy Hand", "5% more Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
-                  Key(108, SKILL_NODE_TRANSFORMER, 2, 2, 107, 2, "Stagger", "Your swings have a 10% chance per rank to daze the enemy.", 1715, KEY_STAGGER),
-                  Key(109, SKILL_NODE_CAPSTONE, 2, 3, 108, 1, "Shockwave", "Your swing critical strikes send a shockwave 10 yards ahead, for 40% of the hit.", 20549, KEY_SHOCKWAVE_STRIKE),
-              } },
-            { SKILL_SEALS, CLASS_PALADIN, "Seals", "Your Seals, as one skill: they are the swing's damage.", 20154, { "Seal of" },
-              { "Righteous", "Command", "Crusader" },
-              {
-                  Kit(201, 0, 1, 0, 3, "Sweeping Seal", "Seal of Righteousness strikes every enemy in front of you; the extras take 20/35/50%.", 20154,
+                  Key(103, SKILL_NODE_MODIFIER, 0, 3, 102, 4, "Heavy Hand", "5% more Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
+                  Ail(104, 0, 4, 103, 3, "Rending Strikes", "Your Crusader hits have an 8% chance per rank to cause Bleeding.", 772, TAG_PHYSICAL, 8),
+                  Key(105, SKILL_NODE_CAPSTONE, 0, 5, 104, 1, "Whirling Strikes", "Every 4th swing also strikes every enemy around you, for 75% of the hit.", 1680, KEY_WHIRLING_STRIKES),
+                  Kit(106, 1, 1, 0, 3, "Sweeping Seal", "Seal of Righteousness strikes every enemy in front of you; the extras take 20/35/50%.", 20154,
                       KIT_ARC, 20154, { 0, 0, 0 }, { 0, 0, 0 }, { 20, 35, 50 }),
-                  Key(202, SKILL_NODE_MODIFIER, 0, 2, 201, 4, "Holy Edge", "6% more Seal damage per rank.", 20101, KEY_HOLY_EDGE),
-                  Key(203, SKILL_NODE_CAPSTONE, 0, 3, 202, 1, "Twin Seals", "Two different Seals can be on you at once.", 20164, KEY_TWIN_SEALS),
-                  Key(204, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Commanding Seal", "10% more Seal of Command damage per rank.", 20375, KEY_COMMANDING_SEAL),
-                  Kit(205, 1, 2, 204, 2, "Command Arc", "Seal of Command strikes every enemy in front of you, at 40/60%.", 20467,
-                      KIT_ARC, 20375, { 0, 0 }, { 0, 0 }, { 40, 60 }),
-                  Key(206, SKILL_NODE_MODIFIER, 1, 3, 205, 3, "Relentless", "Seal of Command strikes 1 more time a minute per rank.", 20424, KEY_RELENTLESS),
-                  Key(207, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Zeal", "+10% attack speed per rank while Seal of the Crusader is on you.", 21082, KEY_ZEAL),
-                  Key(208, SKILL_NODE_SYNERGY, 2, 2, 207, 3, "Mana Strike", "Your Seal hits give you 1% of your maximum mana per rank.", 19742, KEY_MANA_STRIKE),
-                  Key(209, SKILL_NODE_CAPSTONE, 2, 3, 208, 1, "Light of the Crusader", "Your Seal hits heal you for 10% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
+                  Key(107, SKILL_NODE_MODIFIER, 1, 2, 106, 4, "Holy Edge", "6% more Seal damage per rank.", 20101, KEY_HOLY_EDGE),
+                  Ail(108, 1, 3, 107, 3, "Judging Seals", "Your Crusader hits have an 8% chance per rank to Judge.", 20271, TAG_HOLY, 8),
+                  Key(109, SKILL_NODE_SYNERGY, 1, 4, 108, 3, "Mana Strike", "Your Seal hits give you 1% of your maximum mana per rank.", 19742, KEY_MANA_STRIKE),
+                  Key(110, SKILL_NODE_CAPSTONE, 1, 5, 109, 1, "Twin Seals", "Two different Seals can be on you at once.", 20164, KEY_TWIN_SEALS),
+                  Key(111, SKILL_NODE_MODIFIER, 2, 1, 0, 4, "Quickened", "+4% attack speed per rank.", 19740, KEY_QUICKENED),
+                  Key(112, SKILL_NODE_MODIFIER, 2, 2, 111, 3, "Momentum", "Each Crusader hit within 3 sec of the last gives 1% more Crusader damage per rank, up to 5 hits.", 12294, KEY_MOMENTUM),
+                  Key(113, SKILL_NODE_MODIFIER, 2, 3, 112, 3, "Zeal", "+10% attack speed per rank while Seal of the Crusader is on you.", 21082, KEY_ZEAL),
+                  Key(114, SKILL_NODE_SYNERGY, 2, 4, 113, 1, "Light of the Crusader", "Your Seal hits heal you for 10% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
+                  Key(115, SKILL_NODE_CAPSTONE, 2, 5, 114, 1, "Shockwave", "Your critical swings send a shockwave 10 yards ahead, for 40% of the hit.", 20549, KEY_SHOCKWAVE_STRIKE),
+              } },
+            { SKILL_HOLY_LIGHT, CLASS_PALADIN, "Holy Light", "Holy Light and Flash of Light: heals, which its tree turns on your enemies too.", 635, { "Holy Light", "Flash of Light" },
+              { "Radiance", "", "Retribution" },
+              {
+                  Mod(201, 0, 1, 0, 4, "Healing Light", "6% more healing per rank.", 20237, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Mod(202, 0, 2, 201, 3, "Light's Grace", "+4% critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
+                  Mod(203, 0, 3, 202, 3, "Swift Light", "-0.2 sec cast time per rank.", 19750, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
+                  Mod(204, 0, 4, 203, 3, "Divine Grace", "10% less mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Key(205, SKILL_NODE_CAPSTONE, 0, 5, 204, 1, "Dawnbringer", "Your heals on yourself also send half their amount at the nearest enemy as a Holy bolt.", 19977, KEY_DAWNBRINGER),
+                  Key(206, SKILL_NODE_SYNERGY, 2, 1, 0, 3, "Searing Radiance", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Holy damage.", 879, KEY_LIGHT_STRIKE),
+                  Key(207, SKILL_NODE_SYNERGY, 2, 2, 206, 2, "Judging Light", "Your heals Judge every enemy within 8 yards, as a hit of 25% of the heal per rank (once every 3 sec).", 20271, KEY_JUDGING_LIGHT),
+                  Key(208, SKILL_NODE_MODIFIER, 2, 3, 207, 3, "Avenging Light", "Healing yourself gives you 5% more damage per rank for 5 sec.", 20218, KEY_AVENGING_LIGHT),
+                  Key(209, SKILL_NODE_CAPSTONE, 2, 4, 208, 1, "Holy Nova", "Your heals burst outward: every enemy within 8 yards takes 50% of the heal as Holy damage.", 2812, KEY_HOLY_NOVA),
               } },
             { SKILL_JUDGEMENT, CLASS_PALADIN, "Judgement", "Unleash your Seal on an enemy.", 20271, { "Judgement" },
-              { "Chain", "Burst", "Seal" },
+              { "Chain", "Burst", "Verdict" },
               {
                   Kit(301, 0, 1, 0, 3, "Chain of Judgement", "Judgement chains to 1/2/3 more enemies within 10 yards, at 50%.", 20186,
                       KIT_CHAIN, 20271, { 1, 2, 3 }, { 10, 10, 10 }, { 50, 50, 50 }),
                   Key(302, SKILL_NODE_MODIFIER, 0, 2, 301, 3, "Echoing Verdict", "Judgement's chain jumps deal 10% more per rank.", 20185, KEY_ECHOING_VERDICT),
-                  Key(303, SKILL_NODE_CAPSTONE, 0, 3, 302, 1, "Final Verdict", "A kill with Judgement readies Judgement at once.", 20184, KEY_FINAL_VERDICT),
-                  Kit(304, 1, 1, 0, 3, "Hammer of Light", "Judgement bursts onto enemies within 4/6/8 yards of its target, at 40%.", 24275,
+                  Ail(303, 0, 3, 302, 3, "Condemn", "Judgement has a 10% chance per rank to Judge, beside its critical strikes.", 20184, TAG_HOLY, 10),
+                  Key(304, SKILL_NODE_CAPSTONE, 0, 4, 303, 1, "Final Verdict", "A kill with Judgement readies Judgement at once.", 20184, KEY_FINAL_VERDICT),
+                  Kit(305, 1, 1, 0, 3, "Hammer of Light", "Judgement bursts onto enemies within 4/6/8 yards of its target, at 40%.", 24275,
                       KIT_BURST, 20271, { 0, 0, 0 }, { 4, 6, 8 }, { 40, 40, 40 }),
-                  Key(305, SKILL_NODE_MODIFIER, 1, 2, 304, 4, "Radiance", "8% more Judgement damage per rank.", 20218, KEY_RADIANCE),
-                  Key(306, SKILL_NODE_CAPSTONE, 1, 3, 305, 1, "Sentence", "Judgement deals 100% more damage to stunned enemies.", 879, KEY_SENTENCE),
-                  Key(307, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Avenger", "Judgement no longer uses up your Seal, but its cooldown is doubled.", 25780, KEY_AVENGER),
-                  Mod(308, 2, 2, 307, 3, "Swift Judgement", "-1 sec Judgement cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
-                  Key(309, SKILL_NODE_MODIFIER, 2, 3, 308, 2, "Righteous Mind", "Judgement restores 5% of your maximum mana per rank.", 20166, KEY_RIGHTEOUS_MIND),
+                  Key(306, SKILL_NODE_MODIFIER, 1, 2, 305, 4, "Radiance", "8% more Judgement damage per rank.", 20218, KEY_RADIANCE),
+                  Mod(307, 1, 3, 306, 3, "Severity", "Judgement's critical strikes deal 20% more of their bonus per rank.", 20101, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
+                  Key(308, SKILL_NODE_CAPSTONE, 1, 4, 307, 1, "Sentence", "Judgement deals 100% more damage to stunned enemies.", 879, KEY_SENTENCE),
+                  Key(309, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Avenger", "Judgement no longer uses up your Seal, but its cooldown is doubled.", 25780, KEY_AVENGER),
+                  Mod(310, 2, 2, 309, 3, "Swift Judgement", "-1 sec Judgement cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
+                  Mod(311, 2, 3, 310, 3, "Unerring", "+5% Judgement critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
+                  Key(312, SKILL_NODE_MODIFIER, 2, 4, 311, 2, "Righteous Mind", "Judgement restores 5% of your maximum mana per rank.", 20166, KEY_RIGHTEOUS_MIND),
+                  Key(313, SKILL_NODE_CAPSTONE, 2, 5, 312, 1, "Sanctified", "Your Judgement on an enemy in your Consecration bursts onto enemies within 8 yards, at 50%.", 26573, KEY_SANCTIFIED),
               } },
             { SKILL_CONSECRATION, CLASS_PALADIN, "Consecration", "Consecrate the ground beneath you.", 26573, { "Consecration" },
               { "Ground", "Smite", "Refuge" },
               {
                   Mod(401, 0, 1, 0, 4, "Wide Blessing", "+10% Consecration radius per rank. Intellect widens it too.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 10),
                   Mod(402, 0, 2, 401, 3, "Lasting Ground", "+2 sec Consecration duration per rank.", 20925, SPELLMOD_DURATION, SPELLMOD_FLAT, 2000),
-                  Key(403, SKILL_NODE_CAPSTONE, 0, 3, 402, 1, "Walking Consecration", "Your Consecration follows you.", 1044, KEY_WALKING_CONSECRATION),
-                  Key(404, SKILL_NODE_MODIFIER, 1, 1, 0, 4, "Burning Ground", "8% more Consecration damage per rank.", 26573, KEY_BURNING_GROUND),
-                  Key(405, SKILL_NODE_SYNERGY, 1, 2, 404, 2, "Searing Light", "Your Holy damage is 5% more per rank on enemies standing in your Consecration.", 20218, KEY_SEARING_LIGHT),
-                  Key(406, SKILL_NODE_SYNERGY, 1, 3, 405, 1, "Sanctified", "Your Judgement on an enemy in your Consecration bursts onto enemies within 8 yards, at 50%.", 20271, KEY_SANCTIFIED),
-                  Key(407, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hallowed Ground", "While you stand in your Consecration, you regain 1% of your health a second per rank.", 633, KEY_HALLOWED_GROUND),
-                  Key(408, SKILL_NODE_SYNERGY, 2, 2, 407, 1, "Steadfast", "While you stand in your Consecration, you can't be stunned.", 498, KEY_STEADFAST),
-                  Key(409, SKILL_NODE_CAPSTONE, 2, 3, 408, 1, "Sacred Seal", "Your Seals strike twice on enemies in your Consecration.", 20154, KEY_SACRED_SEAL),
+                  Key(403, SKILL_NODE_MODIFIER, 0, 3, 402, 4, "Burning Ground", "8% more Consecration damage per rank.", 26573, KEY_BURNING_GROUND),
+                  Key(404, SKILL_NODE_CAPSTONE, 0, 4, 403, 1, "Walking Consecration", "Your Consecration follows you.", 1044, KEY_WALKING_CONSECRATION),
+                  Key(405, SKILL_NODE_SYNERGY, 1, 1, 0, 2, "Searing Light", "Your Holy damage is 5% more per rank on enemies standing in your Consecration.", 20218, KEY_SEARING_LIGHT),
+                  Mod(406, 1, 2, 405, 3, "Swift Consecration", "-1 sec Consecration cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
+                  Key(407, SKILL_NODE_CAPSTONE, 1, 3, 406, 1, "Sacred Seal", "Your Seals strike twice on enemies in your Consecration.", 20154, KEY_SACRED_SEAL),
+                  Key(408, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hallowed Ground", "While you stand in your Consecration, you regain 1% of your health a second per rank.", 633, KEY_HALLOWED_GROUND),
+                  Key(409, SKILL_NODE_SYNERGY, 2, 2, 408, 1, "Steadfast", "While you stand in your Consecration, you can't be stunned.", 498, KEY_STEADFAST),
+                  Key(410, SKILL_NODE_CAPSTONE, 2, 3, 409, 1, "Martyr's Ward", "Your Retribution Aura burns every enemy within 10 yards each second, doubled.", 7294, KEY_MARTYRS_WARD),
               } },
-            { SKILL_HAMMER, CLASS_PALADIN, "Hammer of Justice", "Stun an enemy.", 853, { "Hammer of Justice" },
-              { "Thrown", "Control", "Holy" },
+            { SKILL_HAMMER, CLASS_PALADIN, "Hammers", "Hammer of Justice, the stun, and Hammer of Wrath, the throw, as one.", 853, { "Hammer of Justice", "Hammer of Wrath" },
+              { "Thrown", "Stun", "Execute" },
               {
-                  Mod(501, 0, 1, 0, 1, "Hurled Hammer", "Hammer of Justice flies 10 yards farther along your aim.", 24275, SPELLMOD_RANGE, SPELLMOD_FLAT, 10),
+                  Mod(501, 0, 1, 0, 1, "Hurled Hammer", "Hammer of Justice flies 10 yards farther along your aim.", 24275, SPELLMOD_RANGE, SPELLMOD_FLAT, 10, "Hammer of Justice"),
                   Key(502, SKILL_NODE_TRANSFORMER, 0, 2, 501, 3, "Ricochet", "Hammer of Justice bounces on to 1 more enemy within 10 yards per rank.", 10308, KEY_RICOCHET),
-                  Key(503, SKILL_NODE_CAPSTONE, 0, 3, 502, 1, "Blessed Hammer", "Hammer of Justice also hurls a blessed hammer at each of the three nearest enemies within 15 yards, for Holy damage of half your attack power.", 19752, KEY_BLESSED_HAMMER),
-                  Kit(504, 1, 1, 0, 2, "Shockwave Hammer", "Hammer of Justice also stuns 1/2 more enemies within 8 yards of its target.", 20549,
+                  Key(503, SKILL_NODE_MODIFIER, 0, 3, 502, 3, "Holy Hammer", "Hammer of Justice also deals Holy damage of 30/45/60% of your attack power.", 20218, KEY_HOLY_HAMMER),
+                  Key(504, SKILL_NODE_CAPSTONE, 0, 4, 503, 1, "Blessed Hammer", "Hammer of Justice also hurls a blessed hammer at each of the three nearest enemies within 15 yards, for Holy damage of half your attack power.", 19752, KEY_BLESSED_HAMMER),
+                  Kit(505, 1, 1, 0, 2, "Shockwave Hammer", "Hammer of Justice also stuns 1/2 more enemies within 8 yards of its target.", 20549,
                       KIT_SPREAD, 853, { 1, 2 }, { 8, 8 }, { 100, 100 }),
-                  Mod(505, 1, 2, 504, 3, "Long Stun", "+0.5 sec stun per rank.", 5588, SPELLMOD_DURATION, SPELLMOD_FLAT, 500),
-                  Mod(506, 1, 3, 505, 3, "Quick Hammer", "-10 sec Hammer of Justice cooldown per rank.", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000),
-                  Key(507, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Holy Hammer", "Hammer of Justice also deals Holy damage of 30/45/60% of your attack power.", 20218, KEY_HOLY_HAMMER),
-                  Key(508, SKILL_NODE_CAPSTONE, 2, 2, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned enemies.", 879, KEY_SENTENCE_PASSED),
+                  Mod(506, 1, 2, 505, 3, "Long Stun", "+0.5 sec stun per rank.", 5588, SPELLMOD_DURATION, SPELLMOD_FLAT, 500, "Hammer of Justice"),
+                  Mod(507, 1, 3, 506, 3, "Quick Hammer", "-10 sec Hammer of Justice cooldown per rank.", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000, "Hammer of Justice"),
+                  Key(508, SKILL_NODE_CAPSTONE, 1, 4, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned enemies.", 879, KEY_SENTENCE_PASSED),
+                  Kit(509, 2, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
+                      KIT_EXTRA_PROJECTILES, 24275, { 1, 2 }, { 15, 15 }, { 60, 60 }),
+                  Mod(510, 2, 2, 509, 4, "Weighted Hammer", "8% more Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8, "Hammer of Wrath"),
+                  Mod(511, 2, 3, 510, 3, "Righteous Hammer", "+5% Hammer of Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5, "Hammer of Wrath"),
+                  Kit(512, 2, 4, 511, 3, "Piercing Hammer", "Hammer of Wrath flies on through 2/4/10 enemies in its path, at 60%.", 20186,
+                      KIT_PIERCE, 24275, { 2, 4, 10 }, { 0, 0, 0 }, { 60, 60, 60 }),
+                  Key(513, SKILL_NODE_CAPSTONE, 2, 5, 512, 1, "Executioner", "Hammer of Wrath deals 100% more damage to enemies below 20% health.", 879, KEY_EXECUTIONER),
               } },
-            { SKILL_EXORCISM, CLASS_PALADIN, "Exorcism", "Holy fire at an enemy. Specialised, it strikes any foe, not only undead and demons.", 879, { "Exorcism" },
-              { "Burning", "Chain", "Purge" },
+            { SKILL_WRATH, CLASS_PALADIN, "Wrath", "Exorcism, a bolt of holy fire, and Holy Wrath, a nova, as one. Specialised, they strike any foe, not only undead and demons.", 879, { "Exorcism", "Holy Wrath" },
+              { "Exorcism", "Nova", "Zeal" },
               {
                   Kit(601, 0, 1, 0, 3, "Holy Fire", "Exorcism bursts onto enemies within 4/6/8 yards of its target, at 35%.", 2812,
                       KIT_BURST, 879, { 0, 0, 0 }, { 4, 6, 8 }, { 35, 35, 35 }),
-                  Mod(602, 0, 2, 601, 4, "Searing Word", "10% more Exorcism damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
-                  KitCap(603, 0, 3, 602, "Purging Light", "Exorcism's light passes through its target: every enemy within 10 yards behind it takes the full hit.", 19750,
-                         KIT_FRAGMENTS, 879, 10, 10.0f, 100),
-                  Kit(604, 1, 1, 0, 3, "Chain Exorcism", "Exorcism leaps to 1/2/3 more enemies within 10 yards, at 60%.", 20186,
+                  Mod(602, 0, 2, 601, 4, "Searing Word", "10% more Exorcism damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10, "Exorcism"),
+                  Kit(603, 0, 3, 602, 3, "Chain Exorcism", "Exorcism leaps to 1/2/3 more enemies within 10 yards, at 60%.", 20186,
                       KIT_CHAIN, 879, { 1, 2, 3 }, { 10, 10, 10 }, { 60, 60, 60 }),
-                  Mod(605, 1, 2, 604, 3, "Swift Exorcism", "-2 sec Exorcism cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -2000),
-                  Kit(606, 1, 3, 605, 2, "Echoing Word", "Every 4th/3rd Exorcism repeats for free along the same aim, at 50%.", 20185,
-                      KIT_ECHO, 879, { 4, 3 }, { 0, 0 }, { 50, 50 }),
-                  Mod(607, 2, 1, 0, 3, "Exorcist", "+5% Exorcism critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
-                  Mod(608, 2, 2, 607, 3, "Zealous Word", "-15% Exorcism mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -15),
-                  KitCap(609, 2, 3, 608, "Twin Exorcism", "Exorcism fires a second bolt beside the first, at 70%.", 879,
-                         KIT_EXTRA_PROJECTILES, 879, 1, 12.0f, 70),
-              } },
-            { SKILL_HOLY_WRATH, CLASS_PALADIN, "Holy Wrath", "A nova of holy fire around you. Specialised, it strikes any foe.", 2812, { "Holy Wrath" },
-              { "Radius", "Fury", "Zeal" },
-              {
-                  Mod(701, 0, 1, 0, 4, "Wide Wrath", "+12% Holy Wrath radius per rank.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 12),
-                  Mod(702, 0, 2, 701, 3, "Searing Wrath", "10% more Holy Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
-                  Key(703, SKILL_NODE_CAPSTONE, 0, 3, 702, 1, "Wrathful", "Holy Wrath fires on its own whenever 4 or more enemies are within 10 yards, every 12 sec at most.", 20925, KEY_WRATHFUL),
-                  Mod(704, 1, 1, 0, 4, "Swift Wrath", "-8 sec Holy Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -8000),
-                  Mod(705, 1, 2, 704, 3, "Quick Wrath", "-0.4 sec Holy Wrath cast time per rank.", 20166, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -400),
-                  Kit(706, 1, 3, 705, 2, "Shattering Wrath", "Each enemy Holy Wrath strikes bursts onto those within 4/6 yards, at 20/30%.", 24275,
+                  KitCap(604, 0, 4, 603, "Purging Light", "Exorcism's light passes through its target: every enemy within 10 yards behind it takes the full hit.", 19750,
+                         KIT_FRAGMENTS, 879, 10, 10.0f, 100),
+                  Mod(605, 1, 1, 0, 4, "Wide Wrath", "+12% Holy Wrath radius per rank.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 12, "Holy Wrath"),
+                  Mod(606, 1, 2, 605, 3, "Searing Wrath", "10% more Holy Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10, "Holy Wrath"),
+                  Kit(607, 1, 3, 606, 2, "Shattering Wrath", "Each enemy Holy Wrath strikes bursts onto those within 4/6 yards, at 20/30%.", 24275,
                       KIT_BURST, 2812, { 0, 0 }, { 4, 6 }, { 20, 30 }),
-                  Mod(707, 2, 1, 0, 3, "Zealous Wrath", "-15% Holy Wrath mana cost per rank.", 20208, SPELLMOD_COST, SPELLMOD_PCT, -15),
-                  Mod(708, 2, 2, 707, 3, "Righteous Wrath", "+5% Holy Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
-                  Mod(709, 2, 3, 708, 2, "Radiant Wrath", "10% more Holy Wrath damage per rank.", 19750, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
-              } },
-            { SKILL_HAMMER_OF_WRATH, CLASS_PALADIN, "Hammer of Wrath", "Hurl a hammer at an enemy, at any health.", 24275, { "Hammer of Wrath" },
-              { "Volley", "Pierce", "Execute" },
-              {
-                  Kit(801, 0, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
-                      KIT_EXTRA_PROJECTILES, 24275, { 1, 2 }, { 15, 15 }, { 60, 60 }),
-                  Mod(802, 0, 2, 801, 4, "Weighted Hammer", "8% more Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8),
-                  KitCap(803, 0, 3, 802, "Storm of Hammers", "Every 2nd Hammer of Wrath repeats for free along the same aim, at 60%.", 20185,
-                         KIT_ECHO, 24275, 2, 0.0f, 60),
-                  Kit(804, 1, 1, 0, 3, "Piercing Hammer", "Hammer of Wrath flies on through 2/4/10 enemies in its path, at 60%.", 20186,
-                      KIT_PIERCE, 24275, { 2, 4, 10 }, { 0, 0, 0 }, { 60, 60, 60 }),
-                  Mod(805, 1, 2, 804, 3, "Long Throw", "+5 yards Hammer of Wrath range per rank.", 5588, SPELLMOD_RANGE, SPELLMOD_FLAT, 5),
-                  Mod(806, 1, 3, 805, 3, "Swift Hammer", "-1 sec Hammer of Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
-                  Mod(807, 2, 1, 0, 3, "Righteous Hammer", "+5% Hammer of Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
-                  Mod(808, 2, 2, 807, 3, "Zealous Hammer", "-15% Hammer of Wrath mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -15),
-                  Key(809, SKILL_NODE_CAPSTONE, 2, 3, 808, 1, "Executioner", "Hammer of Wrath deals 100% more damage to enemies below 20% health.", 879, KEY_EXECUTIONER),
+                  Key(608, SKILL_NODE_CAPSTONE, 1, 4, 607, 1, "Wrathful", "Holy Wrath fires on its own whenever 4 or more enemies are within 10 yards, every 12 sec at most.", 20925, KEY_WRATHFUL),
+                  Mod(609, 2, 1, 0, 3, "Swift Exorcism", "-2 sec Exorcism cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -2000, "Exorcism"),
+                  Mod(610, 2, 2, 609, 3, "Swift Wrath", "-8 sec Holy Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -8000, "Holy Wrath"),
+                  Mod(611, 2, 3, 610, 3, "Exorcist", "+5% critical strike chance per rank with Exorcism and Holy Wrath.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
+                  Mod(612, 2, 4, 611, 3, "Quick Wrath", "-0.4 sec Holy Wrath cast time per rank.", 20166, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -400, "Holy Wrath"),
+                  KitCap(613, 2, 5, 612, "Twin Exorcism", "Exorcism fires a second bolt beside the first, at 70%.", 879,
+                         KIT_EXTRA_PROJECTILES, 879, 1, 12.0f, 70),
               } },
         };
         return skills;
@@ -281,22 +288,32 @@ namespace
 
     PageHome const PAGES[] =
     {
-        { 103, 3975,  "Herod, Scarlet Monastery" },                     // Whirling Strikes
-        { 106, 646,   "Mr. Smite, the Deadmines" },                     // Crusader's Pace
-        { 109, 7228,  "Ironaya, Uldaman" },                             // Shockwave
-        { 203, 6487,  "Arcanist Doan, Scarlet Monastery" },             // Twin Seals
-        { 209, 4542,  "High Inquisitor Fairbanks, Scarlet Monastery" }, // Light of the Crusader
-        { 303, 3976,  "Scarlet Commander Mograine, Scarlet Monastery" },// Final Verdict
-        { 306, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Sentence
-        { 403, 3977,  "High Inquisitor Whitemane, Scarlet Monastery" }, // Walking Consecration
-        { 409, 10813, "Balnazzar, Stratholme" },                        // Sacred Seal
-        { 503, 10440, "Baron Rivendare, Stratholme" },                  // Blessed Hammer
+        { 105, 3975,  "Herod, Scarlet Monastery" },                     // Whirling Strikes
+        { 110, 6487,  "Arcanist Doan, Scarlet Monastery" },             // Twin Seals
+        { 115, 7228,  "Ironaya, Uldaman" },                             // Shockwave
+        { 205, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Dawnbringer
+        { 209, 4542,  "High Inquisitor Fairbanks, Scarlet Monastery" }, // Holy Nova
+        { 304, 3976,  "Scarlet Commander Mograine, Scarlet Monastery" },// Final Verdict
+        { 308, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Sentence
+        { 404, 3977,  "High Inquisitor Whitemane, Scarlet Monastery" }, // Walking Consecration
+        { 407, 10813, "Balnazzar, Stratholme" },                        // Sacred Seal
+        { 410, 646,   "Mr. Smite, the Deadmines" },                     // Martyr's Ward
+        { 504, 10440, "Baron Rivendare, Stratholme" },                  // Blessed Hammer
         { 508, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Sentence Passed
-        { 603, 10508, "Ras Frostwhisper, Scholomance" },                // Purging Light
-        { 609, 10435, "Magistrate Barthilas, Stratholme" },             // Twin Exorcism
-        { 703, 10811, "Archivist Galford, Stratholme" },                // Wrathful
-        { 803, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Storm of Hammers
-        { 809, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Executioner
+        { 513, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Executioner
+        { 604, 10508, "Ras Frostwhisper, Scholomance" },                // Purging Light
+        { 608, 10811, "Archivist Galford, Stratholme" },                // Wrathful
+        { 613, 10435, "Magistrate Barthilas, Stratholme" },             // Twin Exorcism
+    };
+
+    // Revision 2 of the trees renumbered the capstones: a page read for an old one is read for its
+    // new one (Light of the Crusader's and Crusader's Pace's became Holy Nova's and Martyr's Ward's,
+    // Storm of Hammers' Dawnbringer's).
+    std::pair<uint16, uint16> const PAGE_RENUMBER[] =
+    {
+        { 103, 105 }, { 106, 410 }, { 109, 115 }, { 203, 110 }, { 209, 209 }, { 303, 304 }, { 306, 308 },
+        { 403, 404 }, { 409, 407 }, { 503, 504 }, { 508, 508 }, { 603, 604 }, { 609, 613 }, { 703, 608 },
+        { 803, 205 }, { 809, 513 },
     };
 
     PageHome const* PageOf(uint16 node)
@@ -334,23 +351,23 @@ namespace
         static std::vector<RuneDef> const runes =
         {
             { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on Chain of Judgement).", 20186,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
             { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on Hammer of Light).", 24275,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_SEALS) | FIT(SKILL_EXORCISM)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
-              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) } },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_WRATH) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) } },
             { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {} },
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {} },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
-              uint8(FIT(SKILL_SEALS) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_EXORCISM) | FIT(SKILL_HOLY_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) } },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
@@ -362,9 +379,9 @@ namespace
             { RUNE_ANVIL, "Rune of the Anvil", ProcRuneText(RUNE_ANVIL), 853,
               uint8(FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
             { RUNE_FERVOUR, "Rune of Fervour", ProcRuneText(RUNE_FERVOUR), 2812,
-              uint8(FIT(SKILL_HOLY_WRATH) | FIT(SKILL_EXORCISM)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+              uint8(FIT(SKILL_WRATH)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
             { RUNE_ZEAL, "Rune of Zeal", ProcRuneText(RUNE_ZEAL), 20154,
-              uint8(FIT(SKILL_SEALS)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
+              uint8(FIT(SKILL_STRIKE)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 0, {} },
         };
         return runes;
     }
@@ -382,40 +399,72 @@ namespace
     {
         switch (skill)
         {
-            case SKILL_SEALS: return { 20154, 20375 };      // Seal of Righteousness, of Command
+            case SKILL_STRIKE: return { 20154, 20375 };     // Seal of Righteousness, of Command
             case SKILL_JUDGEMENT: return { 20271 };
             case SKILL_CONSECRATION: return { 26573 };
-            case SKILL_HAMMER: return { 853 };
-            case SKILL_EXORCISM: return { 879 };
-            case SKILL_HOLY_WRATH: return { 2812 };
-            case SKILL_HAMMER_OF_WRATH: return { 24275 };
+            case SKILL_HAMMER: return { 853, 24275 };       // Hammer of Justice, of Wrath
+            case SKILL_WRATH: return { 879, 2812 };         // Exorcism, Holy Wrath
             default: return {};
         }
     }
 
     // The family flags of the class's spells a skill covers, for its spell modifiers.
-    uint64 SkillMask(SkillDef const& skill)
+    // The spell family of a class's spells.
+    uint32 FamilyOf(uint8 classId)
+    {
+        switch (classId)
+        {
+            case CLASS_PALADIN: return SPELLFAMILY_PALADIN;
+            case CLASS_MAGE:    return SPELLFAMILY_MAGE;
+            case CLASS_DRUID:   return SPELLFAMILY_DRUID;
+            case CLASS_WARLOCK: return SPELLFAMILY_WARLOCK;
+            case CLASS_SHAMAN:  return SPELLFAMILY_SHAMAN;
+            case CLASS_WARRIOR: return SPELLFAMILY_WARRIOR;
+            case CLASS_PRIEST:  return SPELLFAMILY_PRIEST;
+            case CLASS_ROGUE:   return SPELLFAMILY_ROGUE;
+            case CLASS_HUNTER:  return SPELLFAMILY_HUNTER;
+            default:            return SPELLFAMILY_GENERIC;
+        }
+    }
+
+    // The family flags of the class's spells named `names` (prefixes at a word boundary).
+    uint64 NamesMask(uint8 classId, std::vector<char const*> const& names, char const* what)
     {
         static std::mutex lock;
-        static std::map<uint8, uint64> cache;
+        static std::map<std::string, uint64> cache;
+        std::string key = std::to_string(classId);
+        for (char const* name : names)
+            key += std::string("|") + name;
         std::lock_guard<std::mutex> guard(lock);
-        auto it = cache.find(skill.id);
+        auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
+        uint32 const family = FamilyOf(classId);
         uint64 mask = 0;
         for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
         {
             SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id);
-            if (!spell || spell->SpellFamilyName != SPELLFAMILY_PALADIN || !spell->SpellName[0])
+            if (!spell || spell->SpellFamilyName != family || !spell->SpellName[0])
                 continue;
-            for (char const* want : skill.spells)
+            for (char const* want : names)
                 if (NameMatches(spell->SpellName[0], want))
                     mask |= spell->SpellFamilyFlags.Flags;
         }
         if (!mask)
-            sLog.outError("ARPG skills: no spell of %s has family flags; its spell modifiers do nothing", skill.name);
-        cache[skill.id] = mask;
+            sLog.outError("ARPG skills: no spell of %s has family flags; its spell modifiers do nothing", what);
+        cache[key] = mask;
         return mask;
+    }
+
+    uint64 SkillMask(SkillDef const& skill)
+    {
+        return NamesMask(skill.classId, skill.spells, skill.name);
+    }
+
+    // A node's spell modifiers' reach: its one spell, or the skill's every spell.
+    uint64 NodeMask(SkillDef const& skill, SkillNode const& node)
+    {
+        return node.only ? NamesMask(skill.classId, { node.only }, node.name) : SkillMask(skill);
     }
 
     // --- Each player's skills ---
@@ -529,6 +578,11 @@ namespace
     {
         CharacterDatabase.PExecute("REPLACE INTO character_arpg_codex (guid, page) VALUES (%u, %u)", player->GetGUIDLow(), uint32(node));
     }
+
+    // The skill trees' revision, kept as a held thing: a character from an older one has its
+    // points back once (LoadSkills).
+    constexpr uint16 HELD_TREE_REVISION = 9000;
+    constexpr uint32 TREE_REVISION = 2;
 
     // Points spent beyond what the gear and level allow are given back once that has lasted this
     // long out of combat (SettleSkillPoints).
@@ -849,6 +903,37 @@ namespace Arpg
             }
             while (result->NextRow());
         }
+        // Revision 2 of the trees (six paladin skills, renumbered nodes): a character from before
+        // has its skill points back, once, its runes back in its bags (unsocketed), the slots
+        // whose skill changed (Seals, Exorcism, Holy Wrath, Hammer of Wrath) emptied, and its
+        // Codex pages carried to the capstones that took their place.
+        if (s.things[HELD_TREE_REVISION] < TREE_REVISION)
+        {
+            uint32 const guid = player->GetGUIDLow();
+            bool const had = !s.ranks.empty() || !s.pages.empty() || !s.sockets.empty();
+            s.ranks.clear();
+            s.sockets.clear();
+            for (uint8& slot : s.slots)
+                if (slot == 2 || slot == 6)
+                    slot = 0;
+            std::set<uint16> pages;
+            for (uint16 old : s.pages)
+                for (auto const& [from, to] : PAGE_RENUMBER)
+                    if (from == old)
+                        pages.insert(to);
+            s.pages = pages;
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_skill_node WHERE guid = %u", guid);
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_socket WHERE guid = %u", guid);
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_skill WHERE guid = %u AND skill IN (2, 6, 7, 8)", guid);
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_codex WHERE guid = %u", guid);
+            for (uint16 page : s.pages)
+                SavePage(player, page);
+            s.things[HELD_TREE_REVISION] = TREE_REVISION;
+            SaveHeld(player, HELD_TREE_REVISION, TREE_REVISION);
+            if (had)
+                sLog.outString("ARPG skills: %s's skill trees moved to revision %u: points back to spend", player->GetName(),
+                               TREE_REVISION);
+        }
         // A capstone taken before Codex pages sealed them stays: its page counts as read.
         std::vector<uint16> grandfathered;
         for (auto const& [id, rank] : s.ranks)
@@ -1100,8 +1185,10 @@ namespace Arpg
             if (node->key != KEY_NONE)
                 totals.rank[node->key] = std::max(totals.rank[node->key], rank);
             if (node->modOp >= 0)
-                if (uint64 mask = SkillMask(*skill))
+                if (uint64 mask = NodeMask(*skill, *node))
                     totals.mods.push_back({ uint8(node->modOp), node->modType, node->modPerRank * rank, mask });
+            if (node->ailTag >= 0 && node->ailTag < 7 && skill->id < 16)
+                totals.skillAilment[skill->id][node->ailTag] += int32(node->ailPerRank) * rank;
         }
         for (auto const& [skillId, rune] : ActiveRunes(s))
         {
@@ -1195,6 +1282,16 @@ namespace Arpg
         for (PageHome const& page : PAGES)
             out.push_back(page.node);
         return out;
+    }
+
+    uint16 CurrentPage(uint16 node)
+    {
+        if (PageOf(node))
+            return node;
+        for (auto const& [from, to] : PAGE_RENUMBER)
+            if (from == node)
+                return to;
+        return 0;
     }
 
     std::vector<uint8> AllRunes()

@@ -162,13 +162,11 @@ namespace Arpg
                 AddRune(player, uint8(item - CODEX_RUNE_BASE));
             return true;
         }
-        uint16 const node = uint16(item - CODEX_PAGE_BASE);
-        for (uint16 page : AllPages())
-            if (page == node)
-            {
-                ReadPage(player, node);
-                return true;
-            }
+        if (uint16 const page = CurrentPage(uint16(item - CODEX_PAGE_BASE)))
+        {
+            ReadPage(player, page);
+            return true;
+        }
         return false;
     }
 
