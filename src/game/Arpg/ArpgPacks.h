@@ -116,6 +116,11 @@ namespace Arpg
     void MakeChampion(Creature* creature, uint8 tier, uint8 randomAffixes, std::string const& name = "",
                       std::vector<std::string> const& affixNames = {});
 
+    // Make `creature` (a summon of another system's, a zone event's) a lesser follower, as a pack's
+    // are: a level or two under `level`, a little smaller, Arpg.Packs.FollowerPower of the health
+    // and damage, Arpg.Packs.FollowerXp of the XP, thinned loot.
+    void MakeLesser(Creature* creature, uint32 level);
+
     // How many random affixes a champion or a rare of `level` has.
     uint8 ChampionAffixCount(uint32 level, bool rare);
 

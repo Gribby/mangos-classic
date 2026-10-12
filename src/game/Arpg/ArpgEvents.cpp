@@ -48,7 +48,7 @@ namespace
     // The spot's size, how far from the player it may be, and the creatures' levels around it.
     constexpr float EVENT_RADIUS = 45.0f;
     constexpr float ANCHOR_MIN = 45.0f, ANCHOR_MAX = 130.0f;
-    constexpr int32 LEVEL_BELOW = 4, LEVEL_ABOVE = 3;
+    constexpr int32 LEVEL_BELOW = 4, LEVEL_ABOVE = 1;
     // When the first comes after a player enters a zone, and between one and the next (ms).
     constexpr uint32 EVENT_FIRST_MIN = 45000, EVENT_FIRST_MAX = 90000;
     constexpr uint32 EVENT_COOLDOWN_MIN = 180000, EVENT_COOLDOWN_MAX = 360000;
@@ -241,7 +241,10 @@ namespace
                     float x, y, z;
                     if (SpotNear(anchor, ev.x, ev.y, ev.z, 30.0f, x, y, z))
                         if (Creature* c = Summon(anchor, ev, x, y, z))
+                        {
+                            MakeLesser(c, ev.level);
                             c->GetMotionMaster()->MoveRandomAroundPoint(x, y, z, 6.0f);
+                        }
                 }
                 std::snprintf(buf, sizeof(buf), "Purge near %s", where.c_str());
                 ev.title = buf;
@@ -256,15 +259,23 @@ namespace
                 Creature* rare = Summon(anchor, ev, ev.x, ev.y, ev.z);
                 if (!rare)
                     return false;
-                MakeChampion(rare, 2, ChampionAffixCount(rare->GetLevel(), true));
+                // No higher than the player, and an affix fewer than a pack's rare: one to
+                // hunt, not one to flee (a rare is four times a mob already).
+                rare->SelectLevel(std::min<uint32>(ev.level, player->GetLevel()));
+                rare->SetHealth(rare->GetMaxHealth());
+                MakeChampion(rare, 2, uint8(ChampionAffixCount(rare->GetLevel(), true) - 1));
                 rare->GetMotionMaster()->MoveRandomAroundPoint(ev.x, ev.y, ev.z, 22.0f);
                 ev.target = rare->GetObjectGuid();
-                for (uint32 i = 0; i < 3; ++i)
+                // Its pack: two lesser followers, as a pack's.
+                for (uint32 i = 0; i < 2; ++i)
                 {
                     float x, y, z;
                     if (SpotNear(anchor, ev.x, ev.y, ev.z, 6.0f, x, y, z))
                         if (Creature* c = Summon(anchor, ev, x, y, z))
+                        {
+                            MakeLesser(c, rare->GetLevel());
                             c->GetMotionMaster()->MoveFollow(rare, 2.5f, float(i) * 2.1f);
+                        }
                 }
                 std::string name = ChampionName(rare);
                 if (name.empty())
@@ -336,8 +347,11 @@ namespace
             Creature* c = Summon(from, ev, x, y, z);
             if (!c)
                 continue;
+            // The waves are lesser followers; the last one's leader a champion.
             if (ev.wave == SIEGE_WAVES && i == 0)
                 MakeChampion(c, 1, ChampionAffixCount(c->GetLevel(), false));
+            else
+                MakeLesser(c, ev.level);
             if (foe && c->AI())
                 c->AI()->AttackStart(foe);
             else

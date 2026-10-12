@@ -902,6 +902,20 @@ namespace Arpg
         Crown(creature, t, affixes, shown);
     }
 
+    void MakeLesser(Creature* creature, uint32 level)
+    {
+        if (!creature || !MaybeFollower(creature))
+            return;
+        float const power = std::max(0.05f, sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER));
+        creature->SelectLevel(std::max<uint32>(1, level - std::min<uint32>(level - 1, urand(1, 2))));
+        creature->HandleStatModifier(UNIT_MOD_HEALTH, TOTAL_PCT, (power - 1.0f) * 100.0f, true);
+        creature->UpdateMaxHealth();
+        creature->SetHealth(creature->GetMaxHealth());
+        creature->SetObjectScale(creature->GetObjectScale() * FOLLOWER_SCALE);
+        std::lock_guard<std::mutex> guard(sPacksLock);
+        sFollowers.insert(creature->GetObjectGuid());
+    }
+
     uint8 ChampionAffixCount(uint32 level, bool rare)
     {
         if (rare)
