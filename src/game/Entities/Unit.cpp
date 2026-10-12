@@ -61,6 +61,7 @@
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgEvents.h"
 
 #ifdef BUILD_METRICS
@@ -1454,6 +1455,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
         // ARPG: a finished zone event's cache, and crafting orbs (Arpg/ArpgEvents.h, ArpgCraft.h).
         Arpg::OnEventLoot(victim);
         Arpg::OnCraftLoot(victim);
+        // ARPG: a raid's drops at its item level (Arpg/ArpgBases.h).
+        Arpg::OnRaidLoot(victim);
         // ARPG: the drops' affix seeds (Arpg/ArpgAffixes.h).
         Arpg::SeedArpgLoot(victim->m_loot, victim->GetLootRecipient(), Arpg::LootTier(victim->GetMap()), victim);
         // ARPG: an ARPG looter sees the corpse's loot on the ground around it.

@@ -23,6 +23,7 @@
 #include "World/World.h"
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgBases.h"
 #include "Database/DatabaseEnv.h"
 #include "Config/Config.h"
 #include "Platform/Define.h"
@@ -1021,6 +1022,8 @@ void World::SetInitialWorldSettings()
     Arpg::EnsureCodexItems();
     // ARPG: and the crafting orbs (Arpg/ArpgCraft.h).
     Arpg::EnsureCraftItems();
+    // ARPG: and the raid-level base items (Arpg/ArpgBases.h).
+    Arpg::EnsureBaseItems();
     sLog.outString("Loading Item Templates...");            // must be after LoadRandomEnchantmentsTable and LoadPageTexts
     sObjectMgr.LoadItemPrototypes();
 

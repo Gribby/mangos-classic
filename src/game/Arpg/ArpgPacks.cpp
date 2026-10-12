@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
@@ -646,22 +647,20 @@ namespace Arpg
         Tier const tier = ChampionOf(victim).tier;
         if (tier == TIER_NONE)
             return;
-        // A champion: more gold and a green or blue; a rare: a blue, a chance at a purple.
+        // A champion: more gold and a rolled green or blue; a rare: a rolled blue, a chance at a
+        // purple. Rolled bases, never uniques (vanilla's named items drop from their own tables),
+        // at the foe's level and three over: past vanilla's, the raid bank's (Arpg/ArpgBases.h).
         Loot* loot = victim->m_loot;
         uint32 const level = victim->GetLevel();
         loot->AddArpgDevGold(loot->GetGoldAmount() * (tier == TIER_RARE ? 2 : 1) + level * 5);
-        auto add = [&](uint32 quality)
-        {
-            if (uint32 const id = PickRandomItem(quality, level + 3))
-                loot->AddItem(id, 1, 0, Item::GenerateItemRandomPropertyId(id));
-        };
+        uint32 const itemLevel = level + 3 + uint32(LootTier(victim->GetMap())) * 2;
         if (tier == TIER_CHAMPION)
-            add(roll_chance_i(30) ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
+            AddRolledItem(loot, roll_chance_i(30) ? RARITY_BLUE : RARITY_GREEN, itemLevel);
         else
         {
-            add(ITEM_QUALITY_RARE);
+            AddRolledItem(loot, RARITY_BLUE, itemLevel);
             if (roll_chance_i(15))
-                add(ITEM_QUALITY_EPIC);
+                AddRolledItem(loot, RARITY_PURPLE, itemLevel);
         }
     }
 

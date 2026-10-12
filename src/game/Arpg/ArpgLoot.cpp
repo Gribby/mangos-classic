@@ -5,6 +5,7 @@
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgAffixes.h"
+#include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
@@ -106,6 +107,10 @@ namespace Arpg
 {
     uint32 PickRandomItem(uint32 quality, uint32 level)
     {
+        // Past vanilla's whites and greens, a rolled base comes from the raid bank.
+        if (quality <= ITEM_QUALITY_UNCOMMON && level >= BANK_FROM)
+            if (uint32 const base = RandomBase(level))
+                return base;
         return PickDevItem(quality, level);
     }
 
