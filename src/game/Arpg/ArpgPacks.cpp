@@ -357,9 +357,34 @@ namespace
             return { 1, 2 };
         if (level <= 11)
             return { 2, 3 };
-        if (level <= 19)
+        if (level <= 29)
             return { 3, 4 };
         return { 3, 5 };
+    }
+
+    // A camp: vanilla's own spawns of normal rank, alive, within CAMP_RADIUS of `leader`. A camp
+    // is a pack already (a gnoll camp is eight spawns side by side): each spawn leading its own
+    // made one of thirty.
+    constexpr float CAMP_RADIUS = 18.0f;
+    constexpr uint32 CAMP_CROWDED = 4, CAMP_CLOSE = 2;
+
+    uint32 CampNeighbours(Creature* leader)
+    {
+        UnitList around;
+        MaNGOS::AnyFriendlyUnitInObjectRangeCheck check(leader, CAMP_RADIUS);
+        MaNGOS::UnitListSearcher<MaNGOS::AnyFriendlyUnitInObjectRangeCheck> searcher(around, check);
+        Cell::VisitAllObjects(leader, searcher, CAMP_RADIUS);
+        uint32 n = 0;
+        for (Unit* unit : around)
+        {
+            if (unit == leader || unit->GetTypeId() != TYPEID_UNIT || !unit->IsAlive())
+                continue;
+            Creature* c = static_cast<Creature*>(unit);
+            if (c->HasStaticDBSpawnData() && c->GetCreatureInfo() && c->GetCreatureInfo()->Rank == CREATURE_ELITE_NORMAL &&
+                    !c->GetCreatureInfo()->NpcFlags && c->GetCreatureInfo()->CreatureType != CREATURE_TYPE_CRITTER)
+                ++n;
+        }
+        return n;
     }
 
     // Why `creature` can't lead a pack, or nullptr when it can. A creature in a spawn group (most
@@ -448,10 +473,21 @@ namespace
         Disband(leader);
 
         uint32 const level = leader->GetLevel();
+        // A pack the world forms (not the dev tools'): smaller where vanilla's spawns crowd already;
+        // in a crowded camp, none but a champion pack's champions.
+        bool crowded = false;
         if (!size)
         {
             auto const [lo, hi] = SizeFor(level);
             size = urand(lo, hi);
+            uint32 const neighbours = CampNeighbours(leader);
+            if (neighbours >= CAMP_CROWDED)
+            {
+                size = 1;
+                crowded = true;
+            }
+            else if (neighbours >= CAMP_CLOSE)
+                size = std::min<uint32>(size, 2);
         }
         uint32 followers = size > 1 ? size - 1 : 0;
 
@@ -474,7 +510,7 @@ namespace
         std::string rareName;
         if (special == TIER_CHAMPION)
         {
-            uint32 const champions = level >= 20 ? 3 : 2;
+            uint32 const champions = level >= 20 && !crowded ? 3 : 2;
             roles.assign(champions, ROLE_CHAMPION);
             followers = followers > champions ? followers - champions : 0;
             affixes = RollAffixes(level >= 30 ? 2 : 1);

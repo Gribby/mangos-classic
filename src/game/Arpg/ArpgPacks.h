@@ -5,7 +5,10 @@
  * of its own kind, one or two levels lower, a little smaller, with Arpg.Packs.FollowerPower of its
  * health and damage. A pack's size grows with the leader's level, because the ARPG paladin's area
  * damage does:
- *   level 1-5: 1-2 in all;  6-11: 2-3;  12-19: 3-4;  20 and up: 3-5.
+ *   level 1-5: 1-2 in all;  6-11: 2-3;  12-29: 3-4;  30 and up: 3-5.
+ * Where vanilla's own spawns already crowd (a camp), the camp is the pack: a mob with four or
+ * more spawned neighbours of normal rank within 18 yards leads none (a champion pack still comes,
+ * with two champions), and one with two or three leads at most one follower.
  * Followers are temporary summons: they don't respawn, they share the pack's aggro, their corpses
  * despawn after PACK_CORPSE_MS, and the pack forms afresh when its leader respawns. A follower
  * gives Arpg.Packs.FollowerXp of a kill's XP and Arpg.Packs.FollowerLoot of its gold, and keeps
