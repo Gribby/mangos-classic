@@ -300,8 +300,14 @@ namespace Arpg
         // Codex items: a page, then fragments and runes in turn.
         if (quality == DEV_LOOT_CODEX)
         {
-            std::vector<uint16> const pages = AllPages();
-            std::vector<uint8> const runes = AllRunes();
+            std::vector<uint16> pages;
+            for (uint16 page : AllPages())
+                if (PageClass(page) == player->getClass())
+                    pages.push_back(page);
+            std::vector<uint8> runes;
+            for (uint8 rune : AllRunes())
+                if (RuneFitsClass(rune, player->getClass()))
+                    runes.push_back(rune);
             for (uint8 i = 0; i < count; ++i)
             {
                 uint32 id;

@@ -112,6 +112,20 @@ namespace Arpg
     // Every player update: the ailments `player` inflicted tick, burst and wear off.
     void UpdateAilments(Player* player);
 
+    // Whether `unit` is frozen (a freeze, or any root, as Frost Nova's) or chilled.
+    bool Frozen(Unit const* unit);
+    bool Chilled(Unit const* unit);
+
+    // Chill `victim` as `player`'s, or freeze it.
+    void Chill(Player* player, Unit* victim, bool freeze);
+
+    // `player`'s Ignite on `victim`: ended, its burn left returned (0: none).
+    uint32 TakeIgnite(Player* player, Unit* victim);
+
+    // Copy `player`'s Ignite on `from` (a dying enemy) onto the `count` enemies nearest it within
+    // `range`, fresh; returns how many.
+    size_t SpreadIgnite(Player* player, Unit* from, float range, size_t count);
+
     // Forget a logged-out player's ailments.
     void ForgetAilments(Player* player);
 

@@ -154,7 +154,7 @@ namespace
     bool SampleOf(Player const* player, uint8 skill, Sample& out)
     {
         out.skill = skill;
-        if (skill == SKILL_STRIKE)
+        if (skill == SwingSkill(player->getClass()))
         {
             out.tags = TagsOf(nullptr);
             out.name = "Strike";

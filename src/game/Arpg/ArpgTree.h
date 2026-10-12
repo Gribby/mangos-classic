@@ -127,6 +127,24 @@ namespace Arpg
         KEY_JUDGING_LIGHT,     // heals Judge enemies within 8 yd, a hit of 25% per rank
         KEY_AVENGING_LIGHT,    // healing yourself: 5% more damage per rank for 5 sec
         KEY_HOLY_NOVA,         // heals burst for 50% as Holy around you
+        // The mage's web (ArpgMage.cpp)
+        KEY_PYROMANCER,        // 40% more Fire damage, 30% less Frost and Arcane
+        KEY_WILDFIRE,          // an Ignited enemy's death spreads its Ignite to 3 near it
+        KEY_SHATTER,           // 40% more against frozen enemies, 15% less against the rest
+        KEY_PERMAFROST,        // enemies that hit you are chilled, frozen if chilled; 25% less Fire
+        KEY_BRIMMING_MIND,     // more spell damage with mana above half, less below
+        KEY_ARCANE_FLUX,       // Overload bursts 50% more and restore mana; hits 10% less
+        // The mage's skill trees (ArpgMage.cpp)
+        KEY_PYROCLASM,         // critical Fireballs explode around the target for 60%
+        KEY_SHATTERSTORM,      // Frostbolt on a frozen enemy shatters onto those near it for 80%
+        KEY_DEEP_FREEZE,       // Cone of Cold freezes
+        KEY_OVERCHARGE,        // Overload bursts 40% more
+        KEY_ARCANE_SIPHON,     // Arcane Missiles hits restore 0.5% mana per rank
+        KEY_MANA_BURST,        // Arcane Explosion restores 1% mana per enemy hit, 5 at most
+        KEY_GLACIAL_STORM,     // Blizzard chills, and may freeze the chilled
+        KEY_CHAIN_BLAST,       // a kill with Fire Blast readies it again
+        KEY_SEARING_BRAND,     // Scorch brands the target with Fire Vulnerability
+        KEY_DETONATE,          // Fire Blast sets off the target's Ignite at once, onto those near it
         MAX_KEYSTONE
     };
 

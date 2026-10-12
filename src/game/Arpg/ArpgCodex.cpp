@@ -86,10 +86,29 @@ namespace
         loot->AddItem(item, 1, 0, 0);
     }
 
-    uint32 RandomRune()
+    // A rune for one of the classes in `classMask` (a bit per class id), or 0.
+    uint32 RandomRune(uint32 classMask)
     {
-        std::vector<uint8> const runes = AllRunes();
+        std::vector<uint8> runes;
+        for (uint8 rune : AllRunes())
+            for (uint8 cls = 1; cls < MAX_CLASSES; ++cls)
+                if ((classMask & (1u << cls)) && RuneFitsClass(rune, cls))
+                {
+                    runes.push_back(rune);
+                    break;
+                }
         return runes.empty() ? 0 : CODEX_RUNE_BASE + runes[urand(0, uint32(runes.size() - 1))];
+    }
+
+    // The classes of the ARPG players on `unit`'s map, a bit per class id.
+    uint32 ClassesThere(Unit const* unit)
+    {
+        uint32 mask = 0;
+        for (auto const& ref : unit->GetMap()->GetPlayers())
+            if (Player* player = ref.getSource())
+                if (Active(player))
+                    mask |= 1u << player->getClass();
+        return mask;
     }
 }
 
@@ -158,12 +177,22 @@ namespace Arpg
         }
         if (item > CODEX_RUNE_BASE && item < CODEX_RUNE_BASE + 90)
         {
+            if (!RuneFitsClass(uint8(item - CODEX_RUNE_BASE), player->getClass()))
+            {
+                ChatHandler(player).PSendSysMessage("|cffff2020That rune fits another class's skills: it goes to your bags, to trade.|r");
+                return false;
+            }
             for (uint32 i = 0; i < std::max<uint32>(count, 1); ++i)
                 AddRune(player, uint8(item - CODEX_RUNE_BASE));
             return true;
         }
         if (uint16 const page = CurrentPage(uint16(item - CODEX_PAGE_BASE)))
         {
+            if (PageClass(page) != player->getClass())
+            {
+                ChatHandler(player).PSendSysMessage("|cffff2020That Codex page is another class's: it goes to your bags, to trade.|r");
+                return false;
+            }
             ReadPage(player, page);
             return true;
         }
@@ -204,7 +233,7 @@ namespace Arpg
         }
 
         if (dungeon)
-            for (uint16 node : PagesFrom(victim->GetEntry()))
+            for (uint16 node : PagesFrom(victim->GetEntry(), ClassesThere(victim)))
                 if (Roll(float(PAGE_PCT + PAGE_TIER_PCT * tier)))
                     AddToLoot(loot, CODEX_PAGE_BASE + node);
 
@@ -234,7 +263,7 @@ namespace Arpg
         if (fragment > 0.0f && Roll(std::min(100.0f, fragment * more)))
             AddToLoot(loot, CODEX_FRAGMENT);
         if (rune > 0.0f && Roll(std::min(100.0f, rune * more)))
-            if (uint32 const item = RandomRune())
+            if (uint32 const item = RandomRune(ClassesThere(victim)))
                 AddToLoot(loot, item);
     }
 

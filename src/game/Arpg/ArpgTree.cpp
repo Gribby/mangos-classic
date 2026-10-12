@@ -134,6 +134,9 @@ namespace
     Fx TagFx(Tag tag, int32 v) { return { FX_TAG, uint8(tag), v }; }
     Fx Of(FxKind kind, int32 v) { return { kind, 0, v }; }
 
+    ClassWeb Assemble(RegionSpec const (&regions)[3], BridgeSpec const (&bridges)[3], Spec const& ring,
+                      Spec const& bridgeSmall, Spec const& startSpec);
+
     ClassWeb BuildPaladin()
     {
         RegionSpec const regions[3] =
@@ -201,7 +204,14 @@ namespace
         };
         Spec const ring = { "Swiftness", "+3% movement speed", { Of(FX_MOVE, 3) } };
         Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+        return Assemble(regions, bridges, ring, bridgeSmall, { "Paladin", "Your starting point. Every path leads out from here.", {}, 20154 });
+    }
 
+    // Lay a class's web out: the start, three regions of three arms and two side nodes each, a
+    // ring between the regions near the start and a bridge notable between neighbouring arms.
+    ClassWeb Assemble(RegionSpec const (&regions)[3], BridgeSpec const (&bridges)[3], Spec const& ring,
+                      Spec const& bridgeSmall, Spec const& startSpec)
+    {
         ClassWeb web;
         auto add = [&web](WebNodeKind kind, uint8 region, float r, float deg, Spec const& spec) -> uint16
         {
@@ -224,7 +234,7 @@ namespace
         };
         auto link = [&web](uint16 a, uint16 b) { web.links.emplace_back(a, b); };
 
-        uint16 const start = add(WEB_START, 3, 0.0f, 0.0f, { "Paladin", "Your starting point. Every path leads out from here.", {}, 20154 });
+        uint16 const start = add(WEB_START, 3, 0.0f, 0.0f, startSpec);
         uint16 entry[3] = {};
         uint16 tips[3][3] = {};
         for (uint8 ri = 0; ri < 3; ++ri)
@@ -296,10 +306,87 @@ namespace
         return web;
     }
 
+    // The mage's web: Fire, Arcane and Frost. Its notables teach the mage's own talents.
+    ClassWeb BuildMage()
+    {
+        RegionSpec const regions[3] =
+        {
+            { "Fire", -150.0f,
+              { "Fire", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Kindling", "+4% Fire damage", { TagFx(TAG_FIRE, 4) } },
+                    { "Improved Fireball", "Your Fireball's cast time is 0.5 sec shorter.", {}, 0, "Improved Fireball", 5 },
+                    { "Pyromancer", "40% more Fire damage. Your Frost and Arcane damage is 30% less.", {}, 11366, nullptr, 0, KEY_PYROMANCER },
+                    true },
+                  { { "Insight", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                    { "Critical Mass", "+6% chance to critically strike with Fire spells.", {}, 0, "Critical Mass", 3 },
+                    { "Incinerate", "+4% critical strike chance with Fire Blast and Scorch.", {}, 0, "Incinerate", 2 },
+                    false },
+                  { { "Embers", "+4% Area damage", { TagFx(TAG_AREA, 4) } },
+                    { "Master of Elements", "Your Fire and Frost critical strikes refund 30% of their mana cost.", {}, 0, "Master of Elements", 3 },
+                    { "Wildfire", "When an enemy burning with your Ignite dies, its Ignite spreads to up to 3 enemies within 8 yards. Your Ignites deal 20% less.", {}, 2120, nullptr, 0, KEY_WILDFIRE },
+                    true },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Ardour", "+5 life on kill and +4 mana on hit", { Of(FX_LIFE_ON_KILL, 5), Of(FX_MANA_ON_HIT, 4) } } } },
+            { "Arcane", -30.0f,
+              { "Arcane", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Mind", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                    { "Arcane Mind", "+10% maximum mana.", {}, 0, "Arcane Mind", 5 },
+                    { "Brimming Mind", "Above half mana, your spells deal 1% more per 2% of mana over half, up to 25%. Below half, they deal 15% less.", {}, 12042, nullptr, 0, KEY_BRIMMING_MIND },
+                    true },
+                  { { "Focus", "+4% Arcane damage", { TagFx(TAG_ARCANE, 4) } },
+                    { "Arcane Concentration", "A 10% chance on a spell hit that your next spell costs no mana.", {}, 0, "Arcane Concentration", 5 },
+                    { "Arcane Instability", "+3% spell damage and +3% spell critical strike chance.", {}, 0, "Arcane Instability", 3 },
+                    false },
+                  { { "Meditation", "+4 Spirit and +3 mana on hit", { Stat(STAT_SPIRIT, 4), Of(FX_MANA_ON_HIT, 3) } },
+                    { "Arcane Meditation", "15% of your mana regeneration continues while casting.", {}, 0, "Arcane Meditation", 3 },
+                    { "Arcane Flux", "Your Overload bursts deal 50% more and each restores 2% of your maximum mana. Your hits deal 10% less.", {}, 1449, nullptr, 0, KEY_ARCANE_FLUX },
+                    true },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Tempo", "+4% cooldown recovery", { Of(FX_COOLDOWN, 4) } } } },
+            { "Frost", 90.0f,
+              { "Frost", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Rime", "+4% Frost damage", { TagFx(TAG_FROST, 4) } },
+                    { "Improved Frostbolt", "Your Frostbolt's cast time is 0.5 sec shorter.", {}, 0, "Improved Frostbolt", 5 },
+                    { "Shatter", "40% more damage against frozen enemies (rooted, as by Frost Nova, or frozen by a chill). 15% less against the rest.", {}, 122, nullptr, 0, KEY_SHATTER },
+                    true },
+                  { { "Fortitude", "+6 Stamina", { Stat(STAT_STAMINA, 6) } },
+                    { "Ice Shards", "Your Frost critical strikes deal 100% more of their bonus.", {}, 0, "Ice Shards", 5 },
+                    { "Arctic Reach", "+20% range and area of Frostbolt, Blizzard, Cone of Cold and Frost Nova.", {}, 0, "Arctic Reach", 2 },
+                    false },
+                  { { "Ice", "+4% armour and +2 Stamina", { Of(FX_ARMOUR, 4), Stat(STAT_STAMINA, 2) } },
+                    { "Frostbite", "Your chilling effects have a 15% chance to freeze.", {}, 0, "Frostbite", 3 },
+                    { "Permafrost", "Enemies that hit you are chilled, or frozen if chilled already (once every 3 sec each). Your Fire damage is 25% less.", {}, 168, nullptr, 0, KEY_PERMAFROST },
+                    true },
+              },
+              { { "Endurance", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } },
+                { "Stride", "+3% movement speed", { Of(FX_MOVE, 3) } } } },
+        };
+        BridgeSpec const bridges[3] =
+        {
+            { 0, 2, 1, 0, -90.0f, { "Spellfire", "+8% Fire damage and +8% Arcane damage.", { TagFx(TAG_FIRE, 8), TagFx(TAG_ARCANE, 8) }, 2136 } },
+            { 1, 2, 2, 0, 30.0f, { "Frost Channeling", "Your Frost spells cost 15% less mana.", {}, 0, "Frost Channeling", 3 } },
+            { 2, 2, 0, 0, 150.0f, { "Frostfire", "+8% Frost damage and +8% Fire damage.", { TagFx(TAG_FROST, 8), TagFx(TAG_FIRE, 8) }, 116 } },
+        };
+        Spec const ring = { "Blink", "+3% movement speed", { Of(FX_MOVE, 3) } };
+        Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+        return Assemble(regions, bridges, ring, bridgeSmall, { "Mage", "Your starting point. Every path leads out from here.", {}, 133 });
+    }
+
     ClassWeb const* WebOf(uint8 classId)
     {
         static ClassWeb const paladin = BuildPaladin();
-        return classId == CLASS_PALADIN ? &paladin : nullptr;
+        static ClassWeb const mage = BuildMage();
+        switch (classId)
+        {
+            case CLASS_PALADIN: return &paladin;
+            case CLASS_MAGE: return &mage;
+            default: return nullptr;
+        }
     }
 
     WebNode const* FindNode(ClassWeb const& web, uint16 id)

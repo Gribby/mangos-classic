@@ -7,6 +7,7 @@
 #include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgMage.h"
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgCombat.h"
@@ -41,6 +42,9 @@
 
 namespace
 {
+    // The mage's web keystones' more and less damage (Arpg/ArpgMage.h).
+    constexpr int32 PYROMANCER_PCT = 40, PYROMANCER_LESS_PCT = 30, PERMAFROST_LESS_PCT = 25, SHATTER_PCT = 40,
+                    SHATTER_LESS_PCT = 15, FLUX_LESS_PCT = 10, BRIMMING_MAX_PCT = 25, BRIMMING_LESS_PCT = 15;
     // Rune of Leech: this share of the damage heals.
     constexpr uint32 RUNE_LEECH_PCT = 5;
     // Light of the Crusader: this share of a Seal hit's damage heals.
@@ -773,6 +777,26 @@ namespace
         uint32 const now = WorldTimer::getMSTime();
         if (t.Has(KEY_CRUSADE))
             more(CRUSADE_PER_KILL * int32(CrusadeStacks(R(player), now)), "Crusade");
+        // The mage's web.
+        uint32 const fire = TagBit(TAG_FIRE), coldOrArcane = TagBit(TAG_FROST) | TagBit(TAG_ARCANE);
+        if (t.Has(KEY_PYROMANCER))
+        {
+            if (tags & fire)
+                more(PYROMANCER_PCT, "Pyromancer");
+            else if (tags & coldOrArcane)
+                more(-PYROMANCER_LESS_PCT, "Pyromancer");
+        }
+        if (t.Has(KEY_PERMAFROST) && (tags & fire))
+            more(-PERMAFROST_LESS_PCT, "Permafrost");
+        if (t.Has(KEY_SHATTER) && victim)
+            more(Frozen(victim) ? SHATTER_PCT : -SHATTER_LESS_PCT, "Shatter");
+        if (t.Has(KEY_ARCANE_FLUX))
+            more(-FLUX_LESS_PCT, "Arcane Flux");
+        if (t.Has(KEY_BRIMMING_MIND) && spellInfo && player->GetMaxPower(POWER_MANA))
+        {
+            int32 const manaPct = int32(uint64(player->GetPower(POWER_MANA)) * 100 / player->GetMaxPower(POWER_MANA));
+            more(manaPct > 50 ? std::min(BRIMMING_MAX_PCT, (manaPct - 50) / 2) : -BRIMMING_LESS_PCT, "Brimming Mind");
+        }
 
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
         if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
@@ -909,6 +933,7 @@ namespace Arpg
         ForgetEvents(player);
         ForgetProcs(player);
         ForgetAilments(player);
+        ForgetMage(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -1157,7 +1182,7 @@ namespace Arpg
         if (std::shared_ptr<WebTotals const> totals = TotalsOf(player))
         {
             SpellEntry const* sample = nullptr;
-            if (skill != SKILL_STRIKE)
+            if (skill != SwingSkill(player->getClass()))
                 for (auto const& [id, known] : player->GetSpellMap())
                     if (known.state != PLAYERSPELL_REMOVED && !known.disabled)
                         if (SpellEntry const* info = sSpellTemplate.LookupEntry<SpellEntry>(id))
@@ -1178,7 +1203,7 @@ namespace Arpg
 
         // An estimate: the swing's, or the skill's best known rank's direct or periodic damage, with
         // every bonus above, before the target's armour, resistances and its own modifiers.
-        if (skill == SKILL_STRIKE)
+        if (skill == SwingSkill(player->getClass()))
         {
             float const lo = player->GetFloatValue(UNIT_FIELD_MINDAMAGE), hi = player->GetFloatValue(UNIT_FIELD_MAXDAMAGE);
             float const mod = DamageDoneMod(player, nullptr, nullptr);
@@ -1428,7 +1453,7 @@ namespace Arpg
             r.lastRefresh = 0;
         }
         // Holy Light's tree: heals that hurt.
-        if (SkillOfSpell(player->getClass(), spell->m_spellInfo) == SKILL_HOLY_LIGHT)
+        if (player->getClass() == CLASS_PALADIN && SkillOfSpell(player->getClass(), spell->m_spellInfo) == SKILL_HOLY_LIGHT)
             if (std::shared_ptr<WebTotals const> totals = TotalsOf(caster))
             {
                 WebTotals const& t = *totals;
@@ -1517,6 +1542,8 @@ namespace Arpg
                             r.thornsDue.push_back(attacker->GetObjectGuid());
                     }
         }
+        if (damage && victim && attacker && Active(victim))
+            OnMageStruck(victim, attacker);
         if (!damage || !victim || attacker == victim || !HasKeystone(victim, KEY_MARTYR))
             return;
         R(victim).martyrPending += damage * MARTYR_SHARE_PCT / 100;
@@ -1540,6 +1567,7 @@ namespace Arpg
             return;
         // A kill may ready another skill (Arpg/ArpgProcs.h).
         OnProcKill(killer, victim);
+        OnMageKill(killer, victim);
         std::shared_ptr<WebTotals const> totals = TotalsOf(killer);
         WebTotals const& t = totals ? *totals : NoTotals();
         int32 const life = int32(killer->GetStat(STAT_STAMINA)) / STA_PER_LIFE + t.lifeOnKill;
@@ -1585,13 +1613,14 @@ namespace Arpg
         if (victim->GetTypeId() == TYPEID_UNIT)
             OnTelegraphAggro(static_cast<Creature*>(victim), attacker);
 
-        if (damage)
-            RecordHit(r, SKILL_STRIKE, damage, now);
+        SkillId const swing = SwingSkill(player->getClass());
+        if (damage && swing != SKILL_NONE)
+            RecordHit(r, swing, damage, now);
         // A critical swing may ready another skill (Arpg/ArpgProcs.h).
         if (damage)
             OnProcSwing(attacker, victim, crit, damage);
         // Rune of Leech in Strike.
-        if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
+        if (damage && swing != SKILL_NONE && attacker->IsAlive() && HasRune(player, swing, RUNE_LEECH))
             ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, FromDamage(attacker, victim, damage) * RUNE_LEECH_PCT / 100));
 
         if (t.Has(KEY_MOMENTUM) && damage)

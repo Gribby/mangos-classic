@@ -75,6 +75,13 @@ namespace Arpg
         SKILL_CONSECRATION = 4,
         SKILL_HAMMER       = 5,   // Hammers: Hammer of Justice and Hammer of Wrath
         SKILL_WRATH        = 6,   // Exorcism and Holy Wrath
+        // A mage's, the same ids (a skill is its class's and its id).
+        SKILL_FIREBALL          = 1, // Fireball and Pyroblast
+        SKILL_FROSTBOLT         = 2, // Frostbolt and Cone of Cold
+        SKILL_ARCANE_MISSILES   = 3,
+        SKILL_ARCANE_EXPLOSION  = 4,
+        SKILL_STORMS            = 5, // Blizzard and Flamestrike
+        SKILL_FIRE_BLAST        = 6, // Fire Blast and Scorch
         // 7 and 8 (Holy Wrath, Hammer of Wrath alone) are folded into Wrath and Hammers.
     };
 
@@ -175,7 +182,13 @@ namespace Arpg
     std::vector<std::pair<SkillId, uint8>> SocketedRunes(Player const* player);
 
     // The capstones whose Codex page `bossEntry` drops; every page; every rune.
-    std::vector<uint16> PagesFrom(uint32 bossEntry);
+    // Pages for the classes in `classMask` (a bit per class id) only.
+    std::vector<uint16> PagesFrom(uint32 bossEntry, uint32 classMask);
+    // The class whose capstone a page unseals; whether a rune fits any of `classId`'s skills.
+    uint8 PageClass(uint16 node);
+    bool RuneFitsClass(uint8 rune, uint8 classId);
+    // The skill a class's weapon swing counts as: the paladin's Crusader; none for the rest.
+    SkillId SwingSkill(uint8 classId);
     std::vector<uint16> AllPages();
     // The page an item of node `node`'s page reads today: itself, its renumbered capstone for a page
     // item from before the trees' revision 2, or 0.

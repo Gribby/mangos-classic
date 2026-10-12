@@ -52,6 +52,7 @@
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgMage.h"
 
 #define NULL_AURA_SLOT 0xFF
 
@@ -4597,6 +4598,9 @@ void Aura::PeriodicTick()
 
             CleanDamage cleanDamage(pdamage, BASE_ATTACK, MELEE_HIT_NORMAL, pdamage || absorb);
             Unit::DealDamage(caster, target, pdamage, &cleanDamage, DOT, GetSpellSchoolMask(spellProto), spellProto, true);
+            // ARPG: a mage's keystone on a periodic tick (Arpg/ArpgMage.h).
+            if (pdamage)
+                Arpg::OnPeriodicHit(caster, target, spellProto);
 
             Unit::ProcDamageAndSpell(ProcSystemArguments(caster, target, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, absorb, BASE_ATTACK, spellProto));
 

@@ -130,6 +130,23 @@ namespace
         return node;
     }
 
+    // A capstone built from a spell modifier, or from an ailment chance.
+    SkillNode ModCap(uint16 id, uint8 col, uint8 row, uint16 parent, char const* name, char const* text, uint32 icon,
+                     SpellModOp op, SpellModType type, int32 amount, char const* only = nullptr)
+    {
+        SkillNode node = Mod(id, col, row, parent, 1, name, text, icon, op, type, amount, only);
+        node.kind = SKILL_NODE_CAPSTONE;
+        return node;
+    }
+
+    SkillNode AilCap(uint16 id, uint8 col, uint8 row, uint16 parent, char const* name, char const* text, uint32 icon,
+                     Tag tag, uint8 chance)
+    {
+        SkillNode node = Ail(id, col, row, parent, 1, name, text, icon, tag, chance);
+        node.kind = SKILL_NODE_CAPSTONE;
+        return node;
+    }
+
     // The paladin's specialisable skills (docs/ARPG-CHARACTER.md, "The paladin, in full"): six,
     // for five slots. A tree is three branches (two for Holy Light) of four or five tiers.
     std::vector<SkillDef> const& Skills()
@@ -244,6 +261,108 @@ namespace
                   KitCap(613, 2, 5, 612, "Twin Exorcism", "Exorcism fires a second bolt beside the first, at 70%.", 879,
                          KIT_EXTRA_PROJECTILES, 879, 1, 12.0f, 70),
               } },
+            // --- The mage's six. A class's nodes take their own numbers within each skill's hundred
+            // (the paladin's 1-19, the mage's 20-39), so no two classes share a Codex page. ---
+            { SKILL_FIREBALL, CLASS_MAGE, "Fireball", "Fireball and Pyroblast: the mage's bolt and its great charge.", 133, { "Fireball", "Pyroblast" },
+              { "Volley", "Inferno", "Pyre" },
+              {
+                  Kit(121, 0, 1, 0, 3, "Twin Fireball", "Fireball launches 1/1/2 extra fireballs, at 45/60/60%.", 133,
+                      KIT_EXTRA_PROJECTILES, 133, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
+                  Mod(122, 0, 2, 121, 3, "Quick Fireball", "-0.15 sec Fireball cast time per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Fireball"),
+                  Kit(123, 0, 3, 122, 3, "Piercing Flame", "Fireball flies through 1/2/4 enemies, at 60%.", 2136,
+                      KIT_PIERCE, 133, { 1, 2, 4 }, { 0, 0, 0 }, { 60, 60, 60 }),
+                  KitCap(124, 0, 4, 123, "Flame Echo", "Every 3rd Fireball is echoed for free, at 70%.", 11129, KIT_ECHO, 133, 3, 0.0f, 70),
+                  Mod(125, 1, 1, 0, 4, "Searing Bolt", "6% more Fireball and Pyroblast damage per rank.", 11366, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Ail(126, 1, 2, 125, 3, "Kindle", "Your Fireball and Pyroblast hits have an 8% chance per rank to Ignite, beside their critical strikes.", 2120, TAG_FIRE, 8),
+                  Mod(127, 1, 3, 126, 3, "Lingering Flame", "Fireball's and Pyroblast's burn deals 15% more per rank.", 2948, SPELLMOD_DOT, SPELLMOD_PCT, 15),
+                  Key(128, SKILL_NODE_CAPSTONE, 1, 4, 127, 1, "Pyroclasm", "Critical Fireballs and Pyroblasts explode: every enemy within 8 yards of the target takes 60% of the hit.", 11113, KEY_PYROCLASM),
+                  Mod(129, 2, 1, 0, 3, "Quick Pyre", "-0.5 sec Pyroblast cast time per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -500, "Pyroblast"),
+                  Mod(130, 2, 2, 129, 3, "Hot Streak", "+5% Pyroblast critical strike chance per rank.", 11366, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5, "Pyroblast"),
+                  Mod(131, 2, 3, 130, 3, "Pyre", "Pyroblast's critical strikes deal 20% more of their bonus per rank.", 11129, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20, "Pyroblast"),
+                  KitCap(132, 2, 4, 131, "Cataclysm", "Pyroblast bursts onto every enemy within 10 yards of its target, at 60%.", 11113, KIT_BURST, 11366, 0, 10.0f, 60),
+              } },
+            { SKILL_FROSTBOLT, CLASS_MAGE, "Frostbolt", "Frostbolt and Cone of Cold: cold that slows, chills and shatters.", 116, { "Frostbolt", "Cone of Cold" },
+              { "Shards", "Winter", "Cone" },
+              {
+                  Kit(221, 0, 1, 0, 3, "Splintering Bolt", "Frostbolt shatters into 2/3/4 ice shards that strike the nearest enemies within 10 yards, at 35%.", 116,
+                      KIT_FRAGMENTS, 116, { 2, 3, 4 }, { 10, 10, 10 }, { 35, 35, 35 }),
+                  Mod(222, 0, 2, 221, 4, "Bitter Cold", "6% more Frostbolt damage per rank.", 116, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6, "Frostbolt"),
+                  Kit(223, 0, 3, 222, 2, "Glacial Chain", "Frostbolt chains to 1/2 more enemies within 10 yards, at 50%.", 6143,
+                      KIT_CHAIN, 116, { 1, 2 }, { 10, 10 }, { 50, 50 }),
+                  KitCap(224, 0, 4, 223, "Echoing Frost", "Every 3rd Frostbolt is echoed for free, at 60%.", 12472, KIT_ECHO, 116, 3, 0.0f, 60),
+                  Ail(225, 1, 1, 0, 3, "Deep Chill", "Your Frostbolt and Cone of Cold hits have a 10% chance per rank to chill; a critical hit on the chilled freezes.", 12484, TAG_FROST, 10),
+                  Mod(226, 1, 2, 225, 3, "Brittle", "+4% critical strike chance per rank.", 12494, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
+                  Mod(227, 1, 3, 226, 3, "Razor Ice", "Critical strikes deal 20% more of their bonus per rank.", 11958, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
+                  Key(228, SKILL_NODE_CAPSTONE, 1, 4, 227, 1, "Shatterstorm", "Frostbolt on a frozen enemy shatters: every enemy within 8 yards of it takes 80% of the hit.", 122, KEY_SHATTERSTORM),
+                  Mod(229, 2, 1, 0, 3, "Wide Cone", "+15% Cone of Cold area per rank.", 120, SPELLMOD_RADIUS, SPELLMOD_PCT, 15, "Cone of Cold"),
+                  Mod(230, 2, 2, 229, 3, "Biting Cone", "10% more Cone of Cold damage per rank.", 120, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10, "Cone of Cold"),
+                  Mod(231, 2, 3, 230, 3, "Swift Cone", "-1.5 sec Cone of Cold cooldown per rank.", 12472, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1500, "Cone of Cold"),
+                  Key(232, SKILL_NODE_CAPSTONE, 2, 4, 231, 1, "Deep Freeze", "Cone of Cold freezes every enemy it hits.", 122, KEY_DEEP_FREEZE),
+              } },
+            { SKILL_ARCANE_MISSILES, CLASS_MAGE, "Arcane Missiles", "A channelled stream of arcane bolts.", 5143, { "Arcane Missiles" },
+              { "Barrage", "Flux", "Focus" },
+              {
+                  Kit(321, 0, 1, 0, 3, "Seeking Missiles", "Each missile jumps to 1/1/2 more enemies within 8 yards, at 40/55/55%.", 5143,
+                      KIT_CHAIN, 5143, { 1, 1, 2 }, { 8, 8, 8 }, { 40, 55, 55 }),
+                  Mod(322, 0, 2, 321, 4, "Empowered Missiles", "6% more Arcane Missiles damage per rank.", 5143, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Kit(323, 0, 3, 322, 2, "Piercing Missiles", "Each missile flies through 1/2 enemies, at 50%.", 1953,
+                      KIT_PIERCE, 5143, { 1, 2 }, { 0, 0 }, { 50, 50 }),
+                  KitCap(324, 0, 4, 323, "Arcane Barrage", "Each missile bursts onto enemies within 4 yards of its target, at 30%.", 1449, KIT_BURST, 5143, 0, 4.0f, 30),
+                  Ail(325, 1, 1, 0, 3, "Unstable Missiles", "Each missile has a 6% chance per rank to Overload.", 12042, TAG_ARCANE, 6),
+                  Mod(326, 1, 2, 325, 3, "Sharp Mind", "+3% critical strike chance per rank.", 12043, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 3),
+                  Mod(327, 1, 3, 326, 3, "Arcane Thrift", "10% less mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Key(328, SKILL_NODE_CAPSTONE, 1, 4, 327, 1, "Overcharge", "Your Overload bursts deal 40% more.", 12042, KEY_OVERCHARGE),
+                  Mod(329, 2, 1, 0, 3, "Focused Mind", "Critical strikes deal 15% more of their bonus per rank.", 12043, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 15),
+                  Mod(330, 2, 2, 329, 2, "Long Reach", "+10% Arcane Missiles range per rank.", 1953, SPELLMOD_RANGE, SPELLMOD_PCT, 10),
+                  Key(331, SKILL_NODE_CAPSTONE, 2, 3, 330, 1, "Arcane Siphon", "Each missile that hits restores 0.5% of your maximum mana.", 12051, KEY_ARCANE_SIPHON),
+              } },
+            { SKILL_ARCANE_EXPLOSION, CLASS_MAGE, "Arcane Explosion", "A burst of arcane power all around you.", 1449, { "Arcane Explosion" },
+              { "Nova", "Fury", "Mana" },
+              {
+                  Mod(421, 0, 1, 0, 4, "Wide Explosion", "+10% Arcane Explosion radius per rank. Intellect widens it too.", 1449, SPELLMOD_RADIUS, SPELLMOD_PCT, 10),
+                  Mod(422, 0, 2, 421, 4, "Arcane Force", "6% more Arcane Explosion damage per rank.", 12042, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Ail(423, 0, 3, 422, 3, "Volatile", "Arcane Explosion has a 10% chance per rank to Overload each enemy it hits.", 1449, TAG_ARCANE, 10),
+                  AilCap(424, 0, 4, 423, "Detonation", "Arcane Explosion Overloads every enemy it hits.", 12042, TAG_ARCANE, 100),
+                  Mod(425, 1, 1, 0, 3, "Unstable Power", "+3% Arcane Explosion critical strike chance per rank.", 12043, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 3),
+                  Mod(426, 1, 2, 425, 3, "Arcane Fury", "Critical strikes deal 20% more of their bonus per rank.", 12042, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
+                  ModCap(427, 1, 3, 426, "Arcane Nova", "Arcane Explosion's radius is 40% larger.", 1449, SPELLMOD_RADIUS, SPELLMOD_PCT, 40),
+                  Mod(428, 2, 1, 0, 3, "Mana Efficiency", "10% less Arcane Explosion mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Mod(429, 2, 2, 428, 3, "Resonance", "5% more Arcane Explosion damage per rank.", 1008, SPELLMOD_DAMAGE, SPELLMOD_PCT, 5),
+                  Key(430, SKILL_NODE_CAPSTONE, 2, 3, 429, 1, "Mana Burst", "Each enemy Arcane Explosion hits restores 1% of your maximum mana, 5% at most a cast.", 12051, KEY_MANA_BURST),
+              } },
+            { SKILL_STORMS, CLASS_MAGE, "Storms", "Blizzard and Flamestrike: storms of ice and fire on the ground.", 10, { "Blizzard", "Flamestrike" },
+              { "Blizzard", "Storm", "Flamestrike" },
+              {
+                  Mod(521, 0, 1, 0, 3, "Wide Blizzard", "+12% Blizzard radius per rank.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 12, "Blizzard"),
+                  Mod(522, 0, 2, 521, 4, "Biting Storm", "8% more Blizzard damage per rank.", 10, SPELLMOD_DOT, SPELLMOD_PCT, 8, "Blizzard"),
+                  Mod(523, 0, 3, 522, 3, "Thrifty Storm", "10% less Blizzard mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10, "Blizzard"),
+                  Key(524, SKILL_NODE_CAPSTONE, 0, 4, 523, 1, "Glacial Storm", "Blizzard chills every enemy it strikes, and each strike has a 15% chance to freeze one chilled already.", 12484, KEY_GLACIAL_STORM),
+                  Mod(525, 1, 1, 0, 3, "Stormcaller", "10% less mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Mod(526, 1, 2, 525, 3, "Storm Surge", "+8% radius per rank.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 8),
+                  Mod(527, 1, 3, 526, 3, "Raging Storm", "Blizzard's strikes and Flamestrike's burn deal 6% more per rank.", 2120, SPELLMOD_DOT, SPELLMOD_PCT, 6),
+                  ModCap(528, 1, 4, 527, "Eye of the Storm", "Blizzard and Flamestrike are 30% wider.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 30),
+                  Mod(529, 2, 1, 0, 3, "Quick Flamestrike", "-0.3 sec Flamestrike cast time per rank.", 2120, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -300, "Flamestrike"),
+                  Mod(530, 2, 2, 529, 3, "Searing Ground", "Flamestrike's burn deals 15% more per rank.", 2120, SPELLMOD_DOT, SPELLMOD_PCT, 15, "Flamestrike"),
+                  Ail(531, 2, 3, 530, 3, "Kindling Strike", "Flamestrike's hits have a 10% chance per rank to Ignite.", 2120, TAG_FIRE, 10),
+                  ModCap(532, 2, 4, 531, "Meteor", "Flamestrike is instant.", 11113, SPELLMOD_CASTING_TIME, SPELLMOD_PCT, -100, "Flamestrike"),
+              } },
+            { SKILL_FIRE_BLAST, CLASS_MAGE, "Fire Blast", "Fire Blast and Scorch: quick fire, close in.", 2136, { "Fire Blast", "Scorch" },
+              { "Blast", "Scorch", "Combust" },
+              {
+                  Mod(621, 0, 1, 0, 3, "Swift Blast", "-1 sec Fire Blast cooldown per rank.", 2136, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000, "Fire Blast"),
+                  Kit(622, 0, 2, 621, 3, "Explosive Blast", "Fire Blast bursts onto enemies within 4/6/8 yards of its target, at 40%.", 11113,
+                      KIT_BURST, 2136, { 0, 0, 0 }, { 4, 6, 8 }, { 40, 40, 40 }),
+                  Mod(623, 0, 3, 622, 3, "Incineration", "+5% Fire Blast critical strike chance per rank.", 2136, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5, "Fire Blast"),
+                  Key(624, SKILL_NODE_CAPSTONE, 0, 4, 623, 1, "Chain Blast", "A kill with Fire Blast readies Fire Blast at once.", 11129, KEY_CHAIN_BLAST),
+                  Mod(625, 1, 1, 0, 3, "Quick Scorch", "-0.2 sec Scorch cast time per rank.", 2948, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Scorch"),
+                  Kit(626, 1, 2, 625, 2, "Arcing Scorch", "Scorch chains to 1/2 more enemies within 10 yards, at 60%.", 2948,
+                      KIT_CHAIN, 2948, { 1, 2 }, { 10, 10 }, { 60, 60 }),
+                  Ail(627, 1, 3, 626, 3, "Scorching", "Your Fire Blast and Scorch hits have a 10% chance per rank to Ignite.", 2120, TAG_FIRE, 10),
+                  Key(628, SKILL_NODE_CAPSTONE, 1, 4, 627, 1, "Searing Brand", "Scorch brands its target with Fire Vulnerability: 3% more Fire damage taken per stack, up to 5.", 2948, KEY_SEARING_BRAND),
+                  Mod(629, 2, 1, 0, 3, "Flashpoint", "Critical strikes deal 15% more of their bonus per rank.", 11129, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 15),
+                  Mod(630, 2, 2, 629, 4, "Blazing", "6% more Fire Blast and Scorch damage per rank.", 2136, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Key(631, SKILL_NODE_CAPSTONE, 2, 3, 630, 1, "Detonate", "Fire Blast sets off your Ignite on its target at once: the burn left strikes it and every enemy within 6 yards.", 11113, KEY_DETONATE),
+              } },
         };
         return skills;
     }
@@ -304,6 +423,25 @@ namespace
         { 604, 10508, "Ras Frostwhisper, Scholomance" },                // Purging Light
         { 608, 10811, "Archivist Galford, Stratholme" },                // Wrathful
         { 613, 10435, "Magistrate Barthilas, Stratholme" },             // Twin Exorcism
+        // The mage's
+        { 124, 4275,  "Archmage Arugal, Shadowfang Keep" },             // Flame Echo
+        { 128, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Pyroclasm
+        { 132, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Cataclysm
+        { 224, 7358,  "Amnennar the Coldbringer, Razorfen Downs" },     // Echoing Frost
+        { 228, 10508, "Ras Frostwhisper, Scholomance" },                // Shatterstorm
+        { 232, 1853,  "Darkmaster Gandling, Scholomance" },             // Deep Freeze
+        { 324, 6487,  "Arcanist Doan, Scarlet Monastery" },             // Arcane Barrage
+        { 328, 7800,  "Mekgineer Thermaplugg, Gnomeregan" },            // Overcharge
+        { 331, 11496, "Immol'thar, Dire Maul" },                        // Arcane Siphon
+        { 424, 2748,  "Archaedas, Uldaman" },                           // Detonation
+        { 427, 11486, "Prince Tortheldrin, Dire Maul" },                // Arcane Nova
+        { 430, 10813, "Balnazzar, Stratholme" },                        // Mana Burst
+        { 524, 10440, "Baron Rivendare, Stratholme" },                  // Glacial Storm
+        { 528, 3654,  "Mutanus the Devourer, Wailing Caverns" },        // Eye of the Storm
+        { 532, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Meteor
+        { 624, 639,   "Edwin VanCleef, the Deadmines" },                // Chain Blast
+        { 628, 10811, "Archivist Galford, Stratholme" },                // Searing Brand
+        { 631, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Detonate
     };
 
     // Revision 2 of the trees renumbered the capstones: a page read for an old one is read for its
@@ -341,7 +479,19 @@ namespace
         float value;
         uint32 pct;
         std::vector<std::tuple<uint8, uint8, int32>> mods; // RUNE_MODS: op, type, amount
+        uint8 mageFits = 0;       // `fits` for a mage's skills (`fits` is a paladin's)
     };
+
+    // The skills of `classId`'s a rune fits: a bit per SkillId (0: none, a rune of another class).
+    uint8 FitsFor(RuneDef const& rune, uint8 classId)
+    {
+        switch (classId)
+        {
+            case CLASS_PALADIN: return rune.fits;
+            case CLASS_MAGE: return rune.mageFits;
+            default: return 0;
+        }
+    }
 
     // A rune fits skills 1-7 (the wire's mask is a byte); later skills take none yet.
     constexpr uint8 FIT(SkillId id) { return id < 8 ? uint8(1u << id) : uint8(0); }
@@ -350,25 +500,28 @@ namespace
     {
         static std::vector<RuneDef> const runes =
         {
-            { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on Chain of Judgement).", 20186,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {} },
-            { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on Hammer of Light).", 24275,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {} },
+            { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on a chain its tree gives).", 20186,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)) },
+            { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on a burst its tree gives).", 24275,
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
-              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) } },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) },
+              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)) },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
-              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) } },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)) },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_WRATH) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
-                std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) } },
+                std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) },
+              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {} },
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
-              { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) } },
+              { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) },
+              uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
             // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
@@ -394,9 +547,26 @@ namespace
         return nullptr;
     }
 
-    // The spells a rune's kit row lands on, by skill: the kit spells its tree's own rows use.
-    std::vector<uint32> KitSpellsOf(SkillId skill)
+    // A mage's skills' kit spells, for its kit runes.
+    std::vector<uint32> MageKitSpellsOf(SkillId skill)
     {
+        switch (skill)
+        {
+            case SKILL_FIREBALL: return { 133, 11366 };     // Fireball, Pyroblast
+            case SKILL_FROSTBOLT: return { 116 };
+            case SKILL_ARCANE_MISSILES: return { 5143 };
+            case SKILL_FIRE_BLAST: return { 2136, 2948 };   // Fire Blast, Scorch
+            default: return {};
+        }
+    }
+
+    // The spells a rune's kit row lands on, by skill: the kit spells its tree's own rows use.
+    std::vector<uint32> KitSpellsOf(uint8 classId, SkillId skill)
+    {
+        if (classId == CLASS_MAGE)
+            return MageKitSpellsOf(skill);
+        if (classId != CLASS_PALADIN)
+            return {};
         switch (skill)
         {
             case SKILL_STRIKE: return { 20154, 20375 };     // Seal of Righteousness, of Command
@@ -479,6 +649,7 @@ namespace
         std::map<uint8, uint8> sockets;       // by skill: the rune in its socket
         std::map<uint16, uint32> things;      // other held things (100 and up: raid key pieces)
         std::map<uint8, uint8> gearSent;      // gear's skill levels the client was last sent
+        uint8 classId = 0;                    // the character's class (0: not loaded)
         uint32 overSince = 0;                 // when more was first seen spent than allowed (0: not)
     };
 
@@ -666,7 +837,7 @@ namespace
         std::vector<std::pair<SkillId, RuneDef const*>> out;
         for (auto const& [skill, id] : s.sockets)
             if (RuneDef const* rune = FindRune(id))
-                if ((rune->fits & FIT(SkillId(skill))) && SlotOf(s, skill) >= 0 && SpentIn(s, skill) >= SOCKET_POINTS)
+                if ((FitsFor(*rune, s.classId) & FIT(SkillId(skill))) && SlotOf(s, skill) >= 0 && SpentIn(s, skill) >= SOCKET_POINTS)
                     out.emplace_back(SkillId(skill), rune);
         return out;
     }
@@ -680,7 +851,7 @@ namespace Arpg
         if (!totals || !FindSkill(player->getClass(), skill))
             return 0;
         // The skill's tags: its spells' the character knows (Strike: the swing's).
-        uint32 tags = skill == SKILL_STRIKE ? TagsOf(nullptr) : 0;
+        uint32 tags = skill == SwingSkill(player->getClass()) ? TagsOf(nullptr) : 0;
         for (auto const& [id, known] : player->GetSpellMap())
             if (known.state != PLAYERSPELL_REMOVED)
                 if (SpellEntry const* info = sSpellTemplate.LookupEntry<SpellEntry>(id))
@@ -827,7 +998,7 @@ namespace Arpg
     SkillId SkillOfSpell(uint8 classId, SpellEntry const* spellInfo)
     {
         if (!spellInfo)
-            return classId == CLASS_PALADIN ? SKILL_STRIKE : SKILL_NONE;
+            return SwingSkill(classId);
         char const* name = spellInfo->SpellName[0];
         if (!name)
             return SKILL_NONE;
@@ -844,6 +1015,7 @@ namespace Arpg
         EnsureTables();
         PlayerSkills s;
         uint8 const classId = player->getClass();
+        s.classId = classId;
         if (auto result = CharacterDatabase.PQuery("SELECT slot, skill FROM character_arpg_skill WHERE guid = %u", player->GetGUIDLow()))
         {
             do
@@ -1021,17 +1193,22 @@ namespace Arpg
         }
         data << uint16(std::min<uint32>(s.fragments, 65535));
         data << uint8(FRAGMENTS_PER_PAGE);
-        std::vector<RuneDef> const& runes = Runes();
+        // The class's runes only.
+        std::vector<RuneDef const*> runes;
+        for (RuneDef const& rune : Runes())
+            if (FitsFor(rune, player->getClass()))
+                runes.push_back(&rune);
         data << uint8(runes.size());
-        for (RuneDef const& rune : runes)
+        for (RuneDef const* each : runes)
         {
+            RuneDef const& rune = *each;
             auto held = s.runes.find(rune.id);
             data << uint8(rune.id);
             data << uint32(rune.icon);
             data << rune.name;
             data << rune.text;
             data << uint8(held == s.runes.end() ? 0 : held->second);
-            data << uint8(rune.fits);
+            data << uint8(FitsFor(rune, player->getClass()));
         }
         player->GetSession()->SendPacket(data);
     }
@@ -1216,7 +1393,7 @@ namespace Arpg
             {
                 if (rune->effect != RUNE_KIT)
                     continue;
-                for (uint32 spell : KitSpellsOf(skillId))
+                for (uint32 spell : KitSpellsOf(s.classId, skillId))
                 {
                     bool stacked = false;
                     for (UniqueMechanic const*& row : rows)
@@ -1267,13 +1444,33 @@ namespace Arpg
         return out;
     }
 
-    std::vector<uint16> PagesFrom(uint32 bossEntry)
+    std::vector<uint16> PagesFrom(uint32 bossEntry, uint32 classMask)
     {
         std::vector<uint16> out;
         for (PageHome const& page : PAGES)
-            if (page.boss == bossEntry)
+            if (page.boss == bossEntry && (classMask & (1u << PageClass(page.node))))
                 out.push_back(page.node);
         return out;
+    }
+
+    uint8 PageClass(uint16 node)
+    {
+        for (SkillDef const& skill : Skills())
+            for (SkillNode const& n : skill.nodes)
+                if (n.id == node)
+                    return skill.classId;
+        return 0;
+    }
+
+    bool RuneFitsClass(uint8 rune, uint8 classId)
+    {
+        RuneDef const* def = FindRune(rune);
+        return def && FitsFor(*def, classId);
+    }
+
+    SkillId SwingSkill(uint8 classId)
+    {
+        return classId == CLASS_PALADIN ? SKILL_STRIKE : SKILL_NONE;
     }
 
     std::vector<uint16> AllPages()
@@ -1395,7 +1592,7 @@ namespace Arpg
         if (rune)
         {
             RuneDef const* r = FindRune(rune);
-            if (!r || !(r->fits & FIT(SkillId(skill))))
+            if (!r || !(FitsFor(*r, player->getClass()) & FIT(SkillId(skill))))
                 return refuse("the rune does not fit the skill");
             if (SpentIn(s, skill) < SOCKET_POINTS)
                 return refuse("the socket is not open yet");
@@ -1470,7 +1667,7 @@ namespace Arpg
                 continue;
             std::vector<std::string> lines;
             // Strike is the swing itself; the rest by their icon spell (the skill's own).
-            SpellEntry const* spell = skill.id == SKILL_STRIKE ? nullptr : sSpellTemplate.LookupEntry<SpellEntry>(skill.icon);
+            SpellEntry const* spell = skill.id == SwingSkill(classId) ? nullptr : sSpellTemplate.LookupEntry<SpellEntry>(skill.icon);
             uint32 const tags = TagsOf(spell) & ~TagBit(TAG_HEAL);
             std::string names;
             for (uint8 tag = 0; tag < MAX_TAG; ++tag)

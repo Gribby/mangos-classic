@@ -5,6 +5,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgMage.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgTree.h"
@@ -50,6 +51,9 @@ namespace
     constexpr uint32 OVERLOAD_PCT = 50, OVERLOAD_MS = 3000;
     constexpr uint32 JUDGED_PCT = 25, JUDGED_STACKS = 5, JUDGED_MS = 6000;
     constexpr float BURST_RANGE = 6.0f;
+    // The mage's keystones on ailments: Wildfire's weaker Ignites; Arcane Flux's and Overcharge's
+    // bigger Overload bursts, and Arcane Flux's mana from each.
+    constexpr uint32 WILDFIRE_LESS_PCT = 20, FLUX_MORE_PCT = 50, FLUX_MANA_PCT = 2, OVERCHARGE_MORE_PCT = 40;
     constexpr size_t BURST_MAX = 10;
     // An added hit rolls 60% to 140% of its affixes' average (ArpgAffixes.cpp shows the same range).
     constexpr uint32 ADDED_LOW_PCT = 60, ADDED_HIGH_PCT = 140;
@@ -166,7 +170,10 @@ namespace
             {
                 bool const bleed = tag == TAG_PHYSICAL;
                 uint8 const ticks = uint8(bleed ? BLEED_TICKS : IGNITE_TICKS);
-                uint32 const perTick = std::max<uint32>(1, AilmentShare(player, t, dealt, bleed ? BLEED_PCT : IGNITE_PCT) / ticks);
+                uint32 share = AilmentShare(player, t, dealt, bleed ? BLEED_PCT : IGNITE_PCT);
+                if (!bleed && t.Has(KEY_WILDFIRE))
+                    share = share * (100 - WILDFIRE_LESS_PCT) / 100;
+                uint32 const perTick = std::max<uint32>(1, share / ticks);
                 Affliction* a = Find(list, guid, tag);
                 // The strongest counts: a weaker one leaves it be.
                 if (a && a->ticks && a->perTick > perTick)
@@ -363,6 +370,9 @@ namespace Arpg
         // The main hit's own ailments, and its skill tree's (a dead target takes none).
         if (victim->IsAlive())
             RollAilments(player, t, victim, tags, dealt, crit, uint8(SkillOfSpell(player->getClass(), spellInfo)));
+        // The mage's keystones on a spell's hit (Arpg/ArpgMage.h), the dead included.
+        if (spellInfo)
+            OnMageHit(player, victim, spellInfo, dealt, crit);
 
         // Added damage: attacks take the attack affixes, spells the spell ones. A Seal's hit rides
         // on a swing, which has its added damage already.
@@ -527,7 +537,8 @@ namespace Arpg
         }
         if (merged.empty() || !player->IsInWorld() || !player->IsAlive())
             return;
-        for (Strike const& s : merged)
+        std::shared_ptr<WebTotals const> totals = TotalsOf(player);
+        for (Strike s : merged)
         {
             Unit* victim = player->GetMap()->GetUnit(s.victim);
             if (!victim || !victim->IsAlive())
@@ -542,6 +553,16 @@ namespace Arpg
             SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(s.tag == TAG_HOLY ? JUDGED_LOOK : OVERLOAD_LOOK);
             if (!look)
                 continue;
+            if (s.tag == TAG_ARCANE && totals)
+            {
+                if (totals->Has(KEY_ARCANE_FLUX))
+                {
+                    s.amount = s.amount * (100 + FLUX_MORE_PCT) / 100;
+                    ProcMana(player, "Arcane Flux", player->GetMaxPower(POWER_MANA) * FLUX_MANA_PCT / 100);
+                }
+                if (totals->Has(KEY_OVERCHARGE))
+                    s.amount = s.amount * (100 + OVERCHARGE_MORE_PCT) / 100;
+            }
             float const range = BURST_RANGE * SpellAreaScale(player);
             std::vector<Unit*> foes = NearestFoes(player, victim, range, BURST_MAX);
             if (std::find(foes.begin(), foes.end(), victim) == foes.end())
@@ -553,6 +574,86 @@ namespace Arpg
                        s.tag == TAG_HOLY ? "bursts in a Holy blast" : "overloads", victim->GetName(), s.amount,
                        uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies");
         }
+    }
+
+    bool Frozen(Unit const* unit)
+    {
+        return unit && (unit->HasAura(SPELL_FROSTBITE) || unit->HasAuraType(SPELL_AURA_MOD_ROOT));
+    }
+
+    bool Chilled(Unit const* unit)
+    {
+        return unit && unit->HasAura(SPELL_CHILLED);
+    }
+
+    void Chill(Player* player, Unit* victim, bool freeze)
+    {
+        if (!player || !victim || !victim->IsAlive() || !Scaled(victim) || !player->CanAttack(victim))
+            return;
+        if (freeze)
+        {
+            player->CastSpell(victim, SPELL_FROSTBITE, TRIGGERED_OLD_TRIGGERED);
+            ReportProc(player, PROC_EFFECT, 0, "Freeze", "freezes %s in place.", victim->GetName());
+        }
+        else
+            player->CastSpell(victim, SPELL_CHILLED, TRIGGERED_OLD_TRIGGERED);
+    }
+
+    uint32 TakeIgnite(Player* player, Unit* victim)
+    {
+        if (!player || !victim)
+            return 0;
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sAilments.find(player->GetObjectGuid());
+        if (it == sAilments.end())
+            return 0;
+        Affliction* a = Find(it->second.list, victim->GetObjectGuid(), TAG_FIRE);
+        if (!a || !a->ticks)
+            return 0;
+        uint32 const left = a->perTick * a->ticks;
+        a->ticks = 0;
+        return left;
+    }
+
+    size_t SpreadIgnite(Player* player, Unit* from, float range, size_t count)
+    {
+        if (!player || !from)
+            return 0;
+        uint32 perTick = 0;
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            auto it = sAilments.find(player->GetObjectGuid());
+            if (it == sAilments.end())
+                return 0;
+            Affliction const* a = Find(it->second.list, from->GetObjectGuid(), TAG_FIRE);
+            if (!a || !a->ticks)
+                return 0;
+            perTick = a->perTick;
+        }
+        std::vector<Unit*> const foes = NearestFoes(player, from, range, count);
+        uint32 const now = WorldTimer::getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        std::vector<Affliction>& list = sAilments[player->GetObjectGuid()].list;
+        for (Unit* unit : foes)
+        {
+            if (!Scaled(unit) || !player->CanAttack(unit))
+                continue;
+            Affliction* a = Find(list, unit->GetObjectGuid(), TAG_FIRE);
+            // The strongest counts: a stronger one there stays.
+            if (a && a->ticks && a->perTick > perTick)
+                continue;
+            if (!a)
+            {
+                list.push_back(Affliction());
+                a = &list.back();
+                a->victim = unit->GetObjectGuid();
+                a->tag = TAG_FIRE;
+            }
+            a->perTick = perTick;
+            a->ticks = uint8(IGNITE_TICKS);
+            a->nextTick = now + TICK_MS;
+        }
+        return foes.size();
     }
 
     void ForgetAilments(Player* player)
