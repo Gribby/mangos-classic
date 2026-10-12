@@ -78,27 +78,27 @@ namespace
         { AK_STAT, STAT_SPIRIT,    8, 30, "+%d Spirit", W_ANY, 0 },
         { AK_ALL_STATS, 0,         4, 14, "+%d to all attributes", W_JEWELLERY, 0 },
         // Damage by tag.
-        { AK_TAG, TAG_HOLY,        6, 20, "+%d%% Holy damage", W_ANY, 0 },
-        { AK_TAG, TAG_PHYSICAL,    6, 20, "+%d%% Physical damage", W_ANY, 0 },
-        { AK_TAG, TAG_FIRE,        6, 20, "+%d%% Fire damage", W_ANY, 0 },
-        { AK_TAG, TAG_FROST,       6, 20, "+%d%% Frost damage", W_ANY, 0 },
-        { AK_TAG, TAG_ARCANE,      6, 20, "+%d%% Arcane damage", W_ANY, 0 },
-        { AK_TAG, TAG_NATURE,      6, 20, "+%d%% Nature damage", W_ANY, 0 },
-        { AK_TAG, TAG_SHADOW,      6, 20, "+%d%% Shadow damage", W_ANY, 0 },
-        { AK_TAG, TAG_AREA,        8, 24, "+%d%% Area damage", W_ANY, 0 },
-        { AK_TAG, TAG_PROJECTILE,  6, 18, "+%d%% Projectile damage", W_ANY, 0 },
-        { AK_TAG, TAG_MELEE,       5, 16, "+%d%% Melee damage", W_ANY, 0 },
-        { AK_TAG, TAG_SPELL,       5, 16, "+%d%% Spell damage", W_ANY, 0 },
-        { AK_TAG, TAG_DURATION,    6, 20, "+%d%% damage over time", W_ANY, 0 },
-        { AK_TAG, TAG_SEAL,        6, 20, "+%d%% Seal damage", W_WEAPON, 0 },
-        { AK_TAG, TAG_CHANNEL,     6, 20, "+%d%% channelled spell damage", W_ANY, 0 },
-        { AK_VS_ELITES, 0,         5, 15, "+%d%% damage to elites and bosses", W_ANY, 0 },
-        { AK_SLAYING, CREATURE_TYPE_UNDEAD,    8, 25, "+%d%% damage to Undead", W_WEAPON, 0 },
-        { AK_SLAYING, CREATURE_TYPE_DEMON,     8, 25, "+%d%% damage to Demons", W_WEAPON, 0 },
-        { AK_SLAYING, CREATURE_TYPE_BEAST,     8, 25, "+%d%% damage to Beasts", W_WEAPON, 0 },
-        { AK_SLAYING, CREATURE_TYPE_HUMANOID,  8, 25, "+%d%% damage to Humanoids", W_WEAPON, 0 },
-        { AK_SLAYING, CREATURE_TYPE_DRAGONKIN, 8, 25, "+%d%% damage to Dragonkin", W_WEAPON, 0 },
-        { AK_SLAYING, CREATURE_TYPE_ELEMENTAL, 8, 25, "+%d%% damage to Elementals", W_WEAPON, 0 },
+        { AK_TAG, TAG_HOLY,        10, 30, "+%d%% Holy damage", W_ANY, 0 },
+        { AK_TAG, TAG_PHYSICAL,    10, 30, "+%d%% Physical damage", W_ANY, 0 },
+        { AK_TAG, TAG_FIRE,        10, 30, "+%d%% Fire damage", W_ANY, 0 },
+        { AK_TAG, TAG_FROST,       10, 30, "+%d%% Frost damage", W_ANY, 0 },
+        { AK_TAG, TAG_ARCANE,      10, 30, "+%d%% Arcane damage", W_ANY, 0 },
+        { AK_TAG, TAG_NATURE,      10, 30, "+%d%% Nature damage", W_ANY, 0 },
+        { AK_TAG, TAG_SHADOW,      10, 30, "+%d%% Shadow damage", W_ANY, 0 },
+        { AK_TAG, TAG_AREA,        12, 36, "+%d%% Area damage", W_ANY, 0 },
+        { AK_TAG, TAG_PROJECTILE,  10, 27, "+%d%% Projectile damage", W_ANY, 0 },
+        { AK_TAG, TAG_MELEE,       8, 24, "+%d%% Melee damage", W_ANY, 0 },
+        { AK_TAG, TAG_SPELL,       8, 24, "+%d%% Spell damage", W_ANY, 0 },
+        { AK_TAG, TAG_DURATION,    10, 30, "+%d%% damage over time", W_ANY, 0 },
+        { AK_TAG, TAG_SEAL,        10, 30, "+%d%% Seal damage", W_WEAPON, 0 },
+        { AK_TAG, TAG_CHANNEL,     10, 30, "+%d%% channelled spell damage", W_ANY, 0 },
+        { AK_VS_ELITES, 0,         8, 22, "+%d%% damage to elites and bosses", W_ANY, 0 },
+        { AK_SLAYING, CREATURE_TYPE_UNDEAD,    12, 36, "+%d%% damage to Undead", W_WEAPON, 0 },
+        { AK_SLAYING, CREATURE_TYPE_DEMON,     12, 36, "+%d%% damage to Demons", W_WEAPON, 0 },
+        { AK_SLAYING, CREATURE_TYPE_BEAST,     12, 36, "+%d%% damage to Beasts", W_WEAPON, 0 },
+        { AK_SLAYING, CREATURE_TYPE_HUMANOID,  12, 36, "+%d%% damage to Humanoids", W_WEAPON, 0 },
+        { AK_SLAYING, CREATURE_TYPE_DRAGONKIN, 12, 36, "+%d%% damage to Dragonkin", W_WEAPON, 0 },
+        { AK_SLAYING, CREATURE_TYPE_ELEMENTAL, 12, 36, "+%d%% damage to Elementals", W_WEAPON, 0 },
         // Offence.
         { AK_ATTACK_POWER, 0,     10, 40, "+%d attack power", W_ANY, 0 },
         { AK_SPELL_POWER, 0,       6, 24, "+%d spell damage", W_ANY, 0 },
@@ -106,7 +106,7 @@ namespace
         { AK_CAST_SPEED, 0,        3, 8,  "+%d%% cast speed", W_ANY, 20 },
         { AK_MELEE_CRIT, 0,        1, 3,  "+%d%% critical strike chance", W_ANY, 8 },
         { AK_SPELL_CRIT, 0,        1, 3,  "+%d%% spell critical strike chance", W_ANY, 8 },
-        { AK_SPELL_CRIT_DAMAGE, 0, 8, 25, "+%d%% spell critical strike damage", W_JEWELLERY, 75 },
+        { AK_SPELL_CRIT_DAMAGE, 0, 12, 36, "+%d%% spell critical strike damage", W_JEWELLERY, 75 },
         { AK_MELEE_AREA, 0,        3, 10, "+%d%% melee area", W_WEAPON, 20 },
         { AK_SPELL_AREA, 0,        3, 10, "+%d%% spell area", W_ANY, 20 },
         { AK_COOLDOWN, 0,          3, 10, "+%d%% cooldown recovery", W_ANY, 20 },
@@ -118,7 +118,7 @@ namespace
         { AK_MANA_ON_HIT, 0,       2, 10, "+%d mana on hit", W_ANY, 0 },
         { AK_HEALTH_REGEN, 0,      2, 10, "+%d health a second", W_ARMOUR, 0 },
         { AK_MANA_REGEN, 0,        1, 5,  "+%d mana a second", W_JEWELLERY, 0 },
-        { AK_HEALING, 0,           5, 18, "+%d%% healing", W_ANY, 0 },
+        { AK_HEALING, 0,           8, 26, "+%d%% healing", W_ANY, 0 },
         { AK_GLOBE_HEAL, 0,        5, 20, "+%d%% healing from globes and flasks", W_ARMOUR, 60 },
         // Defence.
         { AK_HEALTH_PCT, 0,        3, 8,  "+%d%% maximum health", W_ARMOUR, 25 },
@@ -153,15 +153,15 @@ namespace
         { AK_ADDED_SPELL, TAG_ARCANE,    12, 28, "Adds %d to %d Arcane damage to spells", W_OFFENCE, 0 },
         { AK_ADDED_SPELL, TAG_NATURE,    12, 28, "Adds %d to %d Nature damage to spells", W_OFFENCE, 0 },
         { AK_ADDED_SPELL, TAG_SHADOW,    12, 28, "Adds %d to %d Shadow damage to spells", W_OFFENCE, 0 },
-        { AK_CRIT_DAMAGE, 0,              6, 20, "+%d%% critical strike multiplier", W_OFFENCE, 60 },
-        { AK_AILMENT_CHANCE, TAG_PHYSICAL, 4, 12, "%d%% chance to cause Bleeding", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_HOLY,     4, 12, "%d%% chance to Judge", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_FIRE,     4, 12, "%d%% chance to Ignite", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_FROST,    4, 12, "%d%% chance to Chill", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_ARCANE,   4, 12, "%d%% chance to Overload", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_NATURE,   4, 12, "%d%% chance to Poison", W_ANY, 40 },
-        { AK_AILMENT_CHANCE, TAG_SHADOW,   4, 12, "%d%% chance to Wither", W_ANY, 40 },
-        { AK_AILMENT_DAMAGE, 0,            6, 20, "+%d%% increased damage with ailments", W_ANY, 0 },
+        { AK_CRIT_DAMAGE, 0,              10, 30, "+%d%% critical strike multiplier", W_OFFENCE, 60 },
+        { AK_AILMENT_CHANCE, TAG_PHYSICAL, 5, 15, "%d%% chance to cause Bleeding", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_HOLY,     5, 15, "%d%% chance to Judge", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_FIRE,     5, 15, "%d%% chance to Ignite", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_FROST,    5, 15, "%d%% chance to Chill", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_ARCANE,   5, 15, "%d%% chance to Overload", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_NATURE,   5, 15, "%d%% chance to Poison", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_SHADOW,   5, 15, "%d%% chance to Wither", W_ANY, 40 },
+        { AK_AILMENT_DAMAGE, 0,            10, 30, "+%d%% increased damage with ailments", W_ANY, 0 },
         // Skill levels (Arpg/ArpgSkills.h): rare, on weapons and amulets; 2 from item level 69 or so.
         { AK_SKILL_LEVEL, 0, 1, 1, "+%d to all Melee skills", W_SKILL, 2 },
         { AK_SKILL_LEVEL, 1, 1, 1, "+%d to all Spell skills", W_SKILL, 2 },
@@ -199,9 +199,9 @@ namespace
     }
 
     // A flat affix (attributes, attack power, added damage, resistances...) grows with the item
-    // level as vanilla's own stats do (LevelScale). A percentage grows gently up to level 60, from
-    // 40% of its level 60 value at level 1 to all of it (a level 20 item rolls two thirds, a level
-    // 30 one 70%), then as the flat ones past it, for the raids.
+    // level as vanilla's own stats do (LevelScale). A percentage grows in step with the item level
+    // up to 60 (a level 30 item rolls half its level 60 value, a level 40 two thirds; a tenth at
+    // least), so every ten levels shows, then as the flat ones past it, for the raids.
     bool Flat(AffixKind kind)
     {
         switch (kind)
@@ -215,13 +215,13 @@ namespace
         }
     }
 
-    constexpr float PCT_FLOOR = 0.4f;
+    constexpr float PCT_FLOOR = 0.1f;
 
     float AffixScale(AffixKind kind, uint32 itemLevel, uint8 tier)
     {
         float level = LevelScale(itemLevel);
         if (!Flat(kind) && itemLevel < uint32(SCALE_LEVEL))
-            level = PCT_FLOOR + (1.0f - PCT_FLOOR) * float(itemLevel) / SCALE_LEVEL;
+            level = std::max(PCT_FLOOR, float(itemLevel) / SCALE_LEVEL);
         return level * TIER_SCALE[std::min<uint8>(tier, MAX_TIER)];
     }
 
