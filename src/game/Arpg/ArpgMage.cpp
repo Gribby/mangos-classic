@@ -107,7 +107,7 @@ namespace Arpg
         if (t.Has(KEY_DEEP_FREEZE) && Named(spellInfo, "Cone of Cold") && victim->IsAlive() && !Frozen(victim))
             Chill(player, victim, true);
 
-        if (t.Has(KEY_ARCANE_SIPHON) && Named(spellInfo, "Arcane Missiles"))
+        if (t.Has(KEY_ARCANE_SIPHON) && (Named(spellInfo, "Arcane Missiles") || Named(spellInfo, "Arcane Missile")))
             ProcMana(player, "Arcane Siphon", std::max<uint32>(1, player->GetMaxPower(POWER_MANA) * SIPHON_PERMILLE / 1000));
 
         if (t.Has(KEY_MANA_BURST) && Named(spellInfo, "Arcane Explosion"))
@@ -173,12 +173,19 @@ namespace Arpg
             Chill(player, target, false);
     }
 
-    void OnMageKill(Player* killer, Unit* victim)
+    void OnMageDeath(Unit* victim)
     {
-        if (!killer || !victim || killer->getClass() != CLASS_MAGE || !HasKeystone(killer, KEY_WILDFIRE))
+        if (!victim || !victim->IsInWorld())
             return;
-        if (size_t n = SpreadIgnite(killer, victim, WILDFIRE_RANGE * SpellAreaScale(killer), WILDFIRE_COUNT))
-            ReportProc(killer, PROC_EFFECT, 0, "Wildfire", "spreads the Ignite to %u %s.", uint32(n), n == 1 ? "enemy" : "enemies");
+        // Every mage there with Wildfire whose Ignite it carried, whoever dealt the blow.
+        for (auto const& ref : victim->GetMap()->GetPlayers())
+        {
+            Player* mage = ref.getSource();
+            if (!mage || mage->getClass() != CLASS_MAGE || !Active(mage) || !mage->IsAlive() || !HasKeystone(mage, KEY_WILDFIRE))
+                continue;
+            if (size_t n = SpreadIgnite(mage, victim, WILDFIRE_RANGE * SpellAreaScale(mage), WILDFIRE_COUNT))
+                ReportProc(mage, PROC_EFFECT, 0, "Wildfire", "spreads the Ignite to %u %s.", uint32(n), n == 1 ? "enemy" : "enemies");
+        }
     }
 
     void OnMageStruck(Unit* victim, Unit* attacker)

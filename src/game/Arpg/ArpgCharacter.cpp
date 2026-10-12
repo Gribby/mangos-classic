@@ -635,6 +635,7 @@ namespace
             if (owner)
             {
                 mod = new SpellModifier(SpellModOp(spec.op), SpellModType(spec.type), spec.value, owner, spec.mask);
+                mod->arpgSpells = spec.spells;
                 player->AddSpellMod(mod, true);
             }
             r.skillMods.emplace_back(spec, mod);
@@ -795,7 +796,7 @@ namespace
         if (t.Has(KEY_BRIMMING_MIND) && spellInfo && player->GetMaxPower(POWER_MANA))
         {
             int32 const manaPct = int32(uint64(player->GetPower(POWER_MANA)) * 100 / player->GetMaxPower(POWER_MANA));
-            more(manaPct > 50 ? std::min(BRIMMING_MAX_PCT, (manaPct - 50) / 2) : -BRIMMING_LESS_PCT, "Brimming Mind");
+            more(manaPct >= 50 ? std::min(BRIMMING_MAX_PCT, (manaPct - 50) / 2) : -BRIMMING_LESS_PCT, "Brimming Mind");
         }
 
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
@@ -1560,6 +1561,7 @@ namespace Arpg
         if (!victim || victim->GetTypeId() != TYPEID_UNIT)
             return;
         OnPackMemberDied(victim);
+        OnMageDeath(victim);
         CreditBossKill(killer, victim);
         if (!Active(killer) || !killer->IsAlive())
             return;
@@ -1567,7 +1569,6 @@ namespace Arpg
             return;
         // A kill may ready another skill (Arpg/ArpgProcs.h).
         OnProcKill(killer, victim);
-        OnMageKill(killer, victim);
         std::shared_ptr<WebTotals const> totals = TotalsOf(killer);
         WebTotals const& t = totals ? *totals : NoTotals();
         int32 const life = int32(killer->GetStat(STAT_STAMINA)) / STA_PER_LIFE + t.lifeOnKill;

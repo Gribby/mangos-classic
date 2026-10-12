@@ -133,7 +133,10 @@ namespace
         if (!want || !have || !*want)
             return false;
         size_t const n = std::strlen(want);
-        return std::strncmp(have, want, n) == 0 && (have[n] == '\0' || have[n] == ' ');
+        if (std::strncmp(have, want, n) == 0 && (have[n] == '\0' || have[n] == ' '))
+            return true;
+        // Rank 1 of a few triggered parts is named in the singular ("Arcane Missile").
+        return n > 1 && want[n - 1] == 's' && std::strlen(have) == n - 1 && std::strncmp(have, want, n - 1) == 0;
     }
 
     // A cosmetic SMSG_SPELL_GO of `spellInfo` from `from` at the ground point (x, y, z): its

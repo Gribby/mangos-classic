@@ -24,8 +24,8 @@ namespace Arpg
     // A periodic damage tick of `spellInfo` from `caster` on `target` (any caster): Glacial Storm.
     void OnPeriodicHit(Unit* caster, Unit* target, SpellEntry const* spellInfo);
 
-    // An ARPG player's kill: Wildfire.
-    void OnMageKill(Player* killer, Unit* victim);
+    // A creature died, whoever killed it: Wildfire.
+    void OnMageDeath(Unit* victim);
 
     // `victim` took a blow from `attacker`: Permafrost.
     void OnMageStruck(Unit* victim, Unit* attacker);

@@ -22,6 +22,7 @@
 #include "Globals/SharedDefines.h"
 #include "Spells/SpellDefines.h"
 #include "Server/DBCStructure.h"
+#include <memory>
 #include <set>
 #include <list>
 #include <vector>
@@ -68,6 +69,9 @@ struct SpellModifier
     int32 priority;
     bool isFinite;
     uint64 modId;
+    // ARPG: the spells this modifier reaches, by id, in place of the family mask (whose bits
+    // classic shares between unrelated spells); `mask` then only tells the client.
+    std::shared_ptr<std::set<uint32> const> arpgSpells;
 };
 
 struct SpellModifierComparator

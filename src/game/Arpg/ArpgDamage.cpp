@@ -632,6 +632,7 @@ namespace Arpg
         }
         std::vector<Unit*> const foes = NearestFoes(player, from, range, count);
         uint32 const now = WorldTimer::getMSTime();
+        size_t spread = 0;
         std::lock_guard<std::mutex> guard(sLock);
         std::vector<Affliction>& list = sAilments[player->GetObjectGuid()].list;
         for (Unit* unit : foes)
@@ -652,8 +653,9 @@ namespace Arpg
             a->perTick = perTick;
             a->ticks = uint8(IGNITE_TICKS);
             a->nextTick = now + TICK_MS;
+            ++spread;
         }
-        return foes.size();
+        return spread;
     }
 
     void ForgetAilments(Player* player)

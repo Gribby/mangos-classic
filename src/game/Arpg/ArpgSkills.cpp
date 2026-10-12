@@ -299,7 +299,7 @@ namespace
                   Mod(231, 2, 3, 230, 3, "Swift Cone", "-1.5 sec Cone of Cold cooldown per rank.", 12472, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1500, "Cone of Cold"),
                   Key(232, SKILL_NODE_CAPSTONE, 2, 4, 231, 1, "Deep Freeze", "Cone of Cold freezes every enemy it hits.", 122, KEY_DEEP_FREEZE),
               } },
-            { SKILL_ARCANE_MISSILES, CLASS_MAGE, "Arcane Missiles", "A channelled stream of arcane bolts.", 5143, { "Arcane Missiles" },
+            { SKILL_ARCANE_MISSILES, CLASS_MAGE, "Arcane Missiles", "A channelled stream of arcane bolts.", 5143, { "Arcane Missiles", "Arcane Missile" },
               { "Barrage", "Flux", "Focus" },
               {
                   Kit(321, 0, 1, 0, 3, "Seeking Missiles", "Each missile jumps to 1/1/2 more enemies within 8 yards, at 40/55/55%.", 5143,
@@ -597,11 +597,20 @@ namespace
         }
     }
 
-    // The family flags of the class's spells named `names` (prefixes at a word boundary).
-    uint64 NamesMask(uint8 classId, std::vector<char const*> const& names, char const* what)
+    // The class's spells named `names` (prefixes at a word boundary), every rank and triggered
+    // part: the spells a skill's modifiers reach, by id, and the family bits only they carry,
+    // for the client. Classic shares its family bits between unrelated spells (every mage bolt
+    // carries one; Exorcism carries none), so the bits alone can't say which spells are meant.
+    struct NamedSpells
+    {
+        uint64 mask = 0;
+        std::shared_ptr<std::set<uint32> const> spells;
+    };
+
+    NamedSpells NamesMask(uint8 classId, std::vector<char const*> const& names, char const* what)
     {
         static std::mutex lock;
-        static std::map<std::string, uint64> cache;
+        static std::map<std::string, NamedSpells> cache;
         std::string key = std::to_string(classId);
         for (char const* name : names)
             key += std::string("|") + name;
@@ -610,29 +619,41 @@ namespace
         if (it != cache.end())
             return it->second;
         uint32 const family = FamilyOf(classId);
-        uint64 mask = 0;
+        uint64 mine = 0, others = 0;
+        auto spells = std::make_shared<std::set<uint32>>();
         for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
         {
             SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id);
             if (!spell || spell->SpellFamilyName != family || !spell->SpellName[0])
                 continue;
+            bool named = false;
             for (char const* want : names)
-                if (NameMatches(spell->SpellName[0], want))
-                    mask |= spell->SpellFamilyFlags.Flags;
+                named = named || NameMatches(spell->SpellName[0], want);
+            if (named)
+            {
+                spells->insert(id);
+                mine |= spell->SpellFamilyFlags.Flags;
+            }
+            else
+                others |= spell->SpellFamilyFlags.Flags;
         }
-        if (!mask)
-            sLog.outError("ARPG skills: no spell of %s has family flags; its spell modifiers do nothing", what);
-        cache[key] = mask;
-        return mask;
+        if (spells->empty())
+            sLog.outError("ARPG skills: no spell of %s found; its spell modifiers do nothing", what);
+        NamedSpells out;
+        out.mask = mine & ~others;
+        if (!spells->empty())
+            out.spells = spells;
+        cache[key] = out;
+        return out;
     }
 
-    uint64 SkillMask(SkillDef const& skill)
+    NamedSpells SkillMask(SkillDef const& skill)
     {
         return NamesMask(skill.classId, skill.spells, skill.name);
     }
 
     // A node's spell modifiers' reach: its one spell, or the skill's every spell.
-    uint64 NodeMask(SkillDef const& skill, SkillNode const& node)
+    NamedSpells NodeMask(SkillDef const& skill, SkillNode const& node)
     {
         return node.only ? NamesMask(skill.classId, { node.only }, node.name) : SkillMask(skill);
     }
@@ -1362,8 +1383,11 @@ namespace Arpg
             if (node->key != KEY_NONE)
                 totals.rank[node->key] = std::max(totals.rank[node->key], rank);
             if (node->modOp >= 0)
-                if (uint64 mask = NodeMask(*skill, *node))
-                    totals.mods.push_back({ uint8(node->modOp), node->modType, node->modPerRank * rank, mask });
+            {
+                NamedSpells const reach = NodeMask(*skill, *node);
+                if (reach.spells)
+                    totals.mods.push_back({ uint8(node->modOp), node->modType, node->modPerRank * rank, reach.mask, reach.spells });
+            }
             if (node->ailTag >= 0 && node->ailTag < 7 && skill->id < 16)
                 totals.skillAilment[skill->id][node->ailTag] += int32(node->ailPerRank) * rank;
         }
@@ -1371,9 +1395,12 @@ namespace Arpg
         {
             if (rune->effect == RUNE_MODS)
                 if (SkillDef const* skill = FindSkill(classId, skillId))
-                    if (uint64 mask = SkillMask(*skill))
+                {
+                    NamedSpells const reach = SkillMask(*skill);
+                    if (reach.spells)
                         for (auto const& [op, type, amount] : rune->mods)
-                            totals.mods.push_back({ op, type, amount, mask });
+                            totals.mods.push_back({ op, type, amount, reach.mask, reach.spells });
+                }
             // Fury: one rank wider, to Wide Swing's top.
             if (rune->effect == RUNE_KEY)
                 totals.rank[KEY_WIDE_SWING] = std::min<uint8>(totals.rank[KEY_WIDE_SWING] + 1, 3);

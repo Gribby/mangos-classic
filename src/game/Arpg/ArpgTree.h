@@ -48,6 +48,7 @@
 #include "Arpg/ArpgUniques.h"
 
 #include <memory>
+#include <set>
 #include <vector>
 
 class Player;
@@ -155,9 +156,13 @@ namespace Arpg
         uint8 op;
         uint8 type;
         int32 value;
-        uint64 mask;
+        uint64 mask;                                    // the family bits the client is told of
+        std::shared_ptr<std::set<uint32> const> spells; // the spells it reaches (nullptr: by `mask`)
 
-        bool operator==(SkillSpellMod const& o) const { return op == o.op && type == o.type && value == o.value && mask == o.mask; }
+        bool operator==(SkillSpellMod const& o) const
+        {
+            return op == o.op && type == o.type && value == o.value && mask == o.mask && spells == o.spells;
+        }
     };
 
     // What a player's taken nodes add up to.
