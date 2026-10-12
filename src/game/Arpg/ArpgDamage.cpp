@@ -397,6 +397,24 @@ namespace Arpg
         }
     }
 
+    void InflictAilment(Player* player, Unit* victim, uint8 tag, uint32 dealt, bool crit)
+    {
+        if (!player || !victim || tag >= DAMAGE_TAGS || !dealt || !victim->IsAlive() || !Scaled(victim) || !player->CanAttack(victim))
+            return;
+        if (std::shared_ptr<WebTotals const> totals = TotalsOf(player))
+            Inflict(player, *totals, victim, tag, dealt, crit);
+    }
+
+    uint32 SchoolOfTag(uint8 tag)
+    {
+        return tag < DAMAGE_TAGS ? SCHOOL_OF_TAG[tag] : uint32(SPELL_SCHOOL_MASK_NORMAL);
+    }
+
+    uint32 LookOfTag(uint8 tag)
+    {
+        return tag < DAMAGE_TAGS ? ADDED_LOOK[tag] : ADDED_LOOK[0];
+    }
+
     float AilmentTakenMod(Unit const* attacker, Unit const* victim)
     {
         if (!attacker || !victim || attacker->GetTypeId() != TYPEID_PLAYER)

@@ -46,6 +46,10 @@ namespace Arpg
     char const* UniquePowerText(uint32 item);
     char const* UniquePowerName(uint32 item);
 
+    // The more damage (percent) and movement speed a unique's power gives `unit` now.
+    int32 UniqueFuryPct(Unit const* unit);
+    int32 UniqueSwiftPct(Unit const* unit);
+
     // Triggers. A player's swing landed (crit or not) for `damage`.
     void OnProcSwing(Unit* attacker, Unit* victim, bool crit, uint32 damage);
     // A spell of the caster's hit `target` for `amount`: damage, or a heal.

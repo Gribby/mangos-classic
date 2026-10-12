@@ -97,6 +97,15 @@ namespace Arpg
     // added hit.
     void OnHitLanded(Unit* attacker, Unit* victim, SpellEntry const* spellInfo, uint32 tags, uint32 dealt, bool crit);
 
+    // Inflict damage tag `tag`'s ailment on `victim` as a hit of `dealt` would (a unique power's
+    // burst of ailments; Frost chills, or freezes when `crit` and it is chilled already).
+    void InflictAilment(Player* player, Unit* victim, uint8 tag, uint32 dealt, bool crit);
+
+    // A damage tag's school mask and the stock spell whose impact stands for it (Rend, Smite,
+    // Fireball, Frostbolt, Arcane Explosion, Lightning Bolt, Shadow Bolt).
+    uint32 SchoolOfTag(uint8 tag);
+    uint32 LookOfTag(uint8 tag);
+
     // The "more damage taken" `victim` has from `attacker`'s Wither.
     float AilmentTakenMod(Unit const* attacker, Unit const* victim);
 

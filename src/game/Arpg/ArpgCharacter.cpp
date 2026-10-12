@@ -782,6 +782,8 @@ namespace
         }
         if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_SEARING_LIGHT) && Consecrated(victim, player))
             more(5 * t.Rank(KEY_SEARING_LIGHT), "Searing Light");
+        // A unique's power's fury (Arpg/ArpgProcs.h).
+        more(UniqueFuryPct(player), "a unique's power");
         // Executioner: Hammer of Wrath doubles on an enemy below 20% health.
         if (skill == SKILL_HAMMER_OF_WRATH && t.Has(KEY_EXECUTIONER) && victim &&
                 victim->GetHealth() < victim->GetMaxHealth() * EXECUTE_BELOW)
@@ -1360,6 +1362,9 @@ namespace Arpg
             speed *= UNYIELDING_SLOW;
         if (t.Has(KEY_CRUSADERS_PACE) && WorldTimer::getMSTime() < R(unit).paceUntil)
             speed *= PACE_SPEED;
+        // A unique's power's swiftness (Arpg/ArpgProcs.h).
+        if (int32 const swift = UniqueSwiftPct(unit))
+            speed *= 1.0f + swift / 100.0f;
         return speed;
     }
 

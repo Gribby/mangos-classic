@@ -4,11 +4,13 @@
 
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgUniques.h"
 
 #include "Globals/ObjectMgr.h"
+#include "Log/Log.h"
 #include "Maps/Map.h"
 
 #include "Entities/Item.h"
@@ -19,6 +21,10 @@
 #include "Util/Timer.h"
 
 #include <algorithm>
+#include <cstdarg>
+#include <cstdio>
+#include <numeric>
+#include <string>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -55,8 +61,6 @@ namespace
         EFFECT_NOVA,          // `value`% of the hit (or blow) strikes every enemy around the player
     };
 
-    // Which uniques a pool power may fall on (POOL_NONE: an authored row, not in the pool).
-    enum Pool : uint8 { POOL_NONE, POOL_ANY, POOL_WEAPON, POOL_ARMOUR };
 
     struct ProcDef
     {
@@ -73,7 +77,6 @@ namespace
         uint32 lasts;                         // ms a readied cast waits
         char const* targetWords;              // "Holy Light or Flash of Light", for the lines
         char const* text;                     // the rune's or the item's line
-        Pool pool = POOL_NONE;                // a power any unique may carry (Arpg::UniquePowerText)
     };
 
     // The stock spells whose hits stand for the powers' damage: Fire, Nature, Holy.
@@ -127,39 +130,6 @@ namespace
               { "Sinister Strike", "Eviscerate", "Heroic Strike", "Mortal Strike" }, 0, 8000, 8000, "finishing strike",
               "A critical swing makes your next Sinister Strike, Eviscerate, Heroic Strike or Mortal Strike cost nothing (once every 8 sec)." },
 
-            // --- The unique power pool: every other named unique carries one (by its entry) ---
-            { 0, 0, "Edge of Ruin", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_DAMAGE, { "*" }, 40, 6000, 8000, "spell",
-              "A critical swing makes your next spell deal 40% more (once every 6 sec).", POOL_WEAPON },
-            { 0, 0, "Reaper's Haste", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_INSTANT, { "*" }, 0, 15000, 10000, "spell",
-              "A kill makes your next spell instant (once every 15 sec).", POOL_ANY },
-            { 0, 0, "Font of Power", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_FREE, { "*" }, 0, 8000, 10000, "spell",
-              "A critical spell makes your next spell cost nothing (once every 8 sec).", POOL_ANY },
-            { 0, 0, "Bloodthirst", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 6, 1000, 0, "",
-              "Each kill heals you for 6% of your maximum health.", POOL_WEAPON },
-            { 0, 0, "Soul Siphon", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 4, 1000, 0, "",
-              "Each kill restores 4% of your maximum mana.", POOL_ANY },
-            { 0, 0, "Pyre", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_EXPLODE, {}, 15, 500, 0, "",
-              "Enemies you slay explode for 15% of their maximum health as Fire damage to enemies within 8 yards.", POOL_ANY },
-            { 0, 0, "Thunder Edge", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_ARC, {}, 35, 1000, 0, "",
-              "A critical swing arcs lightning to 3 nearby enemies for 35% of the hit.", POOL_WEAPON },
-            { 0, 0, "Storm Conduit", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_ARC, {}, 30, 1000, 0, "",
-              "A critical spell arcs lightning to 3 nearby enemies for 30% of the hit.", POOL_ANY },
-            { 0, 0, "Second Wind", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 15, 30000, 0, "",
-              "A heavy blow (a fifth of your health) heals you for 15% of your maximum health (once every 30 sec).", POOL_ARMOUR },
-            { 0, 0, "Mender's Grace", TRIG_HEAL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_INSTANT, { "*" }, 0, 10000, 10000, "spell",
-              "A critical heal makes your next spell instant (once every 10 sec).", POOL_ANY },
-            { 0, 0, "Executioner", TRIG_KILL, Arpg::SKILL_NONE, {}, EFFECT_CRIT, { "*" }, 0, 8000, 10000, "spell",
-              "A kill makes your next spell a sure critical strike (once every 8 sec).", POOL_WEAPON },
-            { 0, 0, "Wellspring", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 3, 2000, 0, "",
-              "A critical swing restores 3% of your maximum mana.", POOL_WEAPON },
-            { 0, 0, "Bastion", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_NOVA, {}, 50, 8000, 0, "",
-              "A heavy blow makes you strike back with holy fire: 50% of it to every enemy within 8 yards (once every 8 sec).", POOL_ARMOUR },
-            { 0, 0, "Wrathstorm", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, {}, EFFECT_NOVA, {}, 25, 3000, 0, "",
-              "A critical spell bursts with holy fire: 25% of the hit to every enemy within 8 yards (once every 3 sec).", POOL_ANY },
-            { 0, 0, "Vampiric Edge", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_HEAL, {}, 3, 1500, 0, "",
-              "A critical swing heals you for 3% of your maximum health.", POOL_WEAPON },
-            { 0, 0, "Ironskin", TRIG_STRUCK, Arpg::SKILL_NONE, {}, EFFECT_MANA, {}, 10, 15000, 0, "",
-              "A heavy blow restores 10% of your maximum mana (once every 15 sec).", POOL_ARMOUR },
         };
         return procs;
     }
@@ -232,6 +202,11 @@ namespace
     {
         std::unordered_map<size_t, uint32> readyAt;   // by row: when it may fire again
         std::vector<Readied> readied;
+        std::unordered_map<uint32, uint32> powerReadyAt; // a unique's generated power, by item entry
+        uint32 furyUntil = 0;                         // a power's more damage, and until when
+        int32 furyPct = 0;
+        uint32 swiftUntil = 0;                        // a power's movement speed
+        int32 swiftPct = 0;
     };
 
     std::mutex sLock;
@@ -260,59 +235,321 @@ namespace
         return false;
     }
 
-    // The pool row unique `item` carries, or -1: a named blue or purple weapon or armour piece
-    // that is not authored takes one, the same one always (by its entry), fitting its kind.
-    int PowerRow(uint32 item)
+    // --- Unique powers: every named unique not authored has one of its own ---
+    //
+    // A power is a trigger, an effect (of a damage type, for the damaging ones), and a smaller
+    // second effect, the rider, with numbers that grow with the item's level. The combinations a
+    // kind of item may carry (weapons, armour, jewellery) are dealt out over its uniques in entry
+    // order, a coprime stride apart, so no two uniques of a kind share one while there are
+    // combinations to go round (about 1,500 a kind).
+
+    enum PowerEffect : uint8
     {
-        static std::mutex lock;
-        static std::unordered_map<uint32, int> cache;
-        {
-            std::lock_guard<std::mutex> guard(lock);
-            auto it = cache.find(item);
-            if (it != cache.end())
-                return it->second;
-        }
-        int row = -1;
-        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(item);
-        bool const equips = proto && proto->Quality >= ITEM_QUALITY_RARE && proto->Quality <= ITEM_QUALITY_EPIC &&
-                            (proto->Class == ITEM_CLASS_WEAPON || proto->Class == ITEM_CLASS_ARMOR) &&
-                            proto->InventoryType != INVTYPE_NON_EQUIP && proto->InventoryType != INVTYPE_BODY &&
-                            proto->InventoryType != INVTYPE_TABARD && proto->InventoryType != INVTYPE_BAG &&
-                            proto->InventoryType != INVTYPE_QUIVER && proto->InventoryType != INVTYPE_AMMO;
-        if (equips && !Authored(item))
-        {
-            bool const weapon = proto->Class == ITEM_CLASS_WEAPON;
-            uint32 const type = proto->InventoryType;
-            bool const jewel = type == INVTYPE_NECK || type == INVTYPE_FINGER || type == INVTYPE_TRINKET;
-            std::vector<int> fits;
-            std::vector<ProcDef> const& procs = Procs();
-            for (size_t i = 0; i < procs.size(); ++i)
-            {
-                Pool const pool = procs[i].pool;
-                if (pool == POOL_ANY || (pool == POOL_WEAPON && weapon) || (pool == POOL_ARMOUR && !weapon && !jewel))
-                    fits.push_back(int(i));
-            }
-            if (!fits.empty())
-                row = fits[(item * 2654435761u >> 7) % fits.size()];
-        }
-        std::lock_guard<std::mutex> guard(lock);
-        cache[item] = row;
-        return row;
+        PE_NOVA,              // `value`% of the basis to every enemy around the player
+        PE_ARC,               // ... to the three enemies nearest the struck one
+        PE_EXPLODE,           // the slain enemy bursts: `value`% of its maximum health around it
+        PE_AILMENTS,          // the element's ailment on every enemy around, as a hit of `value`%
+        PE_HEAL,              // `value`% of maximum health
+        PE_MANA,              // `value`% of maximum mana
+        PE_FURY,              // `value`% more damage for FURY_MS
+        PE_SWIFT,             // `value`% movement speed for SWIFT_MS
+        PE_COUNT,
+    };
+    // Riders: none, heal, mana, fury, swiftness, or an ailment (RIDER_AILMENT + damage tag) on the
+    // target.
+    enum PowerRider : uint8 { RIDER_NONE, RIDER_HEAL, RIDER_MANA, RIDER_FURY, RIDER_SWIFT, RIDER_AILMENT };
+    constexpr uint8 POWER_ELEMENTS = 7;
+    constexpr uint8 RIDER_COUNT = RIDER_AILMENT + POWER_ELEMENTS;
+
+    constexpr uint32 FURY_MS = 6000, SWIFT_MS = 4000, RIDER_FURY_MS = 4000, RIDER_SWIFT_MS = 3000;
+    constexpr float POWER_RANGE = 8.0f, POWER_ARC_RANGE = 10.0f;
+    constexpr size_t POWER_ARC_COUNT = 3, POWER_MAX_FOES = 10;
+
+    struct UniquePower
+    {
+        Trigger trigger = TRIG_KILL;
+        PowerEffect effect = PE_HEAL;
+        uint8 element = 0;        // damage tag (TAG_PHYSICAL .. TAG_SHADOW)
+        int32 value = 0;
+        uint8 rider = RIDER_NONE;
+        int32 riderValue = 0;
+        uint32 icd = 0;
+        std::string name;
+        std::string text;
+    };
+
+    bool Damaging(PowerEffect effect) { return effect <= PE_AILMENTS; }
+
+    // The item level's weight on a power's numbers: half at level 1 to all at 60, then a quarter
+    // more every ten levels (Naxxramas about 1.7).
+    float PowerLevel(uint32 itemLevel)
+    {
+        float const to60 = 0.5f + 0.5f * float(std::min<uint32>(itemLevel, 60)) / 60.0f;
+        return itemLevel > 60 ? to60 * (1.0f + float(itemLevel - 60) / 40.0f) : to60;
     }
 
-    // The pool rows the player's worn uniques carry.
-    std::vector<size_t> WornPowers(Player const* player)
+    // An effect's number at level 60, by what sets it off: a hit's or heal's share, a blow's, or a
+    // share of the slain enemy's maximum health.
+    int32 BaseValue(PowerEffect effect, Trigger trigger)
     {
-        std::vector<size_t> out;
-        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
-            if (Item* it = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
-                if (!it->IsBroken())
-                {
-                    int const row = PowerRow(it->GetEntry());
-                    if (row >= 0)
-                        out.push_back(size_t(row));
-                }
+        bool const kill = trigger == TRIG_KILL, struck = trigger == TRIG_STRUCK, heal = trigger == TRIG_HEAL_CRIT;
+        switch (effect)
+        {
+            case PE_NOVA:     return kill ? 8 : struck ? 50 : heal ? 60 : 30;
+            case PE_ARC:      return kill ? 10 : struck ? 60 : heal ? 70 : 35;
+            case PE_EXPLODE:  return 12;
+            case PE_AILMENTS: return kill ? 15 : struck ? 80 : heal ? 100 : 60;
+            case PE_HEAL:     return struck ? 12 : 4;
+            case PE_MANA:     return struck ? 8 : 4;
+            case PE_FURY:     return struck ? 25 : 15;
+            case PE_SWIFT:    return 20;
+            default:          return 0;
+        }
+    }
+
+    int32 RiderBase(uint8 rider)
+    {
+        switch (rider)
+        {
+            case RIDER_HEAL: case RIDER_MANA: return 2;
+            case RIDER_FURY:  return 8;
+            case RIDER_SWIFT: return 12;
+            default:          return rider >= RIDER_AILMENT ? 40 : 0;
+        }
+    }
+
+    uint32 PowerIcd(Trigger trigger, PowerEffect effect)
+    {
+        uint32 icd;
+        switch (trigger)
+        {
+            case TRIG_SWING_CRIT: icd = 2000; break;
+            case TRIG_SPELL_CRIT: icd = 3000; break;
+            case TRIG_KILL:       icd = 1000; break;
+            case TRIG_STRUCK:     icd = 8000; break;
+            case TRIG_HEAL_CRIT:  icd = 5000; break;
+            default:              icd = 3000; break;
+        }
+        // The buffs last a while: no sooner than they run out.
+        if (effect == PE_FURY)
+            icd = std::max(icd, FURY_MS + 2000);
+        if (effect == PE_SWIFT)
+            icd = std::max(icd, SWIFT_MS + 2000);
+        return icd;
+    }
+
+    char const* const ELEMENT_WORDS[POWER_ELEMENTS] = { "force", "holy light", "fire", "frost", "arcane energy", "lightning", "shadow" };
+    char const* const AILMENT_VERBS[POWER_ELEMENTS] = { "bleeds", "judges", "ignites", "chills", "overloads", "poisons", "withers" };
+    char const* const ELEMENT_NAMES[POWER_ELEMENTS][3] =
+    {
+        { "Iron", "Blade", "Bone" }, { "Dawn", "Radiant", "Sacred" }, { "Ember", "Cinder", "Blaze" },
+        { "Rime", "Winter", "Glacial" }, { "Starfall", "Mana", "Arcane" }, { "Storm", "Thunder", "Venom" },
+        { "Dusk", "Grave", "Shadow" },
+    };
+    char const* const EFFECT_NOUNS[PE_COUNT][3] =
+    {
+        { "Nova", "Burst", "Flare" }, { "Arc", "Fork", "Lash" }, { "Pyre", "Rupture", "Detonation" },
+        { "Brand", "Plague", "Curse" }, { "Lifebloom", "Second Wind", "Bloodrush" }, { "Wellspring", "Font", "Insight" },
+        { "Fury", "Wrath", "Frenzy" }, { "Swiftness", "Haste", "Wind" },
+    };
+    char const* const UTILITY_PREFIX[3] = { "", "Greater ", "True " };
+
+    std::string Printf(char const* format, ...) ATTR_PRINTF(1, 2);
+    std::string Printf(char const* format, ...)
+    {
+        char buf[512];
+        va_list args;
+        va_start(args, format);
+        std::vsnprintf(buf, sizeof(buf), format, args);
+        va_end(args);
+        return buf;
+    }
+
+    // The power's line, as its tooltip shows it.
+    std::string PowerText(UniquePower const& p)
+    {
+        char const* when = "";
+        char const* basis = "the hit";
+        switch (p.trigger)
+        {
+            case TRIG_SWING_CRIT: when = "A critical swing"; break;
+            case TRIG_SPELL_CRIT: when = "A critical spell"; break;
+            case TRIG_KILL:       when = "A kill"; break;
+            case TRIG_STRUCK:     when = "A heavy blow (a fifth of your health)"; basis = "the blow"; break;
+            case TRIG_HEAL_CRIT:  when = "A critical heal"; basis = "the heal"; break;
+            default: break;
+        }
+        bool const kill = p.trigger == TRIG_KILL;
+        char const* element = ELEMENT_WORDS[p.element];
+        std::string what;
+        switch (p.effect)
+        {
+            case PE_NOVA:
+                what = kill ? Printf("sends out a nova of %s: %d%% of the slain enemy's maximum health to every enemy within 8 yards", element, p.value)
+                            : Printf("sends out a nova of %s: %d%% of %s to every enemy within 8 yards", element, p.value, basis);
+                break;
+            case PE_ARC:
+                what = kill ? Printf("arcs %s from the slain enemy to the 3 nearest for %d%% of its maximum health", element, p.value)
+                            : Printf("arcs %s to the 3 enemies nearest the target for %d%% of %s", element, p.value, basis);
+                break;
+            case PE_EXPLODE:
+                what = Printf("makes the slain enemy explode in %s for %d%% of its maximum health to enemies within 8 yards", element, p.value);
+                break;
+            case PE_AILMENTS:
+                what = kill ? Printf("%s every enemy within 8 yards of the slain one, as a hit of %d%% of its maximum health", AILMENT_VERBS[p.element], p.value)
+                            : Printf("%s every enemy within 8 yards, as a hit of %d%% of %s", AILMENT_VERBS[p.element], p.value, basis);
+                break;
+            case PE_HEAL:  what = Printf("heals you for %d%% of your maximum health", p.value); break;
+            case PE_MANA:  what = Printf("restores %d%% of your maximum mana", p.value); break;
+            case PE_FURY:  what = Printf("gives you %d%% more damage for %u sec", p.value, FURY_MS / 1000); break;
+            case PE_SWIFT: what = Printf("gives you %d%% movement speed for %u sec", p.value, SWIFT_MS / 1000); break;
+            default: break;
+        }
+        std::string rider;
+        switch (p.rider)
+        {
+            case RIDER_NONE: break;
+            case RIDER_HEAL:  rider = Printf(", and heals you for %d%% of your maximum health", p.riderValue); break;
+            case RIDER_MANA:  rider = Printf(", and restores %d%% of your maximum mana", p.riderValue); break;
+            case RIDER_FURY:  rider = Printf(", and gives you %d%% more damage for %u sec", p.riderValue, RIDER_FURY_MS / 1000); break;
+            case RIDER_SWIFT: rider = Printf(", and %d%% movement speed for %u sec", p.riderValue, RIDER_SWIFT_MS / 1000); break;
+            default:
+                rider = Printf(", and %s the %s as a hit of %d%% of %s", AILMENT_VERBS[p.rider - RIDER_AILMENT],
+                               p.trigger == TRIG_STRUCK ? "attacker" : kill ? "nearest enemy" : "target", p.riderValue,
+                               kill ? "its maximum health" : basis);
+                break;
+        }
+        return Printf("%s %s%s (once every %u sec).", when, what.c_str(), rider.c_str(), std::max<uint32>(1, p.icd / 1000));
+    }
+
+    std::string PowerName(UniquePower const& p)
+    {
+        uint8 const pick = uint8(p.rider % 3), noun = uint8(uint8(p.trigger) % 3);
+        if (Damaging(p.effect))
+            return std::string(ELEMENT_NAMES[p.element][pick]) + " " + EFFECT_NOUNS[p.effect][noun];
+        return std::string(UTILITY_PREFIX[pick]) + EFFECT_NOUNS[p.effect][noun];
+    }
+
+    enum PowerKind : uint8 { KIND_WEAPON, KIND_ARMOUR, KIND_JEWEL, KIND_COUNT };
+
+    // A named blue or purple weapon or armour piece (not a shirt, tabard, bag or ammunition) that
+    // is not authored: it carries a generated power.
+    bool TakesPower(ItemPrototype const* proto, PowerKind& kind)
+    {
+        if (!proto || proto->Quality < ITEM_QUALITY_RARE || proto->Quality > ITEM_QUALITY_EPIC ||
+                (proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR))
+            return false;
+        switch (proto->InventoryType)
+        {
+            case INVTYPE_NON_EQUIP: case INVTYPE_BODY: case INVTYPE_TABARD: case INVTYPE_BAG: case INVTYPE_QUIVER:
+            case INVTYPE_AMMO:
+                return false;
+            default:
+                break;
+        }
+        uint32 const type = proto->InventoryType;
+        kind = proto->Class == ITEM_CLASS_WEAPON ? KIND_WEAPON
+               : (type == INVTYPE_NECK || type == INVTYPE_FINGER || type == INVTYPE_TRINKET || type == INVTYPE_CLOAK ||
+                  type == INVTYPE_HOLDABLE) ? KIND_JEWEL : KIND_ARMOUR;
+        return !Authored(proto->ItemId);
+    }
+
+    // A combination a kind's uniques are dealt: its numbers come with the item.
+    struct Combo
+    {
+        Trigger trigger;
+        PowerEffect effect;
+        uint8 element;
+        uint8 rider;
+    };
+
+    std::vector<Combo> CombosFor(PowerKind kind)
+    {
+        // Every kind takes every trigger (about 1,500 combinations a kind, more than vanilla has
+        // uniques of any kind); the order only moves which entries draw which.
+        std::vector<Trigger> triggers;
+        switch (kind)
+        {
+            case KIND_WEAPON: triggers = { TRIG_SWING_CRIT, TRIG_SPELL_CRIT, TRIG_KILL, TRIG_STRUCK, TRIG_HEAL_CRIT }; break;
+            case KIND_ARMOUR: triggers = { TRIG_STRUCK, TRIG_KILL, TRIG_HEAL_CRIT, TRIG_SWING_CRIT, TRIG_SPELL_CRIT }; break;
+            default:          triggers = { TRIG_SPELL_CRIT, TRIG_KILL, TRIG_HEAL_CRIT, TRIG_STRUCK, TRIG_SWING_CRIT }; break;
+        }
+        std::vector<Combo> out;
+        for (Trigger trigger : triggers)
+            for (uint8 e = 0; e < PE_COUNT; ++e)
+            {
+                PowerEffect const effect = PowerEffect(e);
+                if (effect == PE_EXPLODE && trigger != TRIG_KILL)
+                    continue;
+                uint8 const elements = Damaging(effect) ? POWER_ELEMENTS : 1;
+                for (uint8 element = 0; element < elements; ++element)
+                    for (uint8 rider = 0; rider < RIDER_COUNT; ++rider)
+                    {
+                        // A rider is something else than the power itself.
+                        if ((rider == RIDER_HEAL && effect == PE_HEAL) || (rider == RIDER_MANA && effect == PE_MANA) ||
+                                (rider == RIDER_FURY && effect == PE_FURY) || (rider == RIDER_SWIFT && effect == PE_SWIFT) ||
+                                (effect == PE_AILMENTS && rider == RIDER_AILMENT + element))
+                            continue;
+                        out.push_back({ trigger, effect, element, rider });
+                    }
+            }
         return out;
+    }
+
+    std::unordered_map<uint32, UniquePower> const& GeneratedPowers()
+    {
+        static std::unordered_map<uint32, UniquePower> const powers = []()
+        {
+            std::unordered_map<uint32, UniquePower> out;
+            std::vector<uint32> uniques[KIND_COUNT];
+            for (uint32 id = 1; id < sItemStorage.GetMaxEntry(); ++id)
+            {
+                PowerKind kind;
+                if (TakesPower(sItemStorage.LookupEntry<ItemPrototype>(id), kind))
+                    uniques[kind].push_back(id);
+            }
+            for (uint8 k = 0; k < KIND_COUNT; ++k)
+            {
+                std::vector<Combo> const combos = CombosFor(PowerKind(k));
+                size_t const n = combos.size();
+                if (!n)
+                    continue;
+                // A stride coprime with the count walks every combination once before any comes
+                // back, and keeps neighbouring entries (a set's pieces) apart.
+                size_t stride = 7919 % n;
+                while (stride < 2 || std::gcd(stride, n) != 1)
+                    stride = (stride + 1) % n;
+                for (size_t i = 0; i < uniques[k].size(); ++i)
+                {
+                    uint32 const entry = uniques[k][i];
+                    Combo const& c = combos[(i * stride + 17) % n];
+                    ItemPrototype const* proto = sItemStorage.LookupEntry<ItemPrototype>(entry);
+                    float const level = PowerLevel(proto->ItemLevel);
+                    UniquePower p;
+                    p.trigger = c.trigger;
+                    p.effect = c.effect;
+                    p.element = c.element;
+                    p.value = std::max<int32>(1, int32(float(BaseValue(c.effect, c.trigger)) * level + 0.5f));
+                    p.rider = c.rider;
+                    p.riderValue = c.rider ? std::max<int32>(1, int32(float(RiderBase(c.rider)) * level + 0.5f)) : 0;
+                    p.icd = PowerIcd(c.trigger, c.effect);
+                    p.name = PowerName(p);
+                    p.text = PowerText(p);
+                    out.emplace(entry, std::move(p));
+                }
+                sLog.outString("ARPG uniques: %u %s uniques dealt their own powers from %u combinations", uint32(uniques[k].size()),
+                               k == KIND_WEAPON ? "weapon" : k == KIND_ARMOUR ? "armour" : "jewellery", uint32(n));
+            }
+            return out;
+        }();
+        return powers;
+    }
+
+    UniquePower const* PowerOf(uint32 item)
+    {
+        std::unordered_map<uint32, UniquePower> const& powers = GeneratedPowers();
+        auto it = powers.find(item);
+        return it == powers.end() ? nullptr : &it->second;
     }
 
     using Sockets = std::vector<std::pair<SkillId, uint8>>;
@@ -325,13 +562,10 @@ namespace
         return false;
     }
 
-    // Whether `player` has proc row `row`: the rune socketed in a skill, the item worn, or a worn
-    // unique carrying the pool power.
-    bool Has(Player const* player, size_t row, Sockets const& sockets, std::vector<size_t> const& worn)
+    // Whether `player` has proc row `row`: the rune socketed in a skill, or the item worn.
+    bool Has(Player const* player, size_t row, Sockets const& sockets)
     {
         ProcDef const& def = Procs()[row];
-        if (def.pool != POOL_NONE)
-            return std::find(worn.begin(), worn.end(), row) != worn.end();
         if (def.item)
             return Wears(player, def.item);
         return Socketed(sockets, Arpg::SKILL_NONE, def.rune);
@@ -485,6 +719,159 @@ namespace
             ReportProc(player, PROC_EFFECT, 0, def.name, "readies your next %s: %s.", def.targetWords, words);
     }
 
+    // The generated powers of the uniques `player` wears (not broken), with their items' entries.
+    std::vector<std::pair<uint32, UniquePower const*>> WornGenerated(Player const* player)
+    {
+        std::vector<std::pair<uint32, UniquePower const*>> out;
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            if (Item* it = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+                if (!it->IsBroken())
+                    if (UniquePower const* power = PowerOf(it->GetEntry()))
+                        out.emplace_back(it->GetEntry(), power);
+        return out;
+    }
+
+    // A generated power goes off: `victim` is the struck, slain or striking unit, `amount` the hit,
+    // heal or blow (0 for a kill, whose numbers come from the slain's maximum health).
+    void PowerAct(Player* player, UniquePower const& p, Unit* victim, uint32 amount)
+    {
+        bool const kill = p.trigger == TRIG_KILL;
+        // A blow or a heal is vanilla-sized: sized for each creature it hits. A hit is sized
+        // already; a share of a creature's health is too, held under a share of the player's own.
+        bool const flat = p.trigger == TRIG_STRUCK || p.trigger == TRIG_HEAL_CRIT;
+        auto basisOf = [&](int32 pct) -> uint32
+        {
+            if (kill)
+            {
+                if (!victim)
+                    return 0;
+                uint32 const cap = ToDamage(player, victim, player->GetMaxHealth() * EXPLODE_CAP_PCT / 100);
+                return std::min(cap, uint32(uint64(victim->GetMaxHealth()) * uint32(pct) / 100));
+            }
+            return uint32(uint64(amount) * uint32(pct) / 100);
+        };
+        auto sized = [&](Unit* unit, uint32 dealt) { return flat ? ToDamage(player, unit, dealt) : dealt; };
+        auto foesNear = [&](WorldObject* centre, float range, Unit const* skip)
+        {
+            std::vector<Unit*> out;
+            for (Unit* unit : EnemiesNear(centre, range))
+                if (unit != skip && unit->IsAlive() && MayCatchUnit(player, unit, nullptr) && out.size() < POWER_MAX_FOES)
+                    out.push_back(unit);
+            return out;
+        };
+        float const area = SpellAreaScale(player);
+        SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(LookOfTag(p.element));
+        uint32 const school = SchoolOfTag(p.element);
+        uint32 const now = WorldTimer::getMSTime();
+        auto grant = [&](bool fury, int32 pct, uint32 ms)
+        {
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                PlayerProcs& pp = sProcs[player->GetObjectGuid()];
+                if (fury)
+                {
+                    pp.furyPct = Later(pp.furyUntil, now) ? std::max(pp.furyPct, pct) : pct;
+                    pp.furyUntil = now + ms;
+                }
+                else
+                {
+                    pp.swiftPct = Later(pp.swiftUntil, now) ? std::max(pp.swiftPct, pct) : pct;
+                    pp.swiftUntil = now + ms;
+                }
+            }
+            if (!fury)
+                player->UpdateSpeed(MOVE_RUN, true);
+        };
+
+        uint32 const basis = basisOf(p.value);
+        switch (p.effect)
+        {
+            case PE_NOVA:
+            case PE_ARC:
+            case PE_EXPLODE:
+            case PE_AILMENTS:
+            {
+                if (!basis || !look)
+                    break;
+                std::vector<Unit*> foes;
+                if (p.effect == PE_NOVA)
+                    foes = foesNear(kill && victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
+                else if (p.effect == PE_ARC && victim)
+                {
+                    foes = foesNear(victim, POWER_ARC_RANGE, victim);
+                    std::sort(foes.begin(), foes.end(), [victim](Unit* a, Unit* b) { return victim->GetDistance(a) < victim->GetDistance(b); });
+                    if (foes.size() > POWER_ARC_COUNT)
+                        foes.resize(POWER_ARC_COUNT);
+                }
+                else if (p.effect == PE_EXPLODE && victim)
+                    foes = foesNear(victim, POWER_RANGE * area, victim);
+                else if (p.effect == PE_AILMENTS)
+                    foes = foesNear(kill && victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
+                for (Unit* unit : foes)
+                {
+                    if (p.effect == PE_AILMENTS)
+                        InflictAilment(player, unit, p.element, sized(unit, basis), false);
+                    else
+                        StrikeFoe(player, unit, look, school, std::max<uint32>(1, sized(unit, basis)));
+                }
+                if (!foes.empty())
+                    ReportProc(player, PROC_DAMAGE, 0, p.name.c_str(), "strikes %u %s.", uint32(foes.size()),
+                               foes.size() == 1 ? "enemy" : "enemies");
+                break;
+            }
+            case PE_HEAL:
+                ProcHeal(player, p.name.c_str(), std::max<uint32>(1, player->GetMaxHealth() * uint32(p.value) / 100));
+                break;
+            case PE_MANA:
+                ProcMana(player, p.name.c_str(), std::max<uint32>(1, player->GetMaxPower(POWER_MANA) * uint32(p.value) / 100));
+                break;
+            case PE_FURY:
+                grant(true, p.value, FURY_MS);
+                ReportProc(player, PROC_EFFECT, 0, p.name.c_str(), "%d%% more damage for %u sec.", p.value, FURY_MS / 1000);
+                break;
+            case PE_SWIFT:
+                grant(false, p.value, SWIFT_MS);
+                ReportProc(player, PROC_EFFECT, 0, p.name.c_str(), "%d%% movement speed for %u sec.", p.value, SWIFT_MS / 1000);
+                break;
+            default:
+                break;
+        }
+
+        // The rider.
+        switch (p.rider)
+        {
+            case RIDER_NONE:
+                break;
+            case RIDER_HEAL:
+                ProcHeal(player, p.name.c_str(), std::max<uint32>(1, player->GetMaxHealth() * uint32(p.riderValue) / 100));
+                break;
+            case RIDER_MANA:
+                ProcMana(player, p.name.c_str(), std::max<uint32>(1, player->GetMaxPower(POWER_MANA) * uint32(p.riderValue) / 100));
+                break;
+            case RIDER_FURY:
+                grant(true, p.riderValue, RIDER_FURY_MS);
+                break;
+            case RIDER_SWIFT:
+                grant(false, p.riderValue, RIDER_SWIFT_MS);
+                break;
+            default:
+            {
+                // The target: the struck one, the attacker, or for a kill the nearest enemy left.
+                Unit* target = victim && victim->IsAlive() ? victim : nullptr;
+                if (!target && victim)
+                {
+                    std::vector<Unit*> around = foesNear(victim, POWER_RANGE * area, victim);
+                    if (!around.empty())
+                        target = around.front();
+                }
+                if (target)
+                    if (uint32 const dealt = basisOf(p.riderValue))
+                        InflictAilment(player, target, uint8(p.rider - RIDER_AILMENT), sized(target, dealt), false);
+                break;
+            }
+        }
+    }
+
     // Something that may set procs off happened: `spell` (nullptr: the swing) with `trigger`, on
     // `victim` (the struck or slain unit), for `amount` (the hit, the heal, the blow).
     void Trip(Unit* unit, Trigger trigger, SpellEntry const* spell, Unit* victim = nullptr, uint32 amount = 0)
@@ -495,7 +882,6 @@ namespace
         uint32 const now = WorldTimer::getMSTime();
         std::vector<ProcDef> const& procs = Procs();
         Sockets const sockets = SocketedRunes(player);
-        std::vector<size_t> const worn = WornPowers(player);
         std::vector<size_t> acts;
         {
             std::lock_guard<std::mutex> guard(sLock);
@@ -508,7 +894,7 @@ namespace
                 auto ready = pp.readyAt.find(i);
                 if (ready != pp.readyAt.end() && Later(ready->second, now))
                     continue;
-                if (!Has(player, i, sockets, worn) || !Fires(player, def, spell, sockets))
+                if (!Has(player, i, sockets) || !Fires(player, def, spell, sockets))
                     continue;
                 pp.readyAt[i] = now + def.icd;
                 if (Readies(def.effect) || def.effect == EFFECT_RESET)
@@ -522,6 +908,27 @@ namespace
         for (size_t i : acts)
             if (player->IsAlive())
                 Act(player, procs[i], victim, amount, flat);
+
+        // The worn uniques' own powers.
+        std::vector<UniquePower const*> powers;
+        {
+            std::vector<std::pair<uint32, UniquePower const*>> const worn = WornGenerated(player);
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerProcs& pp = sProcs[player->GetObjectGuid()];
+            for (auto const& [entry, power] : worn)
+            {
+                if (power->trigger != trigger)
+                    continue;
+                auto ready = pp.powerReadyAt.find(entry);
+                if (ready != pp.powerReadyAt.end() && Later(ready->second, now))
+                    continue;
+                pp.powerReadyAt[entry] = now + power->icd;
+                powers.push_back(power);
+            }
+        }
+        for (UniquePower const* power : powers)
+            if (player->IsAlive())
+                PowerAct(player, *power, victim, amount);
     }
 
     void Drop(Player* player, PlayerProcs& pp, size_t at)
@@ -590,14 +997,34 @@ namespace Arpg
 
     char const* UniquePowerText(uint32 item)
     {
-        int const row = PowerRow(item);
-        return row < 0 ? nullptr : Procs()[size_t(row)].text;
+        UniquePower const* power = PowerOf(item);
+        return power ? power->text.c_str() : nullptr;
     }
 
     char const* UniquePowerName(uint32 item)
     {
-        int const row = PowerRow(item);
-        return row < 0 ? nullptr : Procs()[size_t(row)].name;
+        UniquePower const* power = PowerOf(item);
+        return power ? power->name.c_str() : nullptr;
+    }
+
+    int32 UniqueFuryPct(Unit const* unit)
+    {
+        if (!unit || unit->GetTypeId() != TYPEID_PLAYER)
+            return 0;
+        uint32 const now = WorldTimer::getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sProcs.find(unit->GetObjectGuid());
+        return it != sProcs.end() && Later(it->second.furyUntil, now) ? it->second.furyPct : 0;
+    }
+
+    int32 UniqueSwiftPct(Unit const* unit)
+    {
+        if (!unit || unit->GetTypeId() != TYPEID_PLAYER)
+            return 0;
+        uint32 const now = WorldTimer::getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sProcs.find(unit->GetObjectGuid());
+        return it != sProcs.end() && Later(it->second.swiftUntil, now) ? it->second.swiftPct : 0;
     }
 
     void OnProcSwing(Unit* attacker, Unit* victim, bool crit, uint32 damage)
@@ -732,13 +1159,12 @@ namespace Arpg
         if (pp.readied.empty())
             return;
         Sockets const sockets = SocketedRunes(player);
-        std::vector<size_t> const worn = WornPowers(player);
         for (size_t i = pp.readied.size(); i-- > 0;)
         {
             Readied const& r = pp.readied[i];
             bool const stale = r.spentBy ? !Later(r.spentAt + SPENT_GRACE, now) : !Later(r.expires, now);
             // Gone with what readied it: the rune unsocketed, the item taken off.
-            if (stale || !Has(player, r.proc, sockets, worn))
+            if (stale || !Has(player, r.proc, sockets))
                 Drop(player, pp, i);
         }
     }
