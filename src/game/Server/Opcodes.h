@@ -897,10 +897,13 @@ enum Opcodes
     SMSG_ARPG_PURSE                                 = 0x34B,
     // ARPG: what a carried item would do to the skills' damage if worn (Arpg/ArpgCompare.h)
     SMSG_ARPG_COMPARE                               = 0x34C,
+    // ARPG: the class screen's showcase characters, asked before login (Arpg/ArpgShowcase.cpp)
+    CMSG_ARPG_SHOWCASE_QUERY                        = 0x34D,
+    SMSG_ARPG_SHOWCASE                              = 0x34E,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x34D
+#define NUM_MSG_TYPES 0x34F
 
 /// Player state
 enum SessionStatus

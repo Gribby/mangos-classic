@@ -3658,6 +3658,13 @@ void ObjectMgr::LoadPlayerInfo()
         }
     }
 
+    // ARPG: any race may be any class. A pairing the database lacks is built from the race's own
+    // Warrior (its start, its racial spells, skills and stats) and a donor race of the class (the
+    // class's spells, skills, actions and items, and its stats' difference from that race's
+    // Warrior), a donor of the same side first.
+    if (sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+        BuildArpgPlayerInfo();
+
     // Loading xp per level data
     {
         mPlayerXPperLevel.resize(sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL));
@@ -3954,6 +3961,93 @@ void ObjectMgr::GetPlayerClassLevelInfo(uint32 class_, uint32 level, PlayerClass
         level = sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL);
 
     *info = pInfo->levelInfo[level - 1];
+}
+
+void ObjectMgr::BuildArpgPlayerInfo()
+{
+    uint32 const maxLevel = sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL);
+    auto has = [this](uint32 race, uint32 class_)
+    {
+        PlayerInfo const& info = playerInfo[race][class_];
+        return info.displayId_m != 0 && info.displayId_f != 0 && info.levelInfo;
+    };
+    auto minus = [](std::list<uint32> const& from, std::list<uint32> const& take)
+    {
+        std::list<uint32> out;
+        for (uint32 v : from)
+            if (std::find(take.begin(), take.end(), v) == take.end())
+                out.push_back(v);
+        return out;
+    };
+    auto skillKeys = [](PlayerCreateInfoSkills const& skills)
+    {
+        std::list<uint32> out;
+        for (PlayerCreateInfoSkill const& s : skills)
+            out.push_back(s.SkillId);
+        return out;
+    };
+    uint32 built = 0;
+    for (uint32 race = 1; race < MAX_RACES; ++race)
+    {
+        if (!(convertEnumToFlag(race) & RACEMASK_ALL_PLAYABLE) || !has(race, CLASS_WARRIOR))
+            continue;
+        Team const team = Player::TeamForRace(race);
+        for (uint32 class_ = 1; class_ < MAX_CLASSES; ++class_)
+        {
+            if (!(convertEnumToFlag(class_) & CLASSMASK_ALL_PLAYABLE) || has(race, class_))
+                continue;
+            // The donor: a race of the class, the same side's first.
+            uint32 donor = 0;
+            for (uint32 pass = 0; pass < 2 && !donor; ++pass)
+                for (uint32 other = 1; other < MAX_RACES && !donor; ++other)
+                    if (has(other, class_) && has(other, CLASS_WARRIOR) &&
+                            (pass == 1 || Player::TeamForRace(other) == team))
+                        donor = other;
+            if (!donor)
+                continue;
+            PlayerInfo const& own = playerInfo[race][CLASS_WARRIOR];
+            PlayerInfo const& cls = playerInfo[donor][class_];
+            PlayerInfo const& base = playerInfo[donor][CLASS_WARRIOR];
+            PlayerInfo& info = playerInfo[race][class_];
+            info.mapId = own.mapId;
+            info.areaId = own.areaId;
+            info.positionX = own.positionX;
+            info.positionY = own.positionY;
+            info.positionZ = own.positionZ;
+            info.orientation = own.orientation;
+            info.displayId_m = own.displayId_m;
+            info.displayId_f = own.displayId_f;
+            // Spells: the race's Warrior's but the Warrior's own, then the class's own.
+            std::list<uint32> const warriorOnly = minus(base.spell, cls.spell);
+            info.spell = minus(own.spell, warriorOnly);
+            for (uint32 spell : minus(cls.spell, base.spell))
+                if (std::find(info.spell.begin(), info.spell.end(), spell) == info.spell.end())
+                    info.spell.push_back(spell);
+            // Skills, the same way.
+            std::list<uint32> const warriorSkills = minus(skillKeys(base.skill), skillKeys(cls.skill));
+            std::list<uint32> const classSkills = minus(skillKeys(cls.skill), skillKeys(base.skill));
+            info.skill.clear();
+            for (PlayerCreateInfoSkill const& s : own.skill)
+                if (std::find(warriorSkills.begin(), warriorSkills.end(), s.SkillId) == warriorSkills.end())
+                    info.skill.push_back(s);
+            for (PlayerCreateInfoSkill const& s : cls.skill)
+                if (std::find(classSkills.begin(), classSkills.end(), s.SkillId) != classSkills.end())
+                    info.skill.push_back(s);
+            info.action = cls.action;
+            info.item = cls.item;
+            // Stats: the race's Warrior's, plus the class's difference from the donor's Warrior.
+            info.levelInfo = new PlayerLevelInfo[maxLevel];
+            for (uint32 level = 0; level < maxLevel; ++level)
+                for (int stat = 0; stat < MAX_STATS; ++stat)
+                {
+                    int32 const v = int32(own.levelInfo[level].stats[stat]) + int32(cls.levelInfo[level].stats[stat]) -
+                                    int32(base.levelInfo[level].stats[stat]);
+                    info.levelInfo[level].stats[stat] = uint8(std::clamp(v, 1, 255));
+                }
+            ++built;
+        }
+    }
+    sLog.outString(">> ARPG: built %u race and class pairings the database lacks", built);
 }
 
 void ObjectMgr::GetPlayerLevelInfo(uint32 race, uint32 class_, uint32 level, PlayerLevelInfo* info) const

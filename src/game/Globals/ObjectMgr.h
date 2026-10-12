@@ -528,6 +528,8 @@ class ObjectMgr
             return info;
         }
         void GetPlayerLevelInfo(uint32 race, uint32 class_, uint32 level, PlayerLevelInfo* info) const;
+        // ARPG: build the race and class pairings the database lacks (LoadPlayerInfo).
+        void BuildArpgPlayerInfo();
 
         ObjectGuid GetPlayerGuidByName(std::string name) const;
         int32 GetPlayerMapIdByGUID(ObjectGuid const& guid) const;
