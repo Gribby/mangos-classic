@@ -155,6 +155,13 @@ namespace Arpg
     // `player`'s combat log shows "<name> <format...>". Nothing for a player not on the ARPG client.
     void ReportProc(Unit* player, ProcKind kind, uint32 amount, char const* name, char const* format, ...) ATTR_PRINTF(5, 6);
 
+    // The same, on `target` (the enemy it struck or changed, for the client's label and effect
+    // there), `amount` the damage it dealt each, of damage tag `tag` (Arpg/ArpgTags.h; 0xFF none).
+    // SMSG_ARPG_PROC: uint8 kind, uint32 amount, cstring line, then cstring name, uint64 target
+    // guid (0: none), uint8 tag.
+    void ReportProcOn(Unit* player, Unit const* target, uint8 tag, ProcKind kind, uint32 amount, char const* name,
+                      char const* format, ...) ATTR_PRINTF(7, 8);
+
     // Heal `unit` for `amount` from the proc `name`, and report what it gained (nothing at full
     // health). Returns the health gained.
     uint32 ProcHeal(Unit* unit, char const* name, uint32 amount);

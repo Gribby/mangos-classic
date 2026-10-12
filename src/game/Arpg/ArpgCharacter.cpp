@@ -1467,7 +1467,7 @@ namespace Arpg
                     {
                         uint32 const dealt = ToDamage(player, foes.front(), amount * LIGHT_STRIKE_PCT * rank / 100);
                         SendHolyBolt(player, foes.front(), std::max<uint32>(1, dealt));
-                        ReportProc(player, PROC_DAMAGE, 0, "Searing Radiance", "strikes %s for %u.", foes.front()->GetName(), dealt);
+                        ReportProcOn(player, foes.front(), TAG_HOLY, PROC_DAMAGE, dealt, "Searing Radiance", "strikes %s for %u.", foes.front()->GetName(), dealt);
                     }
                 }
                 if (uint8 const rank = t.Rank(KEY_JUDGING_LIGHT))
@@ -1507,7 +1507,7 @@ namespace Arpg
                 // The heal's size turned into damage's (Arpg/ArpgDamage.h).
                 uint32 const dealt = ToDamage(player, foes.front(), amount);
                 SendHolyBolt(player, foes.front(), dealt);
-                ReportProc(player, PROC_DAMAGE, 0, "Lightforged", "turns the heal into a Holy bolt at %s for %u.",
+                ReportProcOn(player, foes.front(), TAG_HOLY, PROC_DAMAGE, dealt, "Lightforged", "turns the heal into a Holy bolt at %s for %u.",
                            foes.front()->GetName(), dealt);
             }
         }
@@ -1716,7 +1716,7 @@ namespace Arpg
             if (t.Has(KEY_SACRED_SEAL) && victim->IsAlive() && Consecrated(victim, caster))
             {
                 StrikeFoe(caster, victim, spellInfo, spell->GetSchoolMask(), dealt);
-                ReportProc(caster, PROC_DAMAGE, 0, "Sacred Seal", "strikes %s again on consecrated ground for %u.", victim->GetName(), dealt);
+                ReportProcOn(caster, victim, TAG_HOLY, PROC_DAMAGE, dealt, "Sacred Seal", "strikes %s again on consecrated ground for %u.", victim->GetName(), dealt);
             }
         }
         if (skill == SKILL_JUDGEMENT)
@@ -1734,7 +1734,7 @@ namespace Arpg
                 for (Unit* unit : foes)
                     StrikeFoe(caster, unit, spellInfo, spell->GetSchoolMask(), share);
                 if (!foes.empty())
-                    ReportProc(caster, PROC_DAMAGE, 0, "Sanctified", "spreads Judgement to %u %s for %u.",
+                    ReportProcOn(caster, victim, TAG_HOLY, PROC_DAMAGE, share, "Sanctified", "spreads Judgement to %u %s for %u.",
                                uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies", share);
             }
         }

@@ -96,12 +96,12 @@ namespace Arpg
 
         if (t.Has(KEY_PYROCLASM) && crit && (Named(spellInfo, "Fireball") || Named(spellInfo, "Pyroblast")))
             if (size_t n = Explode(player, victim, spellInfo, school, dealt, PYROCLASM_PCT, PYROCLASM_RANGE, FIRE_LOOK))
-                ReportProc(player, PROC_DAMAGE, 0, "Pyroclasm", "explodes onto %u %s for %u.", uint32(n), n == 1 ? "enemy" : "enemies",
+                ReportProcOn(player, victim, TAG_FIRE, PROC_DAMAGE, dealt * PYROCLASM_PCT / 100, "Pyroclasm", "explodes onto %u %s for %u.", uint32(n), n == 1 ? "enemy" : "enemies",
                            dealt * PYROCLASM_PCT / 100);
 
         if (t.Has(KEY_SHATTERSTORM) && Named(spellInfo, "Frostbolt") && Frozen(victim))
             if (size_t n = Explode(player, victim, spellInfo, school, dealt, SHATTERSTORM_PCT, SHATTERSTORM_RANGE, FROST_LOOK))
-                ReportProc(player, PROC_DAMAGE, 0, "Shatterstorm", "shatters onto %u %s for %u.", uint32(n), n == 1 ? "enemy" : "enemies",
+                ReportProcOn(player, victim, TAG_FROST, PROC_DAMAGE, dealt * SHATTERSTORM_PCT / 100, "Shatterstorm", "shatters onto %u %s for %u.", uint32(n), n == 1 ? "enemy" : "enemies",
                            dealt * SHATTERSTORM_PCT / 100);
 
         if (t.Has(KEY_DEEP_FREEZE) && Named(spellInfo, "Cone of Cold") && victim->IsAlive() && !Frozen(victim))
@@ -144,7 +144,7 @@ namespace Arpg
                     if (victim->IsAlive())
                         StrikeFoe(player, victim, spellInfo, SPELL_SCHOOL_MASK_FIRE, burn, look);
                     size_t const n = Explode(player, victim, spellInfo, SPELL_SCHOOL_MASK_FIRE, burn, 100, DETONATE_RANGE, FIRE_LOOK);
-                    ReportProc(player, PROC_DAMAGE, 0, "Detonate", "sets off the Ignite on %s for %u, striking %u more.", victim->GetName(), burn,
+                    ReportProcOn(player, victim, TAG_FIRE, PROC_DAMAGE, burn, "Detonate", "sets off the Ignite on %s for %u, striking %u more.", victim->GetName(), burn,
                                uint32(n));
                 }
             if (t.Has(KEY_CHAIN_BLAST) && !victim->IsAlive())
@@ -184,7 +184,7 @@ namespace Arpg
             if (!mage || mage->getClass() != CLASS_MAGE || !Active(mage) || !mage->IsAlive() || !HasKeystone(mage, KEY_WILDFIRE))
                 continue;
             if (size_t n = SpreadIgnite(mage, victim, WILDFIRE_RANGE * SpellAreaScale(mage), WILDFIRE_COUNT))
-                ReportProc(mage, PROC_EFFECT, 0, "Wildfire", "spreads the Ignite to %u %s.", uint32(n), n == 1 ? "enemy" : "enemies");
+                ReportProcOn(mage, victim, TAG_FIRE, PROC_EFFECT, 0, "Wildfire", "spreads the Ignite to %u %s.", uint32(n), n == 1 ? "enemy" : "enemies");
         }
     }
 

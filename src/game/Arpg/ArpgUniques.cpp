@@ -202,7 +202,8 @@ namespace
     // Deal `share` of `spellInfo`'s school to `unit` as `caster`'s, through the ordinary spell
     // damage path: armour for a physical hit, resistances, absorbs, the combat log. `show`: the
     // hit's impact plays (a relayed hit's missile already brings its own).
-    void DealShare(Unit* caster, Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask, uint32 share, bool show = true)
+    void DealShare(Unit* caster, Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask, uint32 share, bool show = true,
+                   bool periodic = false)
     {
         if (!unit->IsAlive())
             return;
@@ -210,6 +211,8 @@ namespace
             ShowImpact(unit, spellInfo, mask);
         SpellNonMeleeDamage damage(caster, unit, spellInfo->Id, GetFirstSchoolInMask(mask));
         damage.damage = share;
+        // An ailment's tick: logged as periodic, so the client draws it as one.
+        damage.periodicLog = periodic;
         if (mask & SPELL_SCHOOL_MASK_NORMAL)
             damage.damage = Unit::CalcArmorReducedDamage(caster, unit, damage.damage);
         unit->CalculateAbsorbResistBlock(caster, &damage, spellInfo);
@@ -904,7 +907,7 @@ namespace Arpg
         uint32 const dealt = std::max<uint32>(1, ToDamage(player, foes.front(), amount / 2));
         RelayHit(player, caster->GetObjectGuid(), foes.front()->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
                  dealt, 0, 0.0f, GuidVector{});
-        ReportProc(player, PROC_DAMAGE, 0, "Dawnbringer", "sends a Holy bolt at %s for %u.", foes.front()->GetName(), dealt);
+        ReportProcOn(player, foes.front(), TAG_HOLY, PROC_DAMAGE, dealt, "Dawnbringer", "sends a Holy bolt at %s for %u.", foes.front()->GetName(), dealt);
     }
 
     void UpdateKeystones(Player* player)
@@ -953,6 +956,11 @@ namespace Arpg
         }
         else
             DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount);
+    }
+
+    void StrikeTick(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount)
+    {
+        DealShare(caster, unit, spellInfo, SpellSchoolMask(schoolMask), amount, true, true);
     }
 
     void SendHolyBolt(Player* player, Unit* to, uint32 amount)

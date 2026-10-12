@@ -145,6 +145,8 @@ namespace Arpg
     // e.g. a paladin's extra swings, which deal Cleave's physical damage but look holy.
     void StrikeFoe(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount,
                    SpellEntry const* look = nullptr);
+    // The same as an ailment's tick: logged as periodic damage.
+    void StrikeTick(Unit* caster, Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask, uint32 amount);
     // A holy bolt (Holy Shock's missile) from `player` at `to`, landing for `amount`.
     void SendHolyBolt(Player* player, Unit* to, uint32 amount);
     // A bolt drawn as `visual` from `player` at `to`, landing for `amount` of `schoolMask`.

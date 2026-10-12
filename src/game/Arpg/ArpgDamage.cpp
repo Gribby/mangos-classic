@@ -155,7 +155,7 @@ namespace
             if (crit && victim->HasAura(SPELL_CHILLED))
             {
                 player->CastSpell(victim, SPELL_FROSTBITE, TRIGGERED_OLD_TRIGGERED);
-                ReportProc(player, PROC_EFFECT, 0, "Freeze", "freezes %s in place.", victim->GetName());
+                ReportProcOn(player, victim, TAG_FROST, PROC_EFFECT, 0, "Freeze", "freezes %s in place.", victim->GetName());
             }
             else
                 player->CastSpell(victim, SPELL_CHILLED, TRIGGERED_OLD_TRIGGERED);
@@ -547,7 +547,7 @@ namespace Arpg
             {
                 uint32 const lookId = s.tag == TAG_PHYSICAL ? BLEED_LOOK : s.tag == TAG_FIRE ? IGNITE_LOOK : POISON_LOOK;
                 if (SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(lookId))
-                    StrikeFoe(player, victim, look, SCHOOL_OF_TAG[s.tag], std::max<uint32>(1, s.amount));
+                    StrikeTick(player, victim, look, SCHOOL_OF_TAG[s.tag], std::max<uint32>(1, s.amount));
                 continue;
             }
             SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(s.tag == TAG_HOLY ? JUDGED_LOOK : OVERLOAD_LOOK);
@@ -570,7 +570,7 @@ namespace Arpg
             for (Unit* unit : foes)
                 if (unit->IsAlive())
                     StrikeFoe(player, unit, look, SCHOOL_OF_TAG[s.tag], std::max<uint32>(1, s.amount));
-            ReportProc(player, PROC_DAMAGE, 0, AILMENT_NAME[s.tag], "%s on %s for %u, striking %u %s.",
+            ReportProcOn(player, victim, s.tag, PROC_DAMAGE, s.amount, AILMENT_NAME[s.tag], "%s on %s for %u, striking %u %s.",
                        s.tag == TAG_HOLY ? "bursts in a Holy blast" : "overloads", victim->GetName(), s.amount,
                        uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies");
         }
@@ -593,7 +593,7 @@ namespace Arpg
         if (freeze)
         {
             player->CastSpell(victim, SPELL_FROSTBITE, TRIGGERED_OLD_TRIGGERED);
-            ReportProc(player, PROC_EFFECT, 0, "Freeze", "freezes %s in place.", victim->GetName());
+            ReportProcOn(player, victim, TAG_FROST, PROC_EFFECT, 0, "Freeze", "freezes %s in place.", victim->GetName());
         }
         else
             player->CastSpell(victim, SPELL_CHILLED, TRIGGERED_OLD_TRIGGERED);

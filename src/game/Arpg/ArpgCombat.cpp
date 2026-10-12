@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 
 namespace
@@ -499,21 +500,39 @@ namespace Arpg
         return first;
     }
 
-    void ReportProc(Unit* player, ProcKind kind, uint32 amount, char const* name, char const* format, ...)
+    static void SendProc(Unit* player, Unit const* target, uint8 tag, ProcKind kind, uint32 amount, char const* name,
+                  char const* format, va_list args)
     {
         if (!player || player->GetTypeId() != TYPEID_PLAYER || !Active(player) || !name)
             return;
         char rest[192];
-        va_list args;
-        va_start(args, format);
         std::vsnprintf(rest, sizeof(rest), format, args);
-        va_end(args);
         std::string line = std::string("|cffffd200") + name + "|r " + rest;
-        WorldPacket data(SMSG_ARPG_PROC, 1 + 4 + line.size() + 1);
+        WorldPacket data(SMSG_ARPG_PROC, 1 + 4 + line.size() + 1 + std::strlen(name) + 1 + 8 + 1);
         data << uint8(kind);
         data << uint32(amount);
         data << line;
+        data << name;
+        data << (target ? target->GetObjectGuid() : ObjectGuid());
+        data << uint8(tag);
         static_cast<Player*>(player)->GetSession()->SendPacket(data);
+    }
+
+    void ReportProc(Unit* player, ProcKind kind, uint32 amount, char const* name, char const* format, ...)
+    {
+        va_list args;
+        va_start(args, format);
+        SendProc(player, nullptr, 0xFF, kind, amount, name, format, args);
+        va_end(args);
+    }
+
+    void ReportProcOn(Unit* player, Unit const* target, uint8 tag, ProcKind kind, uint32 amount, char const* name,
+                      char const* format, ...)
+    {
+        va_list args;
+        va_start(args, format);
+        SendProc(player, target, tag, kind, amount, name, format, args);
+        va_end(args);
     }
 
     uint32 ProcHeal(Unit* unit, char const* name, uint32 amount)
