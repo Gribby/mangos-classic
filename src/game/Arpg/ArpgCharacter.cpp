@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgEvents.h"
 #include "Arpg/ArpgProcs.h"
@@ -294,6 +296,8 @@ namespace
                                        SHEET_ARPG, CappedPct(std::min(own + t.meleeAreaPct, AREA_CAP), AREA_CAP).c_str()));
                 lines.push_back(Format("%s1%% per %d Strength (%d%% here), %d%% from gear and the web; at most %d%%.|r",
                                        SHEET_NOTE, STR_PER_AREA, own, t.meleeAreaPct, AREA_CAP));
+                lines.push_back(Format("%s+%d%% increased Melee and Physical damage (1%% per %d Strength).|r",
+                                       SHEET_ARPG, value / STR_PER_DAMAGE, STR_PER_DAMAGE));
                 if (t.Has(KEY_HOLY_WEAPONS))
                     lines.push_back(Format("%s+%d%% Holy damage from Holy Weapons (3%% per 10 Strength).|r", SHEET_ARPG, 3 * (value / 10)));
                 break;
@@ -308,6 +312,8 @@ namespace
                                        CappedPct(std::min(BASE_SPEED_PCT + own + t.movePct, SPEED_CAP), SPEED_CAP).c_str()));
                 lines.push_back(Format("%sEveryone runs %d%% faster; 1%% more per %d Agility (%d%% here), %d%% from gear and the web; at most %d%%.|r",
                                        SHEET_NOTE, BASE_SPEED_PCT, AGI_PER_SPEED, own, t.movePct, SPEED_CAP));
+                lines.push_back(Format("%s+%d%% critical strike multiplier (1%% per %d Agility).|r",
+                                       SHEET_ARPG, value / AGI_PER_CRIT, AGI_PER_CRIT));
                 break;
             }
             case STAT_STAMINA:
@@ -332,6 +338,8 @@ namespace
                                        SHEET_ARPG, CappedPct(std::min(own + t.spellAreaPct, AREA_CAP), AREA_CAP).c_str()));
                 lines.push_back(Format("%s1%% per %d Intellect (%d%% here), %d%% from gear and the web; at most %d%%.|r",
                                        SHEET_NOTE, INT_PER_AREA, own, t.spellAreaPct, AREA_CAP));
+                lines.push_back(Format("%s+%d%% increased Spell damage (1%% per %d Intellect).|r",
+                                       SHEET_ARPG, value / INT_PER_DAMAGE, INT_PER_DAMAGE));
                 break;
             }
             case STAT_SPIRIT:
@@ -342,6 +350,8 @@ namespace
                                        CappedPct(std::min(own + t.cooldownPct, COOLDOWN_CAP), COOLDOWN_CAP).c_str()));
                 lines.push_back(Format("%s1%% per %d Spirit (%d%% here), %d%% from gear and the web; at most %d%%.|r",
                                        SHEET_NOTE, SPI_PER_COOLDOWN, own, t.cooldownPct, COOLDOWN_CAP));
+                lines.push_back(Format("%s+%d%% increased damage over time and damage with ailments (1%% per %d Spirit).|r",
+                                       SHEET_ARPG, value / SPI_PER_DOT, SPI_PER_DOT));
                 lines.push_back(Format("%sOut of a fight for %u sec, health comes back %d%% a second and mana %d%%, whatever your Spirit.|r",
                                        SHEET_NOTE, REST_DELAY_MS / 1000, int32(REST_HEALTH_PCT), int32(REST_MANA_PCT)));
                 break;
@@ -413,7 +423,13 @@ namespace
             if (tag != TAG_HEAL && t.tag[tag])
                 damage += Format("%s%s +%d%%", damage.empty() ? "" : ", ", TagName(Tag(tag)), t.tag[tag]);
         lines.push_back(Format("%sDamage: %s|r", SHEET_ARPG, damage.empty() ? "no bonuses yet" : damage.c_str()));
-        lines.push_back(Format("%sA spell's damage bonus is the sum of its tags' bonuses: Seal of Righteousness takes Holy, Melee and Seal.|r", SHEET_NOTE));
+        lines.push_back(Format("%sIncreased bonuses add up: a hit takes every tag it carries (Seal of Righteousness: Holy, Melee and Seal), Strength, Intellect and Spirit. More bonuses (notables, keystones, skill nodes) each multiply.|r", SHEET_NOTE));
+        lines.push_back(Format("%sYour hits on creatures are x%.1f at level %u (creatures' health grows to match).|r", SHEET_NOTE,
+                               PowerScale(player), uint32(player->GetLevel())));
+        if (int32 const crit = t.critDamagePct)
+            lines.push_back(Format("%sCritical strike multiplier +%d%%|r", SHEET_ARPG, crit));
+        if (int32 const ail = t.ailmentPct)
+            lines.push_back(Format("%sDamage with ailments +%d%%|r", SHEET_ARPG, ail));
         lines.push_back(Format("%sEvery class spell: a 0.5 sec global cooldown and half the cast time.|r", SHEET_NOTE));
         // The worn uniques.
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -615,6 +631,8 @@ namespace
     {
         UpdateTree(player);
         UpdateSheet(player, false);
+        // What carried items would do if worn (Arpg/ArpgCompare.h).
+        UpdateCompare(player);
         {
             // The item affixes' regeneration, a second's worth.
             std::shared_ptr<WebTotals const> regen = TotalsOf(player);
@@ -654,6 +672,121 @@ namespace
         }
         while (!r.kills.empty() && WorldTimer::getMSTimeDiff(r.kills.front(), now) > CRUSADE_WINDOW)
             r.kills.pop_front();
+    }
+
+    // A hit's bonuses: "increased" ones add up into one sum, "more" ones each multiply.
+    struct DamageParts
+    {
+        int32 increased = 0;
+        float more = 1.0f;
+    };
+
+    // The increased and more bonuses on a hit of `tags` by `player` with `spellInfo` (nullptr: a
+    // swing) on `victim` (nullptr: an estimate, the bonuses against a kind of enemy left out).
+    // `why`, when given, takes a line per bonus that applies now, for the sheet; the conditions
+    // themselves are ConditionalDamageLines's.
+    DamageParts DamagePartsFor(Player const* player, WebTotals const& t, Unit const* victim, SpellEntry const* spellInfo,
+                               uint32 tags, std::vector<std::string>* why)
+    {
+        DamageParts p;
+        auto increased = [&](int32 pct, char const* from)
+        {
+            if (!pct)
+                return;
+            p.increased += pct;
+            if (why)
+                why->push_back(Format("%s%+d%% increased|r %s(%s)|r", SHEET_ARPG, pct, SHEET_NOTE, from));
+        };
+        auto more = [&](int32 pct, char const* from)
+        {
+            if (!pct)
+                return;
+            p.more *= std::max(0.0f, 1.0f + pct / 100.0f);
+            if (why)
+                why->push_back(Format("|cff20ff20%d%% more|r %s(%s)|r", pct, SHEET_NOTE, from));
+        };
+        Unit* self = const_cast<Player*>(player);
+
+        // Increased: the tags (the sheet lists them by source already), the attributes, gear
+        // against a kind of enemy.
+        for (uint8 tag = 0; tag < MAX_TAG; ++tag)
+            if (tag != TAG_HEAL && (tags & TagBit(Tag(tag))))
+                p.increased += t.tag[tag];
+        if (tags & (TagBit(TAG_MELEE) | TagBit(TAG_PHYSICAL)))
+            increased(int32(player->GetStat(STAT_STRENGTH)) / STR_PER_DAMAGE, "Strength");
+        if (tags & TagBit(TAG_SPELL))
+            increased(int32(player->GetStat(STAT_INTELLECT)) / INT_PER_DAMAGE, "Intellect");
+        if (tags & TagBit(TAG_DURATION))
+            increased(int32(player->GetStat(STAT_SPIRIT)) / SPI_PER_DOT, "Spirit");
+        if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_HOLY_WEAPONS))
+            increased(3 * (int32(player->GetStat(STAT_STRENGTH)) / 10), "Holy Weapons");
+        if (victim && victim->GetTypeId() == TYPEID_UNIT)
+        {
+            Creature const* foe = static_cast<Creature const*>(victim);
+            if (IsDungeonBoss(foe) || foe->IsWorldBoss() || (foe->IsElite() && !foe->GetMap()->IsDungeon()))
+                increased(t.elitePct, "gear, elites and bosses");
+            uint32 const type = foe->GetCreatureType();
+            if (type < 16)
+                increased(t.slaying[type], "gear, its kind");
+        }
+
+        // More: the notables, keystones and skill tree nodes, each on its own.
+        if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_TWO_HANDED_MASTERY) && TwoHanded(player))
+            more(12, "Two-Handed Mastery");
+        if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_SHIELD_AND_HAMMER) && OneHandAndShield(player))
+            more(10, "Shield and Hammer");
+        if (tags & TagBit(TAG_HOLY))
+        {
+            if (t.Has(KEY_LIGHTFORGED))
+                more(30, "Lightforged");
+            if (t.Has(KEY_RIGHTEOUS_FURY))
+            {
+                // (Not `near`: the Windows headers make that a macro.)
+                size_t foes = 0;
+                for (Unit* unit : EnemiesNear(self, FURY_RANGE))
+                    if (unit->IsAlive() && MayCatchUnit(self, unit, nullptr) && ++foes >= FURY_COUNT)
+                        break;
+                if (foes >= FURY_COUNT)
+                    more(20, "Righteous Fury");
+            }
+        }
+        uint32 const now = WorldTimer::getMSTime();
+        if (t.Has(KEY_CRUSADE))
+            more(CRUSADE_PER_KILL * int32(CrusadeStacks(R(player), now)), "Crusade");
+
+        SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
+        if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
+        {
+            Runtime const& r = R(player);
+            if (WorldTimer::getMSTimeDiff(r.lastHit, now) <= MOMENTUM_WINDOW)
+                more(int32(r.momentum * t.Rank(KEY_MOMENTUM)), "Momentum");
+        }
+        if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
+            more(5 * t.Rank(KEY_HEAVY_HAND), "Heavy Hand");
+        if (skill == SKILL_SEALS)
+        {
+            more(6 * t.Rank(KEY_HOLY_EDGE), "Holy Edge");
+            if (spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) == 0)
+                more(10 * t.Rank(KEY_COMMANDING_SEAL), "Commanding Seal");
+        }
+        if (skill == SKILL_JUDGEMENT)
+            more(8 * t.Rank(KEY_RADIANCE), "Radiance");
+        if (skill == SKILL_CONSECRATION)
+            more(8 * t.Rank(KEY_BURNING_GROUND), "Burning Ground");
+        if (victim && victim->IsStunned())
+        {
+            if (skill == SKILL_JUDGEMENT && t.Has(KEY_SENTENCE))
+                more(100, "Sentence");
+            if (t.Has(KEY_SENTENCE_PASSED))
+                more(15, "Sentence Passed");
+        }
+        if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_SEARING_LIGHT) && Consecrated(victim, player))
+            more(5 * t.Rank(KEY_SEARING_LIGHT), "Searing Light");
+        // Executioner: Hammer of Wrath doubles on an enemy below 20% health.
+        if (skill == SKILL_HAMMER_OF_WRATH && t.Has(KEY_EXECUTIONER) && victim &&
+                victim->GetHealth() < victim->GetMaxHealth() * EXECUTE_BELOW)
+            more(100, "Executioner");
+        return p;
     }
 }
 
@@ -734,8 +867,7 @@ namespace Arpg
                 mods.push_back({ uint8(SPELLMOD_COST), uint8(SPELLMOD_PCT), -v, ~uint64(0) });
             if (int32 const v = std::clamp(t.spellCritPct, 0, CRIT_CAP))
                 mods.push_back({ uint8(SPELLMOD_CRITICAL_CHANCE), uint8(SPELLMOD_FLAT), v, ~uint64(0) });
-            if (t.spellCritDamagePct > 0)
-                mods.push_back({ uint8(SPELLMOD_CRIT_DAMAGE_BONUS), uint8(SPELLMOD_PCT), t.spellCritDamagePct, ~uint64(0) });
+            // (Spell critical strike damage adds to the multiplier: Arpg::CritBonus.)
         }
         SetSkillMods(player, r, mods);
         SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (r.stunImmune && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
@@ -750,6 +882,8 @@ namespace Arpg
         ForgetChampionsSent(player);
         ForgetEvents(player);
         ForgetProcs(player);
+        ForgetAilments(player);
+        ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
     }
@@ -760,6 +894,8 @@ namespace Arpg
         uint32 const now = WorldTimer::getMSTime();
         // A readied proc that waited too long goes (Arpg/ArpgProcs.h).
         UpdateProcs(player);
+        // The ailments this player inflicted tick and burst (Arpg/ArpgDamage.h).
+        UpdateAilments(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)
@@ -795,7 +931,7 @@ namespace Arpg
                 for (ObjectGuid const& guid : due)
                     if (Unit* foe = player->GetMap()->GetUnit(guid))
                         if (foe->IsAlive() && player->IsWithinDistInMap(foe, THORNS_REACH))
-                            StrikeFoe(player, foe, shown, SPELL_SCHOOL_MASK_NATURE, uint32(totals->thorns));
+                            StrikeFoe(player, foe, shown, SPELL_SCHOOL_MASK_NATURE, ToDamage(player, foe, uint32(totals->thorns)));
         }
 
         // Martyr: the damage taken since the last update strikes back.
@@ -806,11 +942,12 @@ namespace Arpg
             if (SpellEntry const* aura = sSpellTemplate.LookupEntry<SpellEntry>(RETRIBUTION_AURA))
             {
                 std::vector<Unit*> const foes = NearestFoes(player, player, MARTYR_RANGE, 10);
+                // At the ARPG's size against each creature (Arpg/ArpgDamage.h).
                 for (Unit* unit : foes)
-                    StrikeFoe(player, unit, aura, SPELL_SCHOOL_MASK_HOLY, share);
+                    StrikeFoe(player, unit, aura, SPELL_SCHOOL_MASK_HOLY, ToDamage(player, unit, share));
                 if (!foes.empty())
                     ReportProc(player, PROC_DAMAGE, 0, "Martyr", "strikes back at %u %s for %u Holy.",
-                               uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies", share);
+                               uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies", ToDamage(player, nullptr, share));
             }
         }
 
@@ -851,10 +988,23 @@ namespace Arpg
 
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo)
     {
-        // A pack follower hits for its share (ArpgPacks.h).
+        return DamageModForTags(attacker, victim, spellInfo, TagsOf(spellInfo));
+    }
+
+    void DamagePartsOf(Player const* player, WebTotals const& t, SpellEntry const* spellInfo, uint32 tags, int32& increased, float& more)
+    {
+        DamageParts const parts = DamagePartsFor(player, t, nullptr, spellInfo, tags, nullptr);
+        increased = parts.increased;
+        more = parts.more;
+    }
+
+    float DamageModForTags(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo, uint32 tags)
+    {
+        // A creature: a pack follower hits for its share (ArpgPacks.h); an ARPG player's pet,
+        // totem or guardian at its owner's size.
         if (attacker && attacker->GetTypeId() == TYPEID_UNIT)
         {
-            float mod = PackDamageMod(attacker);
+            float mod = PackDamageMod(attacker) * DamageScale(attacker, victim);
             // Damage taken, the victim's item affixes.
             if (victim && victim->GetTypeId() == TYPEID_PLAYER)
                 if (std::shared_ptr<WebTotals const> taken = TotalsOf(victim))
@@ -864,81 +1014,9 @@ namespace Arpg
         std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
         if (!totals)
             return 1.0f;
-        WebTotals const& t = *totals;
-        Player const* player = static_cast<Player const*>(attacker);
-        uint32 const tags = TagsOf(spellInfo);
-        int32 pct = TagSum(t, tags & ~TagBit(TAG_HEAL));
-        // The item affixes against the target: elites and bosses, a creature type.
-        if (victim && victim->GetTypeId() == TYPEID_UNIT)
-        {
-            Creature const* foe = static_cast<Creature const*>(victim);
-            if (IsDungeonBoss(foe) || foe->IsWorldBoss() || (foe->IsElite() && !foe->GetMap()->IsDungeon()))
-                pct += t.elitePct;
-            uint32 const type = foe->GetCreatureType();
-            if (type < 16)
-                pct += t.slaying[type];
-        }
-
-        if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_TWO_HANDED_MASTERY) && TwoHanded(player))
-            pct += 12;
-        if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_SHIELD_AND_HAMMER) && OneHandAndShield(player))
-            pct += 10;
-        if (tags & TagBit(TAG_HOLY))
-        {
-            if (t.Has(KEY_HOLY_WEAPONS))
-                pct += 3 * (int32(player->GetStat(STAT_STRENGTH)) / 10);
-            if (t.Has(KEY_LIGHTFORGED))
-                pct += 30;
-            if (t.Has(KEY_RIGHTEOUS_FURY))
-            {
-                // (Not `near`: the Windows headers make that a macro.)
-                size_t foes = 0;
-                for (Unit* unit : EnemiesNear(const_cast<Unit*>(attacker), FURY_RANGE))
-                    if (unit->IsAlive() && MayCatchUnit(const_cast<Unit*>(attacker), unit, nullptr) && ++foes >= FURY_COUNT)
-                        break;
-                if (foes >= FURY_COUNT)
-                    pct += 20;
-            }
-        }
-        uint32 const now = WorldTimer::getMSTime();
-        if (t.Has(KEY_CRUSADE))
-            pct += CRUSADE_PER_KILL * int32(CrusadeStacks(R(attacker), now));
-
-        // The skill trees.
-        SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
-        if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
-        {
-            Runtime const& r = R(attacker);
-            if (WorldTimer::getMSTimeDiff(r.lastHit, now) <= MOMENTUM_WINDOW)
-                pct += int32(r.momentum * t.Rank(KEY_MOMENTUM));
-        }
-        if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
-            pct += 5 * t.Rank(KEY_HEAVY_HAND);
-        if (skill == SKILL_SEALS)
-        {
-            pct += 6 * t.Rank(KEY_HOLY_EDGE);
-            if (spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Command", 15) == 0)
-                pct += 10 * t.Rank(KEY_COMMANDING_SEAL);
-        }
-        if (skill == SKILL_JUDGEMENT)
-            pct += 8 * t.Rank(KEY_RADIANCE);
-        if (skill == SKILL_CONSECRATION)
-            pct += 8 * t.Rank(KEY_BURNING_GROUND);
-        if (victim && victim->IsStunned())
-        {
-            if (skill == SKILL_JUDGEMENT && t.Has(KEY_SENTENCE))
-                pct += 100;
-            if (t.Has(KEY_SENTENCE_PASSED))
-                pct += 15;
-        }
-        if ((tags & TagBit(TAG_HOLY)) && t.Has(KEY_SEARING_LIGHT) && Consecrated(victim, attacker))
-            pct += 5 * t.Rank(KEY_SEARING_LIGHT);
-        float mod = std::max(0.0f, 1.0f + pct / 100.0f);
-        // Executioner: Hammer of Wrath doubles on an enemy below 20% health.
-        if (skill == SKILL_HAMMER_OF_WRATH && t.Has(KEY_EXECUTIONER) && victim &&
-                victim->GetHealth() < victim->GetMaxHealth() * EXECUTE_BELOW)
-            mod *= 2.0f;
-        return mod;
+        DamageParts const parts = DamagePartsFor(static_cast<Player const*>(attacker), *totals, victim, spellInfo, tags, nullptr);
+        return std::max(0.0f, 1.0f + parts.increased / 100.0f) * parts.more * DamageScale(attacker, victim) *
+               AilmentTakenMod(attacker, victim);
     }
 
     void ConditionalDamageLines(Player const* player, uint32 tags, uint8 skill, std::vector<std::string>& out)
@@ -953,36 +1031,36 @@ namespace Arpg
             out.push_back(Format("%s%s%s|r", active ? "|cff20ff20" : SHEET_NOTE, text, active ? " (on now)" : ""));
         };
         if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_TWO_HANDED_MASTERY))
-            line(TwoHanded(player), "Two-Handed Mastery: +12% with a two-handed weapon");
+            line(TwoHanded(player), "Two-Handed Mastery: 12% more with a two-handed weapon");
         if ((tags & TagBit(TAG_MELEE)) && t.Has(KEY_SHIELD_AND_HAMMER))
-            line(OneHandAndShield(player), "Shield and Hammer: +10% with a one-hander and a shield");
+            line(OneHandAndShield(player), "Shield and Hammer: 10% more with a one-hander and a shield");
         if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND))
-            line(TwoHanded(player), Format("Heavy Hand: +%d%% with a two-handed weapon", 5 * t.Rank(KEY_HEAVY_HAND)).c_str());
+            line(TwoHanded(player), Format("Heavy Hand: %d%% more with a two-handed weapon", 5 * t.Rank(KEY_HEAVY_HAND)).c_str());
         if (tags & TagBit(TAG_HOLY))
         {
             if (t.Has(KEY_HOLY_WEAPONS))
-                line(true, Format("Holy Weapons: +%d%% from your Strength", 3 * (int32(player->GetStat(STAT_STRENGTH)) / 10)).c_str());
+                line(true, Format("Holy Weapons: +%d%% increased from your Strength", 3 * (int32(player->GetStat(STAT_STRENGTH)) / 10)).c_str());
             if (t.Has(KEY_LIGHTFORGED))
-                line(true, "Lightforged: +30%");
+                line(true, "Lightforged: 30% more");
             if (t.Has(KEY_RIGHTEOUS_FURY))
-                line(false, "Righteous Fury: +20% with three or more enemies within 8 yards");
+                line(false, "Righteous Fury: 20% more with three or more enemies within 8 yards");
             if (t.Has(KEY_SEARING_LIGHT))
-                line(false, Format("Searing Light: +%d%% on consecrated enemies", 5 * t.Rank(KEY_SEARING_LIGHT)).c_str());
+                line(false, Format("Searing Light: %d%% more on consecrated enemies", 5 * t.Rank(KEY_SEARING_LIGHT)).c_str());
         }
         if (t.Has(KEY_CRUSADE))
-            line(false, "Crusade: +4% per kill in the last 5 sec, up to 10 kills");
+            line(false, "Crusade: 4% more per kill in the last 5 sec, up to 10 kills");
         // The item affixes' bonuses against a kind of enemy.
         if (t.elitePct)
-            line(false, Format("Gear: +%d%% to elites and bosses", t.elitePct).c_str());
+            line(false, Format("Gear: +%d%% increased to elites and bosses", t.elitePct).c_str());
         static char const* const TYPE_NAME[16] = { "", "Beasts", "Dragonkin", "Demons", "Elementals", "Giants", "Undead",
                                                    "Humanoids", "Critters", "Mechanicals", "", "", "", "", "", "" };
         for (uint32 type = 1; type < 16; ++type)
             if (t.slaying[type] && TYPE_NAME[type][0])
-                line(false, Format("Gear: +%d%% to %s", t.slaying[type], TYPE_NAME[type]).c_str());
+                line(false, Format("Gear: +%d%% increased to %s", t.slaying[type], TYPE_NAME[type]).c_str());
         if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
-            line(false, Format("Momentum: +%d%% per hit in a row, up to 5", int32(t.Rank(KEY_MOMENTUM))).c_str());
+            line(false, Format("Momentum: %d%% more per hit in a row, up to 5", int32(t.Rank(KEY_MOMENTUM))).c_str());
         if (t.Has(KEY_SENTENCE_PASSED))
-            line(false, "Sentence Passed: +15% on stunned enemies");
+            line(false, "Sentence Passed: 15% more on stunned enemies");
         if (tags & TagBit(TAG_AREA))
         {
             bool const melee = (tags & TagBit(TAG_MELEE)) != 0;
@@ -1046,6 +1124,30 @@ namespace Arpg
                                  player->GetFloatValue(PLAYER_CRIT_PERCENTAGE)));
         if (spell)
             out.push_back(Format("|cffffffffSpell damage %d|r", player->SpellBaseDamageBonusDone(SpellSchoolMask(schools))));
+
+        // The bonuses that apply now: one sum of increased, each more on its own; then crits,
+        // added damage and ailments (Arpg/ArpgDamage.h).
+        if (std::shared_ptr<WebTotals const> totals = TotalsOf(player))
+        {
+            SpellEntry const* sample = nullptr;
+            if (skill != SKILL_STRIKE)
+                for (auto const& [id, known] : player->GetSpellMap())
+                    if (known.state != PLAYERSPELL_REMOVED && !known.disabled)
+                        if (SpellEntry const* info = sSpellTemplate.LookupEntry<SpellEntry>(id))
+                            if (SkillOfSpell(player->getClass(), info) == SkillId(skill))
+                            {
+                                sample = info;
+                                break;
+                            }
+            std::vector<std::string> why;
+            DamageParts const parts = DamagePartsFor(player, *totals, nullptr, sample, tags, &why);
+            out.push_back(Format("|cffffd200Damage|r |cffffffffx%.1f size, +%d%% increased, x%.2f more|r",
+                                 PowerScale(player), parts.increased, parts.more));
+            out.push_back(Format("  %s+%d%% increased|r %s(its tags, above)|r", SHEET_ARPG, TagSum(*totals, tags & ~TagBit(TAG_HEAL)), SHEET_NOTE));
+            for (std::string const& line : why)
+                out.push_back("  " + line);
+            HitExtraLines(player, sample, tags, out);
+        }
 
         // An estimate: the swing's, or the skill's best known rank's direct or periodic damage, with
         // every bonus above, before the target's armour, resistances and its own modifiers.
@@ -1300,9 +1402,11 @@ namespace Arpg
             std::vector<Unit*> foes = NearestFoes(player, player, LIGHTFORGED_RANGE, 1);
             if (!foes.empty())
             {
-                SendHolyBolt(player, foes.front(), amount);
+                // The heal's size turned into damage's (Arpg/ArpgDamage.h).
+                uint32 const dealt = ToDamage(player, foes.front(), amount);
+                SendHolyBolt(player, foes.front(), dealt);
                 ReportProc(player, PROC_DAMAGE, 0, "Lightforged", "turns the heal into a Holy bolt at %s for %u.",
-                           foes.front()->GetName(), amount);
+                           foes.front()->GetName(), dealt);
             }
         }
     }
@@ -1319,7 +1423,7 @@ namespace Arpg
         if (damage && attacker && victim && attacker != victim && attacker->GetTypeId() == TYPEID_PLAYER && Active(attacker))
             if (std::shared_ptr<WebTotals const> dealt = TotalsOf(attacker))
                 if ((dealt->lifeLeech > 0 || dealt->manaLeech > 0) && attacker->CanAttack(victim) && victim->IsAlive())
-                    Leech(static_cast<Player*>(attacker), *dealt, std::min<uint32>(damage, victim->GetHealth()));
+                    Leech(static_cast<Player*>(attacker), *dealt, FromDamage(attacker, victim, std::min<uint32>(damage, victim->GetHealth())));
         // A hit taken is fighting: the rest waits.
         if (damage && victim && attacker != victim && Active(victim))
         {
@@ -1412,7 +1516,7 @@ namespace Arpg
             OnProcSwing(attacker, victim, crit, damage);
         // Rune of Leech in Strike.
         if (damage && attacker->IsAlive() && HasRune(player, SKILL_STRIKE, RUNE_LEECH))
-            ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, damage * RUNE_LEECH_PCT / 100));
+            ProcHeal(attacker, "Rune of Leech", std::max<uint32>(1, FromDamage(attacker, victim, damage) * RUNE_LEECH_PCT / 100));
 
         if (t.Has(KEY_MOMENTUM) && damage)
         {
@@ -1495,14 +1599,14 @@ namespace Arpg
 
         // Rune of Leech in the skill.
         if (dealt && skill != SKILL_NONE && caster->IsAlive() && HasRune(player, skill, RUNE_LEECH))
-            ProcHeal(caster, "Rune of Leech", std::max<uint32>(1, dealt * RUNE_LEECH_PCT / 100));
+            ProcHeal(caster, "Rune of Leech", std::max<uint32>(1, FromDamage(caster, victim, dealt) * RUNE_LEECH_PCT / 100));
 
         if (skill == SKILL_SEALS)
         {
             if (t.Has(KEY_MANA_STRIKE))
                 ProcMana(player, "Mana Strike", player->GetMaxPower(POWER_MANA) * t.Rank(KEY_MANA_STRIKE) / 100);
             if (t.Has(KEY_LIGHT_OF_THE_CRUSADER) && player->IsAlive())
-                ProcHeal(player, "Light of the Crusader", std::max<uint32>(1, dealt * CRUSADER_LIGHT_PCT / 100));
+                ProcHeal(player, "Light of the Crusader", std::max<uint32>(1, FromDamage(caster, victim, dealt) * CRUSADER_LIGHT_PCT / 100));
             if (t.Has(KEY_SACRED_SEAL) && victim->IsAlive() && Consecrated(victim, caster))
             {
                 StrikeFoe(caster, victim, spellInfo, spell->GetSchoolMask(), dealt);
@@ -1543,7 +1647,7 @@ namespace Arpg
         float const ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
         if (t.Has(KEY_HOLY_HAMMER) && target->IsAlive())
         {
-            uint32 const amount = std::max<uint32>(1, uint32(ap * (0.15f + 0.15f * t.Rank(KEY_HOLY_HAMMER))));
+            uint32 const amount = std::max<uint32>(1, ToDamage(caster, target, uint32(ap * (0.15f + 0.15f * t.Rank(KEY_HOLY_HAMMER)))));
             StrikeFoe(caster, target, spellInfo, SPELL_SCHOOL_MASK_HOLY, amount);
             ReportProc(caster, PROC_DAMAGE, 0, "Holy Hammer", "adds %u Holy to the hammer.", amount);
         }
@@ -1556,10 +1660,11 @@ namespace Arpg
         }
         if (t.Has(KEY_BLESSED_HAMMER))
         {
-            uint32 const amount = std::max<uint32>(1, uint32(ap * 0.5f));
+            uint32 const flat = std::max<uint32>(1, uint32(ap * 0.5f));
+            uint32 const amount = ToDamage(caster, nullptr, flat);
             std::vector<Unit*> const foes = NearestFoes(caster, caster, BLESSED_RANGE, BLESSED_COUNT);
             for (Unit* unit : foes)
-                SendBolt(player, unit, spellInfo, SPELL_SCHOOL_MASK_HOLY, amount);
+                SendBolt(player, unit, spellInfo, SPELL_SCHOOL_MASK_HOLY, ToDamage(caster, unit, flat));
             if (!foes.empty())
                 ReportProc(caster, PROC_DAMAGE, 0, "Blessed Hammer", "throws %u spinning %s for %u Holy.",
                            uint32(foes.size()), foes.size() == 1 ? "hammer" : "hammers", amount);

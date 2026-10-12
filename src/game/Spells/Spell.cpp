@@ -30,6 +30,8 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgProcs.h"
+#include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgTags.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -1352,6 +1354,10 @@ void Spell::DoAllEffectOnTarget(TargetInfo* target)
             // ARPG: a hit or a crit may ready another skill (Arpg/ArpgProcs.h).
             Arpg::OnProcSpellHit(this, affectiveCaster, unitTarget, (spellDamageInfo.HitInfo & SPELL_HIT_TYPE_CRIT) != 0, false,
                                  spellDamageInfo.damage);
+            // ARPG: the hit's added damage and ailments; a unique's added hit has none (Arpg/ArpgDamage.h).
+            if (!IsArpgSecondary())
+                Arpg::OnHitLanded(affectiveCaster, unitTarget, m_spellInfo, Arpg::TagsOf(m_spellInfo), spellDamageInfo.damage,
+                                  (spellDamageInfo.HitInfo & SPELL_HIT_TYPE_CRIT) != 0);
         }
 
         // Bloodthirst

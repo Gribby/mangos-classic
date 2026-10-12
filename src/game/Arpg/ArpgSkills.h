@@ -120,6 +120,16 @@ namespace Arpg
     // Skill points a character of `level` has: two a level from 2 to 51.
     uint32 SkillPointsFor(uint32 level);
 
+    // The levels `player`'s gear gives skill `skill` ("+1 to all Holy skills"): its cap is
+    // SKILL_CAP more by them, and it has that many more points, spendable in it alone.
+    uint8 GearSkillLevels(Player const* player, uint8 skill);
+
+    // Every second: send the skills again when gear's skill levels changed (their caps and points).
+    void UpdateSkillGear(Player* player);
+
+    // The skills in `player`'s slots, in slot order.
+    std::vector<uint8> SlottedSkills(Player const* player);
+
     // The skill `spellInfo` belongs to for `classId` (nullptr: the swing, Strike); SKILL_NONE for none.
     SkillId SkillOfSpell(uint8 classId, SpellEntry const* spellInfo);
 

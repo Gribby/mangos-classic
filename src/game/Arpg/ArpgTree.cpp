@@ -813,6 +813,8 @@ namespace Arpg
             SendTree(player);
             SendSkills(player);
         }
+        else
+            UpdateSkillGear(player);
         PlayerWeb const w = WebFor(player);
         if (!w.arpg || w.level == player->GetLevel())
             return;

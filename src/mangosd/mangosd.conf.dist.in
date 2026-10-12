@@ -1858,6 +1858,17 @@ Dummy.Debug2 = 0
 #        An open-world elite's health against one player; each group member near adds PlayerHealth.
 #        Default: 0.5
 #
+#    Arpg.Power.PerLevel
+#        ARPG-sized numbers: an ARPG player's (and its pets') damage to creatures is multiplied by
+#        1 + PerLevel per level past the first (6.9 at 60 by default), and every creature's health
+#        by the same at its own level. 0 keeps vanilla's sizes.
+#        Default: 0.1
+#
+#    Arpg.Power.HealthGrowth
+#        Creature health grows by this much more at level 60 (a share of that at lower levels), for
+#        the increased and more damage, added damage and ailments a character builds up.
+#        Default: 0.5
+#
 ###################################################################################################
 
 Arpg.Enable = 0
@@ -1871,3 +1882,5 @@ Arpg.Dungeons = 1
 Arpg.Dungeons.SoloHealth = 0.35
 Arpg.Dungeons.PlayerHealth = 0.16
 Arpg.Dungeons.EliteSoloHealth = 0.5
+Arpg.Power.PerLevel = 0.1
+Arpg.Power.HealthGrowth = 0.5

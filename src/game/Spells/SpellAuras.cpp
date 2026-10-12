@@ -51,6 +51,7 @@
 #include "AI/ScriptDevAI/include/sc_grid_searchers.h"
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgDamage.h"
 
 #define NULL_AURA_SLOT 0xFF
 
@@ -4688,6 +4689,8 @@ void Aura::PeriodicTick()
                 modOwner->ApplySpellMod(GetId(), SPELLMOD_MULTIPLE_VALUE, multiplier);
             }
 
+            // ARPG: the damage was dealt at the ARPG's size; the heal is vanilla's (Arpg/ArpgDamage.h).
+            new_damage = int32(Arpg::FromDamage(caster, victim, uint32(std::max(0, new_damage))));
             uint32 heal = beneficiary->SpellHealingBonusTaken(caster, spellProto, GetEffIndex(), int32(new_damage * multiplier), DOT, GetStackAmount());
 
             int32 gain = caster->DealHeal(beneficiary, heal, spellProto);

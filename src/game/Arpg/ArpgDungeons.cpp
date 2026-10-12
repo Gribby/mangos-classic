@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
@@ -45,6 +46,10 @@ namespace
     // A raid's solo health is SoloHealth * RAID_SOLO_SIZE / its size; each extra player adds
     // RAID_PLAYER_SHARE of that.
     constexpr float RAID_SOLO_SIZE = 9.0f, RAID_PLAYER_SHARE = 0.75f;
+    // A raid creature's health grows by one more of itself per RAID_GROWTH_PER item levels its raid
+    // drops past RAID_GROWTH_FROM (Arpg/ArpgBases.h, RaidItemLevel).
+    constexpr int32 RAID_GROWTH_FROM = 60;
+    constexpr float RAID_GROWTH_PER = 20.0f;
     // Dungeon trash champions and rares, per mob.
     constexpr uint32 DUNGEON_CHAMPION_MIN_LEVEL = 8;
     constexpr uint32 DUNGEON_RARE_PER_MILLE = 15, DUNGEON_CHAMPION_PER_MILLE = 60;
@@ -150,6 +155,11 @@ namespace
         factor = std::max(0.01f, std::min(1.0f, factor));
         if (kind == KIND_INSTANCE)
             factor *= TierHealth(TierOf(creature->GetMap()));
+        // A raid's creatures grow with the gear it drops, as a character's damage does: a third
+        // more in Molten Core, about twice in Temple of Ahn'Qiraj, two and a half in Naxxramas.
+        if (kind == KIND_INSTANCE && map->IsRaid())
+            if (uint32 const itemLevel = RaidItemLevel(creature->GetMap()))
+                factor *= 1.0f + float(std::max<int32>(0, int32(itemLevel) - RAID_GROWTH_FROM)) / RAID_GROWTH_PER;
         return factor;
     }
 

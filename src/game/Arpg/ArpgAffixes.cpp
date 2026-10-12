@@ -5,6 +5,8 @@
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgCompare.h"
+#include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgPacks.h"
@@ -47,10 +49,13 @@ namespace
         AK_RESIST, AK_ALL_RESIST, AK_LIFE_LEECH, AK_MANA_LEECH, AK_HEALTH_REGEN, AK_MANA_REGEN,
         AK_DAMAGE_TAKEN, AK_THORNS, AK_VS_ELITES, AK_SLAYING, AK_GLOBE_HEAL, AK_GOLD_FIND, AK_XP,
         AK_MELEE_AREA, AK_SPELL_AREA,
+        // Damage (Arpg/ArpgDamage.h).
+        AK_ADDED_ATTACK, AK_ADDED_SPELL, AK_CRIT_DAMAGE, AK_AILMENT_CHANCE, AK_AILMENT_DAMAGE,
+        AK_SKILL_LEVEL,
     };
 
     // Where an affix may roll.
-    enum AffixWhere : uint8 { W_ANY, W_WEAPON, W_ARMOUR, W_FEET, W_SHIELD, W_JEWELLERY };
+    enum AffixWhere : uint8 { W_ANY, W_WEAPON, W_ARMOUR, W_FEET, W_SHIELD, W_JEWELLERY, W_OFFENCE, W_SKILL };
 
     struct AffixDef
     {
@@ -132,6 +137,36 @@ namespace
         { AK_MOVE, 0,              3, 8,  "+%d%% movement speed", W_FEET, 15 },
         { AK_GOLD_FIND, 0,         5, 25, "+%d%% gold found", W_ANY, 100 },
         { AK_XP, 0,                2, 6,  "+%d%% experience gained", W_JEWELLERY, 15 },
+
+        // Damage (Arpg/ArpgDamage.h), from the second pool on (POOL_DAMAGE). Added damage: its
+        // average at vanilla's size, shown and dealt at the ARPG's size for the item's level, as a
+        // range (60% to 140% of it). Weapons, gloves and jewellery (W_OFFENCE).
+        { AK_ADDED_ATTACK, TAG_PHYSICAL, 10, 24, "Adds %d to %d Physical damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_ATTACK, TAG_HOLY,     10, 24, "Adds %d to %d Holy damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_ATTACK, TAG_FIRE,     10, 24, "Adds %d to %d Fire damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_ATTACK, TAG_FROST,    10, 24, "Adds %d to %d Frost damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_ATTACK, TAG_NATURE,   10, 24, "Adds %d to %d Nature damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_ATTACK, TAG_SHADOW,   10, 24, "Adds %d to %d Shadow damage to attacks", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_HOLY,      12, 28, "Adds %d to %d Holy damage to spells", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_FIRE,      12, 28, "Adds %d to %d Fire damage to spells", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_FROST,     12, 28, "Adds %d to %d Frost damage to spells", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_ARCANE,    12, 28, "Adds %d to %d Arcane damage to spells", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_NATURE,    12, 28, "Adds %d to %d Nature damage to spells", W_OFFENCE, 0 },
+        { AK_ADDED_SPELL, TAG_SHADOW,    12, 28, "Adds %d to %d Shadow damage to spells", W_OFFENCE, 0 },
+        { AK_CRIT_DAMAGE, 0,              6, 20, "+%d%% critical strike multiplier", W_OFFENCE, 60 },
+        { AK_AILMENT_CHANCE, TAG_PHYSICAL, 4, 12, "%d%% chance to cause Bleeding", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_HOLY,     4, 12, "%d%% chance to Judge", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_FIRE,     4, 12, "%d%% chance to Ignite", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_FROST,    4, 12, "%d%% chance to Chill", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_ARCANE,   4, 12, "%d%% chance to Overload", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_NATURE,   4, 12, "%d%% chance to Poison", W_ANY, 40 },
+        { AK_AILMENT_CHANCE, TAG_SHADOW,   4, 12, "%d%% chance to Wither", W_ANY, 40 },
+        { AK_AILMENT_DAMAGE, 0,            6, 20, "+%d%% increased damage with ailments", W_ANY, 0 },
+        // Skill levels (Arpg/ArpgSkills.h): rare, on weapons and amulets; 2 from item level 69 or so.
+        { AK_SKILL_LEVEL, 0, 1, 1, "+%d to all Melee skills", W_SKILL, 2 },
+        { AK_SKILL_LEVEL, 1, 1, 1, "+%d to all Spell skills", W_SKILL, 2 },
+        { AK_SKILL_LEVEL, 2, 1, 1, "+%d to all Holy skills", W_SKILL, 2 },
+        { AK_SKILL_LEVEL, 3, 1, 1, "+%d to all Fire, Frost, Nature, Arcane and Shadow skills", W_SKILL, 2 },
     };
 
     // A value's share of the level 60 range, by item level: it grows by half again every nine
@@ -259,11 +294,20 @@ namespace
             case W_FEET:      return type == INVTYPE_FEET;
             case W_SHIELD:    return type == INVTYPE_SHIELD;
             case W_JEWELLERY: return jewel || type == INVTYPE_CLOAK || type == INVTYPE_HOLDABLE;
+            case W_OFFENCE:   return proto->Class == ITEM_CLASS_WEAPON || jewel || type == INVTYPE_HANDS || type == INVTYPE_HOLDABLE;
+            case W_SKILL:     return proto->Class == ITEM_CLASS_WEAPON || type == INVTYPE_NECK;
         }
         return false;
     }
 
-    std::vector<Rolled> Roll(ItemPrototype const* proto, uint32 seed, uint8 tier, uint8 storedRarity)
+    // The affixes a seed rolls from: an item stored before the damage affixes keeps rolling from
+    // the first pool (the first POOL_FIRST_COUNT affixes), so its affixes never change.
+    enum AffixPool : uint8 { POOL_FIRST = 0, POOL_DAMAGE = 1, POOL_CURRENT = POOL_DAMAGE };
+    constexpr size_t POOL_FIRST_COUNT = 61;
+
+    size_t PoolSize(uint8 pool);
+
+    std::vector<Rolled> Roll(ItemPrototype const* proto, uint32 seed, uint8 tier, uint8 storedRarity, uint8 affixPool)
     {
         std::vector<Rolled> out;
         if (!Takes(proto) || !seed)
@@ -284,9 +328,11 @@ namespace
         uint32 const count = unique ? (bracket >= RARITY_PURPLE ? 6u : 4u) : AffixCount(proto, tier, bracket, rng);
         float const scale = LevelScale(proto->ItemLevel) * TIER_SCALE[tier];
         std::vector<AffixDef const*> pool;
-        for (AffixDef const& def : AFFIXES)
-            if (Fits(def, proto))
-                pool.push_back(&def);
+        // A unique's affixes come from the first pool whatever its row's: every copy has the same.
+        size_t const size = PoolSize(unique ? uint8(POOL_FIRST) : affixPool);
+        for (size_t i = 0; i < size; ++i)
+            if (Fits(AFFIXES[i], proto))
+                pool.push_back(&AFFIXES[i]);
         for (uint32 i = 0; i < count && !pool.empty(); ++i)
         {
             size_t const pick = picks.Next() % pool.size();
@@ -310,12 +356,19 @@ namespace
         uint8 rarity = 0;         // its rolled rarity (0: from before rarities)
         std::string affixes;      // a crafted item's own list (Crafted), else empty: the seed's
         uint8 forged = 0;         // the shard crafts it has taken
+        uint8 pool = POOL_CURRENT; // the affixes its seed rolls from (AffixPool)
     };
 
     // A crafted item's affixes are kept as a list, not a seed: "v1|" then "id:value" by ";", an
     // affix's id its place in AFFIXES from 1 (the list only ever grows at its end).
     constexpr char const* CRAFTED = "v1|";
     constexpr uint16 AFFIX_COUNT = uint16(sizeof(AFFIXES) / sizeof(AFFIXES[0]));
+    static_assert(POOL_FIRST_COUNT < AFFIX_COUNT, "the first pool is the affixes before the damage ones");
+
+    size_t PoolSize(uint8 pool)
+    {
+        return pool == POOL_FIRST ? POOL_FIRST_COUNT : AFFIX_COUNT;
+    }
 
     uint16 IdOf(AffixDef const* def) { return uint16(def - AFFIXES + 1); }
 
@@ -362,7 +415,7 @@ namespace
             return {};
         if (IsCrafted(s.affixes))
             return Parsed(s.affixes);
-        return Roll(proto, s.seed, s.tier, s.rarity);
+        return Roll(proto, s.seed, s.tier, s.rarity, s.pool);
     }
 
     std::mutex sSeedsLock;
@@ -386,6 +439,7 @@ namespace
                 "item INT UNSIGNED NOT NULL, entry MEDIUMINT UNSIGNED NOT NULL, seed INT UNSIGNED NOT NULL, "
                 "tier TINYINT UNSIGNED NOT NULL DEFAULT 0, rarity TINYINT UNSIGNED NOT NULL DEFAULT 0, "
                 "affixes VARCHAR(255) NOT NULL DEFAULT '', forged TINYINT UNSIGNED NOT NULL DEFAULT 0, "
+                "pool TINYINT UNSIGNED NOT NULL DEFAULT 0, "
                 "PRIMARY KEY (item)) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='ARPG item affix seeds (Arpg/ArpgAffixes.h)'");
             // A table from before tiers or rarities: add the columns.
             for (char const* column : { "tier", "rarity" })
@@ -397,6 +451,10 @@ namespace
                                           "AND TABLE_NAME = 'character_arpg_item' AND COLUMN_NAME = 'affixes'"))
                 CharacterDatabase.DirectExecute("ALTER TABLE character_arpg_item ADD COLUMN affixes VARCHAR(255) NOT NULL DEFAULT '', "
                                                 "ADD COLUMN forged TINYINT UNSIGNED NOT NULL DEFAULT 0");
+            // And from before the damage affixes: its rows roll from the first pool.
+            if (!CharacterDatabase.PQuery("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                                          "AND TABLE_NAME = 'character_arpg_item' AND COLUMN_NAME = 'pool'"))
+                CharacterDatabase.DirectExecute("ALTER TABLE character_arpg_item ADD COLUMN pool TINYINT UNSIGNED NOT NULL DEFAULT 0");
             return true;
         }();
         (void)created;
@@ -412,9 +470,9 @@ namespace
         }
         std::string affixes = s.affixes;
         CharacterDatabase.escape_string(affixes);
-        CharacterDatabase.PExecute("REPLACE INTO character_arpg_item (item, entry, seed, tier, rarity, affixes, forged) "
-                                   "VALUES (%u, %u, %u, %u, %u, '%s', %u)", item->GetGUIDLow(), s.entry, s.seed,
-                                   uint32(s.tier), uint32(s.rarity), affixes.c_str(), uint32(s.forged));
+        CharacterDatabase.PExecute("REPLACE INTO character_arpg_item (item, entry, seed, tier, rarity, affixes, forged, pool) "
+                                   "VALUES (%u, %u, %u, %u, %u, '%s', %u, %u)", item->GetGUIDLow(), s.entry, s.seed,
+                                   uint32(s.tier), uint32(s.rarity), affixes.c_str(), uint32(s.forged), uint32(s.pool));
     }
 
     std::string Joined(std::vector<std::string> const& lines)
@@ -489,11 +547,25 @@ namespace
         return RARITY_PURPLE;
     }
 
-    std::string FormatAffix(Rolled const& r)
+    // Added damage's range at the ARPG's size for an item of `itemLevel` (Arpg/ArpgDamage.h).
+    void AddedRange(int32 average, uint32 itemLevel, int32& low, int32& high)
+    {
+        float const size = PowerScaleAt(std::min<uint32>(itemLevel, 60));
+        low = std::max<int32>(1, int32(average * 0.6f * size + 0.5f));
+        high = std::max<int32>(low, int32(average * 1.4f * size + 0.5f));
+    }
+
+    std::string FormatAffix(Rolled const& r, uint32 itemLevel)
     {
         char value[16];
         char buf[128];
-        if (r.def->tenths)
+        if (r.def->kind == AK_ADDED_ATTACK || r.def->kind == AK_ADDED_SPELL)
+        {
+            int32 low, high;
+            AddedRange(r.value, itemLevel, low, high);
+            std::snprintf(buf, sizeof(buf), r.def->format, int(low), int(high));
+        }
+        else if (r.def->tenths)
         {
             std::snprintf(value, sizeof(value), "%d.%d", int(r.value / 10), int(r.value % 10));
             std::snprintf(buf, sizeof(buf), r.def->format, value);
@@ -532,7 +604,7 @@ namespace
         if (!rolled.empty() && tier)
             lines.push_back(std::string(TIER_COLOUR[tier]) + TierName(tier) + "|r");
         for (Rolled const& r : rolled)
-            lines.push_back(FormatAffix(r));
+            lines.push_back(FormatAffix(r, proto->ItemLevel));
         if (s.forged)
         {
             char buf[64];
@@ -644,14 +716,29 @@ namespace Arpg
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
         {
             Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-            if (!item || item->IsBroken())
-                continue;
+            if (item && !item->IsBroken())
+                AddAffixTotals(item, totals, 1);
+        }
+    }
+
+    uint32 AffixStateOf(Item const* item)
+    {
+        Seeded const s = SeedOf(item);
+        uint32 state = s.seed * 2654435761u ^ (uint32(s.tier) << 3) ^ (uint32(s.rarity) << 7) ^ (uint32(s.forged) << 11) ^
+                       (uint32(s.pool) << 15);
+        state ^= uint32(std::hash<std::string>()(s.affixes));
+        return state;
+    }
+
+    void AddAffixTotals(Item const* item, WebTotals& totals, int32 sign)
+    {
+        {
             Seeded const seeded = SeedOf(item);
             if (!seeded.seed)
-                continue;
+                return;
             for (Rolled const& r : AffixesOf(item->GetProto(), seeded))
             {
-                int32 const v = r.value;
+                int32 const v = r.value * sign;
                 uint8 const p = r.def->param;
                 switch (r.def->kind)
                 {
@@ -690,6 +777,20 @@ namespace Arpg
                     case AK_XP: totals.xpPct += v; break;
                     case AK_MELEE_AREA: totals.meleeAreaPct += v; break;
                     case AK_SPELL_AREA: totals.spellAreaPct += v; break;
+                    // Added damage at the ARPG's size for the item's level, its average.
+                    case AK_ADDED_ATTACK:
+                    case AK_ADDED_SPELL:
+                        if (p < 7)
+                        {
+                            int32 low, high;
+                            AddedRange(r.value, item->GetProto()->ItemLevel, low, high);
+                            (r.def->kind == AK_ADDED_ATTACK ? totals.addedAttack : totals.addedSpell)[p] += sign * ((low + high) / 2);
+                        }
+                        break;
+                    case AK_CRIT_DAMAGE: totals.critDamagePct += v; break;
+                    case AK_AILMENT_CHANCE: if (p < 7) totals.ailmentChance[p] += v; break;
+                    case AK_AILMENT_DAMAGE: totals.ailmentPct += v; break;
+                    case AK_SKILL_LEVEL: if (p < 4) totals.skillLevel[p] += v; break;
                 }
             }
         }
@@ -716,7 +817,7 @@ namespace Arpg
         // By the item's holder now (a trade or the mail moves it), and only for the item the seed
         // was rolled for: a guid reused after a crash, or a row left by a sold item, takes none.
         if (auto result = CharacterDatabase.PQuery(
-                    "SELECT a.item, a.seed, a.entry, a.tier, a.rarity, a.affixes, a.forged FROM character_arpg_item a JOIN item_instance i ON i.guid = a.item "
+                    "SELECT a.item, a.seed, a.entry, a.tier, a.rarity, a.affixes, a.forged, a.pool FROM character_arpg_item a JOIN item_instance i ON i.guid = a.item "
                     "WHERE i.owner_guid = %u AND i.itemEntry = a.entry", player->GetGUIDLow()))
         {
             do
@@ -733,6 +834,7 @@ namespace Arpg
                 s.rarity = uint8(std::min<uint32>(fields[4].GetUInt32(), RARITY_UNIQUE));
                 s.affixes = fields[5].GetCppString();
                 s.forged = uint8(fields[6].GetUInt32());
+                s.pool = uint8(std::min<uint32>(fields[7].GetUInt32(), POOL_CURRENT));
                 {
                     std::lock_guard<std::mutex> guard(sSeedsLock);
                     sSeeds[low] = s;
@@ -764,6 +866,8 @@ namespace Arpg
                     addUnseeded(container->GetItemByPos(uint8(i)));
         SendLines(player, lines);
         RefreshTotals(player);
+        // A fresh hello (a reconnect) is sent its comparisons again (Arpg/ArpgCompare.h).
+        ForgetCompare(player);
     }
 
     // --- Crafting (Arpg/ArpgCraft.h) ---
@@ -782,6 +886,20 @@ namespace Arpg
             case AK_THORNS:       return "Shard of Thorns";
             case AK_COST:         return "Shard of Thrift";
             case AK_DAMAGE_TAKEN: return "Shard of Warding";
+            case AK_CRIT_DAMAGE:  return "Shard of Ruin";
+            case AK_AILMENT_DAMAGE: return "Shard of Affliction";
+            case AK_SKILL_LEVEL:
+            {
+                static char const* const NAMES[4] = { "Shard of Arms", "Shard of Sorcery", "Shard of the Light", "Shard of the Elements" };
+                return NAMES[std::min<uint8>(def.param, 3)];
+            }
+            case AK_ADDED_ATTACK: return std::string("Shard of ") + TagName(Tag(def.param)) + " Strikes";
+            case AK_ADDED_SPELL:  return std::string("Shard of ") + TagName(Tag(def.param)) + " Spells";
+            case AK_AILMENT_CHANCE:
+            {
+                static char const* const NAMES[7] = { "Bleeding", "Judgement", "Ignition", "Chilling", "Overload", "Poison", "Withering" };
+                return std::string("Shard of ") + NAMES[std::min<uint8>(def.param, 6)];
+            }
             default: break;
         }
         // The line without its number: "+%d%% Holy damage" is a Shard of Holy damage.

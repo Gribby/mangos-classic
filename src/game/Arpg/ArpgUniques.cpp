@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgProcs.h"
+#include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
@@ -896,10 +897,11 @@ namespace Arpg
         SpellEntry const* bolt = sSpellTemplate.LookupEntry<SpellEntry>(HOLY_SHOCK_DAMAGE);
         if (!bolt)
             bolt = spell->m_spellInfo;
+        // A heal's size turned into damage's (Arpg/ArpgDamage.h).
+        uint32 const dealt = std::max<uint32>(1, ToDamage(player, foes.front(), amount / 2));
         RelayHit(player, caster->GetObjectGuid(), foes.front()->GetObjectGuid(), bolt, SPELL_SCHOOL_MASK_HOLY,
-                 std::max<uint32>(1, amount / 2), 0, 0.0f, GuidVector{});
-        ReportProc(player, PROC_DAMAGE, 0, "Dawnbringer", "sends a Holy bolt at %s for %u.", foes.front()->GetName(),
-                   std::max<uint32>(1, amount / 2));
+                 dealt, 0, 0.0f, GuidVector{});
+        ReportProc(player, PROC_DAMAGE, 0, "Dawnbringer", "sends a Holy bolt at %s for %u.", foes.front()->GetName(), dealt);
     }
 
     void UpdateKeystones(Player* player)
@@ -918,12 +920,14 @@ namespace Arpg
             if (aura->GetCasterGuid() != player->GetObjectGuid() || !proto->SpellName[0] ||
                     std::strncmp(proto->SpellName[0], "Retribution Aura", 16) != 0)
                 continue;
-            uint32 const damage = uint32(std::max(0, aura->GetModifier()->m_amount)) * 2;
+            uint32 const flat = uint32(std::max(0, aura->GetModifier()->m_amount)) * 2;
+            uint32 const damage = ToDamage(player, nullptr, flat);
             if (!damage)
                 return;
             std::vector<Unit*> const foes = NearestTo(player, player, MARTYRS_WARD_RANGE, BURST_MAX);
+            // At the ARPG's size against each creature (Arpg/ArpgDamage.h).
             for (Unit* unit : foes)
-                DealShare(player, unit, proto, SPELL_SCHOOL_MASK_HOLY, damage);
+                DealShare(player, unit, proto, SPELL_SCHOOL_MASK_HOLY, ToDamage(player, unit, flat));
             if (!foes.empty())
                 ReportProc(player, PROC_DAMAGE, 0, "Martyr's Ward", "pulses Holy at %u %s for %u.",
                            uint32(foes.size()), Plural(foes.size(), "enemy", "enemies"), damage);

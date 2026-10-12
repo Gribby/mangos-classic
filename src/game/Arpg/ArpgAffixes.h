@@ -77,6 +77,12 @@ namespace Arpg
     // Add the player's worn items' affixes to `totals`.
     void AddItemTotals(Player const* player, WebTotals& totals);
 
+    // Add one item's affixes to `totals` (`sign` -1: take them off), for a comparison.
+    void AddAffixTotals(Item const* item, WebTotals& totals, int32 sign);
+
+    // A number that changes whenever `item`'s affixes do (a craft, a new seed), for caches.
+    uint32 AffixStateOf(Item const* item);
+
     // An item went on or came off: refresh the totals, a moment later.
     void OnEquipChanged(Player* player, Item* item);
 

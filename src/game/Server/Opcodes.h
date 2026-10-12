@@ -895,10 +895,12 @@ enum Opcodes
     SMSG_ARPG_BOUNTIES                              = 0x34A,
     // ARPG: the crafting purse: orbs and shards (Arpg/ArpgCraft.h)
     SMSG_ARPG_PURSE                                 = 0x34B,
+    // ARPG: what a carried item would do to the skills' damage if worn (Arpg/ArpgCompare.h)
+    SMSG_ARPG_COMPARE                               = 0x34C,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x34C
+#define NUM_MSG_TYPES 0x34D
 
 /// Player state
 enum SessionStatus

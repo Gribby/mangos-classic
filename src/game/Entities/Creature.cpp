@@ -23,6 +23,7 @@
 #include "Globals/ObjectMgr.h"
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgDamage.h"
 #include "Globals/ObjectAccessor.h"
 #include "Entities/ObjectGuid.h"
 #include "Server/SQLStorages.h"
@@ -532,6 +533,9 @@ bool Creature::UpdateEntry(uint32 Entry, const CreatureData* data /*=nullptr*/, 
         if (data)
         {
             uint32 curhealth = data->spawnTemplate->curHealth > 0 ? data->spawnTemplate->curHealth : GetMaxHealth();
+            // ARPG: a spawn's stored health grows as its maximum did (Arpg/ArpgDamage.h).
+            if (data->spawnTemplate->curHealth > 0)
+                curhealth = std::min(GetMaxHealth(), uint32(curhealth * Arpg::CreatureHealthScale(GetLevel())));
             SetHealth(m_deathState == ALIVE ? curhealth : 0);
             if (GetPowerType() == POWER_MANA)
             {
@@ -1425,6 +1429,9 @@ void Creature::SelectLevel(uint32 forcedLevel /*= USE_DEFAULT_DATABASE_LEVEL*/)
     }
 
     health *= _GetHealthMod(rank); // Apply custom config setting
+    // ARPG: creature health grows with the ARPG's damage scale (Arpg/ArpgDamage.h).
+    if (!IsPet())
+        health = uint32(health * Arpg::CreatureHealthScale(level));
     if (health < 1)
         health = 1;
 

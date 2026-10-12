@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
@@ -52,8 +53,11 @@ namespace
     constexpr float FOLLOWER_SCALE = 0.85f;
     // Followers wander this far from where they appeared, if their leader wanders.
     constexpr float FOLLOWER_WANDER = 3.0f;
-    // A pack member this far from the one pulled doesn't join in.
+    // How far a test pack's leader is looked for (DevFormPack).
     constexpr float AGGRO_REACH = 40.0f;
+    // A pack member joins a fight only within this many yards of the one pulled, in its sight: a
+    // camp is a pack, and a whole camp coming at once from across it was too much.
+    constexpr float PULL_REACH = 20.0f;
     // Formation waits this long after the spawn, in ms, so the grid has finished loading.
     constexpr uint32 FORM_DELAY_MIN = 500, FORM_DELAY_MAX = 1500;
 
@@ -714,13 +718,13 @@ namespace Arpg
             if (striker.Has(AFFIX_COLD_ENCHANTED))
                 attacker->CastSpell(victim, SPELL_CHILLED, TRIGGERED_OLD_TRIGGERED);
             if (striker.Has(AFFIX_VAMPIRIC) && attacker->IsAlive())
-                attacker->ModifyHealth(int32(damage * VAMPIRIC_PCT / 100));
+                attacker->ModifyHealth(int32(damage * VAMPIRIC_PCT / 100 * CreatureHealthScale(attacker->GetLevel())));
         }
         // Blows on a thorned champion.
         Champion const struck = ChampionOf(victim);
         if (struck.Has(AFFIX_THORNS) && attacker->IsAlive())
             if (SpellEntry const* thorns = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_THORNS))
-                StrikeFoe(victim, attacker, thorns, SPELL_SCHOOL_MASK_NATURE, std::max<uint32>(1, damage * THORNS_PCT / 100));
+                StrikeFoe(victim, attacker, thorns, SPELL_SCHOOL_MASK_NATURE, std::max<uint32>(1, FromDamage(attacker, victim, damage) * THORNS_PCT / 100));
     }
 
     void SendNearbyChampions(Player* player)
@@ -794,7 +798,7 @@ namespace Arpg
         {
             Creature* other = member->GetMap()->GetCreature(guid);
             if (!other || other == member || !other->IsAlive() || other->IsInCombat() || !other->AI() ||
-                    !other->IsWithinDistInMap(member, AGGRO_REACH))
+                    !other->IsWithinDistInMap(member, PULL_REACH) || !other->IsWithinLOSInMap(member))
                 continue;
             other->AI()->AttackStart(enemy);
         }

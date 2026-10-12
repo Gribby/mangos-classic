@@ -174,6 +174,15 @@ namespace Arpg
         int32 globeHealPct = 0;      // healing from globes and the flask
         int32 goldFindPct = 0;
         int32 xpPct = 0;
+        // Damage (Arpg/ArpgDamage.h), by damage tag (TAG_PHYSICAL .. TAG_SHADOW).
+        int32 critDamagePct = 0;     // critical strike multiplier, every hit
+        int32 addedAttack[7] = {};   // damage added to attacks, its average at the ARPG's size
+        int32 addedSpell[7] = {};    // damage added to spells
+        int32 ailmentChance[7] = {}; // % chance to inflict the type's ailment
+        int32 ailmentPct = 0;        // increased damage with ailments
+        // Skill levels from gear (Arpg/ArpgSkills.h, GearSkillLevels): to all Melee, Spell, Holy,
+        // and elemental (Fire, Frost, Nature, Arcane or Shadow) skills.
+        int32 skillLevel[4] = {};
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers

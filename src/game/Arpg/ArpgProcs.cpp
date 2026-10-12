@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgProcs.h"
+#include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgUniques.h"
@@ -356,7 +357,9 @@ namespace
 
     // The effects done at once (heal, mana, damage): outside the lock, as a kill they cause trips
     // procs again (its row's cooldown, already set, stops a chain).
-    void Act(Player* player, ProcDef const& def, Unit* victim, uint32 amount)
+    // `flat`: `amount` is a blow taken or a heal, vanilla-sized: it hits each creature at the ARPG's
+    // size (Arpg/ArpgDamage.h); else it is a hit's damage, sized already.
+    void Act(Player* player, ProcDef const& def, Unit* victim, uint32 amount, bool flat)
     {
         auto foes = [&](WorldObject* centre, float range, Unit const* skip)
         {
@@ -366,15 +369,15 @@ namespace
                     out.push_back(unit);
             return out;
         };
-        auto strike = [&](std::vector<Unit*> const& units, uint32 look, uint32 school, uint32 dealt, char const* verb)
+        auto strike = [&](std::vector<Unit*> const& units, uint32 look, uint32 school, uint32 dealt, char const* verb, bool size)
         {
             SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(look);
             if (!spell || units.empty() || !dealt)
                 return;
             for (Unit* unit : units)
-                StrikeFoe(player, unit, spell, school, dealt);
+                StrikeFoe(player, unit, spell, school, size ? ToDamage(player, unit, dealt) : dealt);
             ReportProc(player, PROC_DAMAGE, 0, def.name, "%s %u %s for %u.", verb, uint32(units.size()),
-                       units.size() == 1 ? "enemy" : "enemies", dealt);
+                       units.size() == 1 ? "enemy" : "enemies", size ? ToDamage(player, nullptr, dealt) : dealt);
         };
         switch (def.effect)
         {
@@ -388,9 +391,9 @@ namespace
             {
                 if (!victim)
                     break;
-                uint32 const cap = player->GetMaxHealth() * EXPLODE_CAP_PCT / 100;
+                uint32 const cap = ToDamage(player, victim, player->GetMaxHealth() * EXPLODE_CAP_PCT / 100);
                 uint32 const dealt = std::min(cap, victim->GetMaxHealth() * uint32(def.value) / 100);
-                strike(foes(victim, EXPLODE_RANGE, victim), EXPLODE_LOOK, SPELL_SCHOOL_MASK_FIRE, dealt, "bursts onto");
+                strike(foes(victim, EXPLODE_RANGE, victim), EXPLODE_LOOK, SPELL_SCHOOL_MASK_FIRE, dealt, "bursts onto", false);
                 break;
             }
             case EFFECT_ARC:
@@ -401,11 +404,11 @@ namespace
                 std::sort(closest.begin(), closest.end(), [victim](Unit* a, Unit* b) { return victim->GetDistance(a) < victim->GetDistance(b); });
                 if (closest.size() > ARC_COUNT)
                     closest.resize(ARC_COUNT);
-                strike(closest, ARC_LOOK, SPELL_SCHOOL_MASK_NATURE, amount * uint32(def.value) / 100, "arcs to");
+                strike(closest, ARC_LOOK, SPELL_SCHOOL_MASK_NATURE, amount * uint32(def.value) / 100, "arcs to", flat);
                 break;
             }
             case EFFECT_NOVA:
-                strike(foes(player, NOVA_RANGE, nullptr), NOVA_LOOK, SPELL_SCHOOL_MASK_HOLY, amount * uint32(def.value) / 100, "strikes");
+                strike(foes(player, NOVA_RANGE, nullptr), NOVA_LOOK, SPELL_SCHOOL_MASK_HOLY, amount * uint32(def.value) / 100, "strikes", flat);
                 break;
             default:
                 break;
@@ -514,9 +517,11 @@ namespace
                     acts.push_back(i);
             }
         }
+        // A blow taken or a heal is vanilla-sized: Act sizes it for each creature it hits.
+        bool const flat = trigger == TRIG_STRUCK || trigger == TRIG_HEAL_CRIT;
         for (size_t i : acts)
             if (player->IsAlive())
-                Act(player, procs[i], victim, amount);
+                Act(player, procs[i], victim, amount, flat);
     }
 
     void Drop(Player* player, PlayerProcs& pp, size_t at)

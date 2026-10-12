@@ -39,6 +39,8 @@ struct SpellEntry;
 
 namespace Arpg
 {
+    struct WebTotals;
+
     // Apply the player's web totals: stats, armour, and the keystones that hold a state.
     void ApplyCharacter(Player* player);
 
@@ -50,6 +52,16 @@ namespace Arpg
 
     // The multiplier on damage `attacker` deals with `spellInfo` (nullptr: a weapon swing).
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo);
+
+    // The same for a hit of `tags` (an added hit of another damage type than `spellInfo`'s): the
+    // power scale, one sum of increased bonuses, each more bonus on its own, and the victim's
+    // Wither (Arpg/ArpgDamage.h).
+    float DamageModForTags(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo, uint32 tags);
+
+    // The increased sum and the more product on a hit of `tags` by `player` with `spellInfo`, with
+    // totals `t` (a set the player may not have yet: Arpg/ArpgCompare.h), against no enemy in
+    // particular.
+    void DamagePartsOf(Player const* player, WebTotals const& t, SpellEntry const* spellInfo, uint32 tags, int32& increased, float& more);
 
     // The item affixes' experience bonus for `gainer`, a multiplier.
     float XpGainMod(Unit const* gainer);

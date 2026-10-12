@@ -39,6 +39,7 @@
 #include "Entities/Totem.h"
 #include "AI/BaseAI/CreatureAI.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgDamage.h"
 #include "BattleGround/BattleGroundMgr.h"
 #include "BattleGround/BattleGround.h"
 #include "Tools/Language.h"
@@ -1921,7 +1922,8 @@ void Spell::EffectHealthLeech(SpellEffectIndex eff_idx)
     if (Player* modOwner = m_caster->GetSpellModOwner())
         modOwner->ApplySpellMod(m_spellInfo->Id, SPELLMOD_MULTIPLE_VALUE, multiplier);
 
-    uint32 heal = uint32(damage * multiplier);
+    // ARPG: the damage was dealt at the ARPG's size; the heal is vanilla's (Arpg/ArpgDamage.h).
+    uint32 heal = uint32(Arpg::FromDamage(m_caster, unitTarget, uint32(damage)) * multiplier);
     if (m_caster->IsAlive())
     {
         heal = m_caster->SpellHealingBonusTaken(m_caster, m_spellInfo, eff_idx, heal, HEAL);

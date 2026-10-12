@@ -20,6 +20,7 @@
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
 #include "Spells/SpellMgr.h"
+#include "Util/Timer.h"
 
 #include <algorithm>
 #include <cstdarg>
@@ -126,9 +127,9 @@ namespace
                   Key(102, SKILL_NODE_MODIFIER, 0, 2, 101, 2, "Long Arm", "+1 yard melee reach per rank.", 12292, KEY_LONG_ARM),
                   Key(103, SKILL_NODE_CAPSTONE, 0, 3, 102, 1, "Whirling Strikes", "Every 4th swing also strikes every enemy around you, for 75% of the hit.", 1680, KEY_WHIRLING_STRIKES),
                   Key(104, SKILL_NODE_MODIFIER, 1, 1, 0, 4, "Quickened", "+4% attack speed per rank.", 19740, KEY_QUICKENED),
-                  Key(105, SKILL_NODE_MODIFIER, 1, 2, 104, 3, "Momentum", "Each swing that hits within 3 sec of the last gives +1% swing damage per rank, up to 5 hits.", 12294, KEY_MOMENTUM),
+                  Key(105, SKILL_NODE_MODIFIER, 1, 2, 104, 3, "Momentum", "Each swing that hits within 3 sec of the last gives 1% more swing damage per rank, up to 5 hits.", 12294, KEY_MOMENTUM),
                   Key(106, SKILL_NODE_CAPSTONE, 1, 3, 105, 1, "Crusader's Pace", "Your kills give +30% movement speed for 3 sec.", 2983, KEY_CRUSADERS_PACE),
-                  Key(107, SKILL_NODE_MODIFIER, 2, 1, 0, 4, "Heavy Hand", "+5% Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
+                  Key(107, SKILL_NODE_MODIFIER, 2, 1, 0, 4, "Heavy Hand", "5% more Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
                   Key(108, SKILL_NODE_TRANSFORMER, 2, 2, 107, 2, "Stagger", "Your swings have a 10% chance per rank to daze the enemy.", 1715, KEY_STAGGER),
                   Key(109, SKILL_NODE_CAPSTONE, 2, 3, 108, 1, "Shockwave", "Your swing critical strikes send a shockwave 10 yards ahead, for 40% of the hit.", 20549, KEY_SHOCKWAVE_STRIKE),
               } },
@@ -137,9 +138,9 @@ namespace
               {
                   Kit(201, 0, 1, 0, 3, "Sweeping Seal", "Seal of Righteousness strikes every enemy in front of you; the extras take 20/35/50%.", 20154,
                       KIT_ARC, 20154, { 0, 0, 0 }, { 0, 0, 0 }, { 20, 35, 50 }),
-                  Key(202, SKILL_NODE_MODIFIER, 0, 2, 201, 4, "Holy Edge", "+6% Seal damage per rank.", 20101, KEY_HOLY_EDGE),
+                  Key(202, SKILL_NODE_MODIFIER, 0, 2, 201, 4, "Holy Edge", "6% more Seal damage per rank.", 20101, KEY_HOLY_EDGE),
                   Key(203, SKILL_NODE_CAPSTONE, 0, 3, 202, 1, "Twin Seals", "Two different Seals can be on you at once.", 20164, KEY_TWIN_SEALS),
-                  Key(204, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Commanding Seal", "+10% Seal of Command damage per rank.", 20375, KEY_COMMANDING_SEAL),
+                  Key(204, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Commanding Seal", "10% more Seal of Command damage per rank.", 20375, KEY_COMMANDING_SEAL),
                   Kit(205, 1, 2, 204, 2, "Command Arc", "Seal of Command strikes every enemy in front of you, at 40/60%.", 20467,
                       KIT_ARC, 20375, { 0, 0 }, { 0, 0 }, { 40, 60 }),
                   Key(206, SKILL_NODE_MODIFIER, 1, 3, 205, 3, "Relentless", "Seal of Command strikes 1 more time a minute per rank.", 20424, KEY_RELENTLESS),
@@ -156,8 +157,8 @@ namespace
                   Key(303, SKILL_NODE_CAPSTONE, 0, 3, 302, 1, "Final Verdict", "A kill with Judgement readies Judgement at once.", 20184, KEY_FINAL_VERDICT),
                   Kit(304, 1, 1, 0, 3, "Hammer of Light", "Judgement bursts onto enemies within 4/6/8 yards of its target, at 40%.", 24275,
                       KIT_BURST, 20271, { 0, 0, 0 }, { 4, 6, 8 }, { 40, 40, 40 }),
-                  Key(305, SKILL_NODE_MODIFIER, 1, 2, 304, 4, "Radiance", "+8% Judgement damage per rank.", 20218, KEY_RADIANCE),
-                  Key(306, SKILL_NODE_CAPSTONE, 1, 3, 305, 1, "Sentence", "Judgement deals double damage to stunned enemies.", 879, KEY_SENTENCE),
+                  Key(305, SKILL_NODE_MODIFIER, 1, 2, 304, 4, "Radiance", "8% more Judgement damage per rank.", 20218, KEY_RADIANCE),
+                  Key(306, SKILL_NODE_CAPSTONE, 1, 3, 305, 1, "Sentence", "Judgement deals 100% more damage to stunned enemies.", 879, KEY_SENTENCE),
                   Key(307, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Avenger", "Judgement no longer uses up your Seal, but its cooldown is doubled.", 25780, KEY_AVENGER),
                   Mod(308, 2, 2, 307, 3, "Swift Judgement", "-1 sec Judgement cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
                   Key(309, SKILL_NODE_MODIFIER, 2, 3, 308, 2, "Righteous Mind", "Judgement restores 5% of your maximum mana per rank.", 20166, KEY_RIGHTEOUS_MIND),
@@ -168,8 +169,8 @@ namespace
                   Mod(401, 0, 1, 0, 4, "Wide Blessing", "+10% Consecration radius per rank. Intellect widens it too.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 10),
                   Mod(402, 0, 2, 401, 3, "Lasting Ground", "+2 sec Consecration duration per rank.", 20925, SPELLMOD_DURATION, SPELLMOD_FLAT, 2000),
                   Key(403, SKILL_NODE_CAPSTONE, 0, 3, 402, 1, "Walking Consecration", "Your Consecration follows you.", 1044, KEY_WALKING_CONSECRATION),
-                  Key(404, SKILL_NODE_MODIFIER, 1, 1, 0, 4, "Burning Ground", "+8% Consecration damage per rank.", 26573, KEY_BURNING_GROUND),
-                  Key(405, SKILL_NODE_SYNERGY, 1, 2, 404, 2, "Searing Light", "Enemies standing in your Consecration take +5% Holy damage from you per rank.", 20218, KEY_SEARING_LIGHT),
+                  Key(404, SKILL_NODE_MODIFIER, 1, 1, 0, 4, "Burning Ground", "8% more Consecration damage per rank.", 26573, KEY_BURNING_GROUND),
+                  Key(405, SKILL_NODE_SYNERGY, 1, 2, 404, 2, "Searing Light", "Your Holy damage is 5% more per rank on enemies standing in your Consecration.", 20218, KEY_SEARING_LIGHT),
                   Key(406, SKILL_NODE_SYNERGY, 1, 3, 405, 1, "Sanctified", "Your Judgement on an enemy in your Consecration bursts onto enemies within 8 yards, at 50%.", 20271, KEY_SANCTIFIED),
                   Key(407, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hallowed Ground", "While you stand in your Consecration, you regain 1% of your health a second per rank.", 633, KEY_HALLOWED_GROUND),
                   Key(408, SKILL_NODE_SYNERGY, 2, 2, 407, 1, "Steadfast", "While you stand in your Consecration, you can't be stunned.", 498, KEY_STEADFAST),
@@ -186,14 +187,14 @@ namespace
                   Mod(505, 1, 2, 504, 3, "Long Stun", "+0.5 sec stun per rank.", 5588, SPELLMOD_DURATION, SPELLMOD_FLAT, 500),
                   Mod(506, 1, 3, 505, 3, "Quick Hammer", "-10 sec Hammer of Justice cooldown per rank.", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000),
                   Key(507, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Holy Hammer", "Hammer of Justice also deals Holy damage of 30/45/60% of your attack power.", 20218, KEY_HOLY_HAMMER),
-                  Key(508, SKILL_NODE_CAPSTONE, 2, 2, 507, 1, "Sentence Passed", "Stunned enemies take +15% damage from you.", 879, KEY_SENTENCE_PASSED),
+                  Key(508, SKILL_NODE_CAPSTONE, 2, 2, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned enemies.", 879, KEY_SENTENCE_PASSED),
               } },
             { SKILL_EXORCISM, CLASS_PALADIN, "Exorcism", "Holy fire at an enemy. Specialised, it strikes any foe, not only undead and demons.", 879, { "Exorcism" },
               { "Burning", "Chain", "Purge" },
               {
                   Kit(601, 0, 1, 0, 3, "Holy Fire", "Exorcism bursts onto enemies within 4/6/8 yards of its target, at 35%.", 2812,
                       KIT_BURST, 879, { 0, 0, 0 }, { 4, 6, 8 }, { 35, 35, 35 }),
-                  Mod(602, 0, 2, 601, 4, "Searing Word", "+10% Exorcism damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+                  Mod(602, 0, 2, 601, 4, "Searing Word", "10% more Exorcism damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
                   KitCap(603, 0, 3, 602, "Purging Light", "Exorcism's light passes through its target: every enemy within 10 yards behind it takes the full hit.", 19750,
                          KIT_FRAGMENTS, 879, 10, 10.0f, 100),
                   Kit(604, 1, 1, 0, 3, "Chain Exorcism", "Exorcism leaps to 1/2/3 more enemies within 10 yards, at 60%.", 20186,
@@ -210,7 +211,7 @@ namespace
               { "Radius", "Fury", "Zeal" },
               {
                   Mod(701, 0, 1, 0, 4, "Wide Wrath", "+12% Holy Wrath radius per rank.", 2812, SPELLMOD_RADIUS, SPELLMOD_PCT, 12),
-                  Mod(702, 0, 2, 701, 3, "Searing Wrath", "+10% Holy Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+                  Mod(702, 0, 2, 701, 3, "Searing Wrath", "10% more Holy Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
                   Key(703, SKILL_NODE_CAPSTONE, 0, 3, 702, 1, "Wrathful", "Holy Wrath fires on its own whenever 4 or more enemies are within 10 yards, every 12 sec at most.", 20925, KEY_WRATHFUL),
                   Mod(704, 1, 1, 0, 4, "Swift Wrath", "-8 sec Holy Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -8000),
                   Mod(705, 1, 2, 704, 3, "Quick Wrath", "-0.4 sec Holy Wrath cast time per rank.", 20166, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -400),
@@ -218,14 +219,14 @@ namespace
                       KIT_BURST, 2812, { 0, 0 }, { 4, 6 }, { 20, 30 }),
                   Mod(707, 2, 1, 0, 3, "Zealous Wrath", "-15% Holy Wrath mana cost per rank.", 20208, SPELLMOD_COST, SPELLMOD_PCT, -15),
                   Mod(708, 2, 2, 707, 3, "Righteous Wrath", "+5% Holy Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
-                  Mod(709, 2, 3, 708, 2, "Radiant Wrath", "+10% Holy Wrath damage per rank.", 19750, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
+                  Mod(709, 2, 3, 708, 2, "Radiant Wrath", "10% more Holy Wrath damage per rank.", 19750, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10),
               } },
             { SKILL_HAMMER_OF_WRATH, CLASS_PALADIN, "Hammer of Wrath", "Hurl a hammer at an enemy, at any health.", 24275, { "Hammer of Wrath" },
               { "Volley", "Pierce", "Execute" },
               {
                   Kit(801, 0, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
                       KIT_EXTRA_PROJECTILES, 24275, { 1, 2 }, { 15, 15 }, { 60, 60 }),
-                  Mod(802, 0, 2, 801, 4, "Weighted Hammer", "+8% Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8),
+                  Mod(802, 0, 2, 801, 4, "Weighted Hammer", "8% more Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8),
                   KitCap(803, 0, 3, 802, "Storm of Hammers", "Every 2nd Hammer of Wrath repeats for free along the same aim, at 60%.", 20185,
                          KIT_ECHO, 24275, 2, 0.0f, 60),
                   Kit(804, 1, 1, 0, 3, "Piercing Hammer", "Hammer of Wrath flies on through 2/4/10 enemies in its path, at 60%.", 20186,
@@ -234,7 +235,7 @@ namespace
                   Mod(806, 1, 3, 805, 3, "Swift Hammer", "-1 sec Hammer of Wrath cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
                   Mod(807, 2, 1, 0, 3, "Righteous Hammer", "+5% Hammer of Wrath critical strike chance per rank.", 20101, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
                   Mod(808, 2, 2, 807, 3, "Zealous Hammer", "-15% Hammer of Wrath mana cost per rank.", 20166, SPELLMOD_COST, SPELLMOD_PCT, -15),
-                  Key(809, SKILL_NODE_CAPSTONE, 2, 3, 808, 1, "Executioner", "Hammer of Wrath deals double damage to enemies below 20% health.", 879, KEY_EXECUTIONER),
+                  Key(809, SKILL_NODE_CAPSTONE, 2, 3, 808, 1, "Executioner", "Hammer of Wrath deals 100% more damage to enemies below 20% health.", 879, KEY_EXECUTIONER),
               } },
         };
         return skills;
@@ -428,6 +429,8 @@ namespace
         std::map<uint8, uint8> runes;         // runes held, socketed ones included
         std::map<uint8, uint8> sockets;       // by skill: the rune in its socket
         std::map<uint16, uint32> things;      // other held things (100 and up: raid key pieces)
+        std::map<uint8, uint8> gearSent;      // gear's skill levels the client was last sent
+        uint32 overSince = 0;                 // when more was first seen spent than allowed (0: not)
     };
 
     std::mutex sSkillsLock;
@@ -527,6 +530,10 @@ namespace
         CharacterDatabase.PExecute("REPLACE INTO character_arpg_codex (guid, page) VALUES (%u, %u)", player->GetGUIDLow(), uint32(node));
     }
 
+    // Points spent beyond what the gear and level allow are given back once that has lasted this
+    // long out of combat (SettleSkillPoints).
+    constexpr uint32 OVER_GRACE_MS = 10000;
+
     // A rune socket opens with this many points in the skill.
     constexpr uint32 SOCKET_POINTS = 10;
 
@@ -613,6 +620,51 @@ namespace
 
 namespace Arpg
 {
+    uint8 GearSkillLevels(Player const* player, uint8 skill)
+    {
+        std::shared_ptr<WebTotals const> totals = TotalsOf(player);
+        if (!totals || !FindSkill(player->getClass(), skill))
+            return 0;
+        // The skill's tags: its spells' the character knows (Strike: the swing's).
+        uint32 tags = skill == SKILL_STRIKE ? TagsOf(nullptr) : 0;
+        for (auto const& [id, known] : player->GetSpellMap())
+            if (known.state != PLAYERSPELL_REMOVED)
+                if (SpellEntry const* info = sSpellTemplate.LookupEntry<SpellEntry>(id))
+                    if (SkillOfSpell(player->getClass(), info) == SkillId(skill))
+                        tags |= TagsOf(info);
+        uint32 const elemental = TagBit(TAG_FIRE) | TagBit(TAG_FROST) | TagBit(TAG_NATURE) | TagBit(TAG_ARCANE) | TagBit(TAG_SHADOW);
+        int32 levels = 0;
+        if (tags & TagBit(TAG_MELEE))
+            levels += totals->skillLevel[0];
+        if (tags & TagBit(TAG_SPELL))
+            levels += totals->skillLevel[1];
+        if (tags & TagBit(TAG_HOLY))
+            levels += totals->skillLevel[2];
+        if (tags & elemental)
+            levels += totals->skillLevel[3];
+        return uint8(std::clamp(levels, 0, 20));
+    }
+
+    std::vector<uint8> SlottedSkills(Player const* player)
+    {
+        PlayerSkills const s = SkillsFor(player);
+        std::vector<uint8> out;
+        for (uint8 skill : s.slots)
+            if (skill)
+                out.push_back(skill);
+        return out;
+    }
+
+    void UpdateSkillGear(Player* player)
+    {
+        std::map<uint8, uint8> gear;
+        for (SkillDef const& skill : Skills())
+            if (skill.classId == player->getClass())
+                gear[skill.id] = GearSkillLevels(player, skill.id);
+        if (gear != SkillsFor(player).gearSent)
+            SendSkills(player);
+    }
+
     uint32 SkillPointsFor(uint32 level)
     {
         // One a level from the second: 19 at 20, 59 at 60, against 20 a skill in five slots, so
@@ -622,15 +674,99 @@ namespace Arpg
 
     bool SettleSkillPoints(Player* player)
     {
-        PlayerSkills const s = SkillsFor(player);
-        if (SpentIn(s) <= SkillPointsFor(player->GetLevel()) || player->IsInCombat())
+        // Each skill within its cap (gear's levels raise it), and the points beyond gear's within
+        // what the level gives. Gear taken off, or points rebalanced, gives back the deepest
+        // ranks first, one at a time, so the rest of the tree stays. Only once the excess has
+        // lasted OVER_GRACE_MS out of combat, with the character's totals (and so its gear) known:
+        // at login the gear's affixes load after the skills, and a weapon swap passes through
+        // a moment with neither weapon worn.
+        if (!TotalsOf(player))
+        {
+            Edit(player, [](PlayerSkills& e) { e.overSince = 0; });
             return false;
-        // More spent than the level gives (the points were rebalanced): every skill's back.
+        }
+        uint8 const classId = player->getClass();
+        uint32 const points = SkillPointsFor(player->GetLevel());
+        std::map<uint8, uint8> gear;
         for (SkillDef const& skill : Skills())
-            if (skill.classId == player->getClass() && SpentIn(s, skill.id))
-                ClearSkill(player, skill.id);
+            if (skill.classId == classId)
+                gear[skill.id] = GearSkillLevels(player, skill.id);
+        uint32 trimmed = 0;
+        for (int guard = 0; guard < 200; ++guard)
+        {
+            PlayerSkills const s = SkillsFor(player);
+            int over = -1;
+            uint32 own = 0, most = 0;
+            for (auto const& [id, levels] : gear)
+            {
+                uint32 const spent = SpentIn(s, id);
+                if (spent > SKILL_CAP + levels)
+                    over = id;
+                uint32 const beyond = spent > levels ? spent - levels : 0;
+                own += beyond;
+                if (over < 0 && beyond > most)
+                    most = beyond;
+            }
+            if (over < 0 && own > points)
+                for (auto const& [id, levels] : gear)
+                {
+                    uint32 const spent = SpentIn(s, id);
+                    if ((spent > levels ? spent - levels : 0) == most)
+                    {
+                        over = id;
+                        break;
+                    }
+                }
+            if (over < 0)
+            {
+                if (!trimmed)
+                    Edit(player, [](PlayerSkills& e) { e.overSince = 0; });
+                break;
+            }
+            if (!trimmed)
+            {
+                uint32 const now = WorldTimer::getMSTime();
+                uint32 since = s.overSince;
+                if (!since)
+                {
+                    Edit(player, [now](PlayerSkills& e) { e.overSince = now ? now : 1; });
+                    break;
+                }
+                if (player->IsInCombat() || WorldTimer::getMSTimeDiff(since, now) < OVER_GRACE_MS)
+                    break;
+            }
+            // The deepest ranked node of the skill with nothing ranked below it.
+            SkillDef const* skill = FindSkill(classId, uint8(over));
+            SkillNode const* leaf = nullptr;
+            for (SkillNode const& node : skill->nodes)
+            {
+                if (!s.ranks.count(node.id))
+                    continue;
+                bool parent = false;
+                for (SkillNode const& child : skill->nodes)
+                    parent = parent || (child.parent == node.id && s.ranks.count(child.id));
+                if (!parent && (!leaf || node.row > leaf->row))
+                    leaf = &node;
+            }
+            if (!leaf)
+                break;
+            uint8 const rank = s.ranks.at(leaf->id) - 1;
+            Edit(player, [&](PlayerSkills& e)
+            {
+                if (rank)
+                    e.ranks[leaf->id] = rank;
+                else
+                    e.ranks.erase(leaf->id);
+            });
+            SaveNode(player, leaf->id, rank);
+            ++trimmed;
+        }
+        if (!trimmed)
+            return false;
+        Edit(player, [](PlayerSkills& e) { e.overSince = 0; });
         RefreshTotals(player);
-        ChatHandler(player).SendSysMessage("|cffffd200Skill points were rebalanced: your skill trees' points are back to spend.|r");
+        ChatHandler(player).PSendSysMessage("|cffffd200%u skill %s given back: your gear or level no longer holds %s.|r",
+                                            trimmed, trimmed == 1 ? "point was" : "points were", trimmed == 1 ? "it" : "them");
         return true;
     }
 
@@ -748,7 +884,17 @@ namespace Arpg
 
         WorldPacket data(SMSG_ARPG_SKILLS, 512 + mine.size() * 1600);
         data << uint8(2);
-        data << uint16(SkillPointsFor(player->GetLevel()));
+        // Gear's skill levels add points, each spendable in its own skill alone.
+        std::map<uint8, uint8> gear;
+        uint32 gearPoints = 0;
+        for (SkillDef const* skill : mine)
+        {
+            gear[skill->id] = GearSkillLevels(player, skill->id);
+            if (SlotOf(s, skill->id) >= 0)
+                gearPoints += gear[skill->id];
+        }
+        Edit(player, [&](PlayerSkills& e) { e.gearSent = gear; });
+        data << uint16(SkillPointsFor(player->GetLevel()) + gearPoints);
         data << uint16(SpentIn(s));
         data << uint8(std::min<uint32>(player->GetLevel(), 255));
         data << uint8(SKILL_SLOTS);
@@ -762,7 +908,7 @@ namespace Arpg
             data << skill->name;
             data << skill->text;
             data << uint8(SpentIn(s, skill->id));
-            data << uint8(SKILL_CAP);
+            data << uint8(SKILL_CAP + gear[skill->id]);
             auto socket = s.sockets.find(skill->id);
             data << uint8(socket == s.sockets.end() ? 0 : socket->second);
             data << uint8(SOCKET_POINTS);
@@ -875,10 +1021,24 @@ namespace Arpg
             return refuse("sealed: its Codex page is unread");
         if (node->parent && !s.ranks.count(node->parent))
             return refuse("the node above it has no rank");
-        if (SpentIn(s, skill->id) >= SKILL_CAP)
+        // Gear's levels raise the cap, and are spent first in their own skill.
+        uint8 const levels = GearSkillLevels(player, skill->id);
+        uint32 const spent = SpentIn(s, skill->id);
+        if (spent >= uint32(SKILL_CAP) + levels)
             return refuse("the skill is at its cap");
-        if (SpentIn(s) >= SkillPointsFor(player->GetLevel()))
-            return refuse("no skill points left");
+        if (spent >= levels)
+        {
+            uint32 own = 0;
+            for (SkillDef const& other : Skills())
+                if (other.classId == player->getClass())
+                {
+                    uint32 const in = SpentIn(s, other.id);
+                    uint8 const theirs = GearSkillLevels(player, other.id);
+                    own += in > theirs ? in - theirs : 0;
+                }
+            if (own >= SkillPointsFor(player->GetLevel()))
+                return refuse("no skill points left");
+        }
         Edit(player, [&](PlayerSkills& e) { e.ranks[id] = rank + 1; });
         SaveNode(player, id, rank + 1);
         RefreshTotals(player);

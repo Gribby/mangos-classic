@@ -63,6 +63,8 @@
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgTags.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -2346,6 +2348,8 @@ void Unit::DealMeleeDamage(CalcDamageInfo* calcDamageInfo, bool durabilityLoss)
 
                 if (victim->GetTypeId() == TYPEID_PLAYER)
                     ((Player*)victim)->ApplySpellMod(spellProto->Id, SPELLMOD_DAMAGE, damage);
+                // ARPG: an ARPG player's damage shield hits at the ARPG's size (Arpg/ArpgDamage.h).
+                damage = Arpg::ToDamage(victim, this, damage);
 
                 // Calculate absorb resist ??? no data in opcode for this possibly unable to absorb or resist?
                 // uint32 absorb;
@@ -2729,6 +2733,8 @@ void Unit::AttackerStateUpdate(Unit* pVictim, WeaponAttackType attType, bool ext
     // ARPG: the Strike skill tree's swing nodes (Arpg/ArpgCharacter.h), and champions' melee
     // affixes (Arpg/ArpgPacks.h).
     Arpg::OnSwingHit(this, pVictim, meleeDamageInfo.totalDamage, (meleeDamageInfo.HitInfo & HITINFO_CRITICALHIT) != 0);
+    // ARPG: the swing's added damage and ailments (Arpg/ArpgDamage.h).
+    Arpg::OnHitLanded(this, pVictim, nullptr, Arpg::TagsOf(nullptr), meleeDamageInfo.totalDamage, (meleeDamageInfo.HitInfo & HITINFO_CRITICALHIT) != 0);
     Arpg::OnPackMelee(this, pVictim, meleeDamageInfo.totalDamage);
 
     uint32 totalAbsorb = 0;
@@ -3653,6 +3659,8 @@ float Unit::GetCritMultiplier(SpellSchoolMask dmgSchoolMask, uint32 creatureType
         if (creatureTypeMask)
             bonus += GetTotalAuraModifierByMiscMask(SPELL_AURA_MOD_CRIT_PERCENT_VERSUS, creatureTypeMask); // Creature slaying
         multiplier *= (1.0f + (bonus * pct));
+        // ARPG: Agility and gear add to the critical strike multiplier (Arpg/ArpgDamage.h).
+        multiplier += Arpg::CritBonus(this, spell);
     }
     // Apply spellInfo mods
     if (spell)
@@ -7127,9 +7135,9 @@ uint32 Unit::SpellDamageBonusDone(Unit* victim, SpellSchoolMask schoolMask, Spel
     if (!spellInfo || !victim || damagetype == DIRECT_DAMAGE)
         return pdamage;
 
-    // Some spells don't benefit from done mods
+    // Some spells don't benefit from done mods (ARPG: but still hit at the ARPG's size, Arpg/ArpgDamage.h)
     if (spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
-        return pdamage;
+        return Arpg::ToDamage(this, victim, pdamage);
 
     // For totems get damage bonus from owner (statue isn't totem in fact)
     if (GetTypeId() == TYPEID_UNIT && ((Creature*)this)->IsTotem() && ((Totem*)this)->GetTotemType() != TOTEM_STATUE)
@@ -7550,9 +7558,9 @@ uint32 Unit::MeleeDamageBonusDone(Unit* victim, uint32 pdamage, WeaponAttackType
     if (!victim || pdamage == 0)
         return pdamage;
 
-    // Some spells don't benefit from done mods
+    // Some spells don't benefit from done mods (ARPG: but still hit at the ARPG's size, Arpg/ArpgDamage.h)
     if (spellInfo && spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
-        return pdamage;
+        return Arpg::ToDamage(this, victim, pdamage);
 
     // differentiate for weapon damage based spells
     bool isWeaponDamageBasedSpell = !(spellInfo && (damagetype == DOT || IsSpellHaveEffect(spellInfo, SPELL_EFFECT_SCHOOL_DAMAGE)));
