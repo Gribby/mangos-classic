@@ -2590,7 +2590,11 @@ void RemoveItemsSetItem(Player* player, ItemPrototype const* proto);
 template <class T> void Player::ApplySpellMod(uint32 spellId, SpellModOp op, T& basevalue, bool finalUse)
 {
     SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
-    if (!spellInfo || spellInfo->SpellFamilyName != GetSpellClass() || spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS)) return; // client condition
+    // ARPG: a generic-family spell passes too (Exorcism, Holy Wrath, Judgement of Command's
+    // hit): only an ARPG skill modifier, which names its spells by id, can reach one; a stock
+    // modifier still needs its own family (SpellModifier::isAffectedOnSpell).
+    if (!spellInfo || (spellInfo->SpellFamilyName != GetSpellClass() && spellInfo->SpellFamilyName != SPELLFAMILY_GENERIC) ||
+            spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS)) return; // client condition
     int32 totalpct = 100;
     int32 totalflat = 0;
     std::vector<SpellModifier*> consumedFiniteMods;

@@ -27,6 +27,8 @@
 #include <string>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <set>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -172,6 +174,48 @@ namespace
             mask |= it->second;
         }
         return mask;
+    }
+
+    // The spells of `family` (and generic ones: Exorcism, Holy Wrath, Judgement of Command's hit
+    // carry no class family) named exactly `names`, by id, for a readied modifier's reach; and the
+    // family bits only they carry, for the client. Classic shares its bits between unrelated
+    // spells (every mage bolt has one), so the bits alone would ready the wrong spells too.
+    std::pair<uint64, std::shared_ptr<std::set<uint32> const>> SpellsNamed(uint32 family, std::vector<char const*> const& names)
+    {
+        static std::mutex lock;
+        static std::map<std::string, std::pair<uint64, std::shared_ptr<std::set<uint32> const>>> cache;
+        std::string key = std::to_string(family);
+        for (char const* want : names)
+            key += std::string("|") + want;
+        std::lock_guard<std::mutex> guard(lock);
+        auto it = cache.find(key);
+        if (it != cache.end())
+            return it->second;
+        auto ids = std::make_shared<std::set<uint32>>();
+        uint64 mine = 0, others = 0;
+        for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
+        {
+            SpellEntry const* s = sSpellTemplate.LookupEntry<SpellEntry>(id);
+            if (!s || !s->SpellName[0])
+                continue;
+            bool const own = s->SpellFamilyName == family;
+            if (!own && s->SpellFamilyName != SPELLFAMILY_GENERIC)
+                continue;
+            bool named = false;
+            for (char const* want : names)
+                named = named || !std::strcmp(s->SpellName[0], want);
+            if (named)
+            {
+                ids->insert(id);
+                if (own)
+                    mine |= s->SpellFamilyFlags.Flags;
+            }
+            else if (own)
+                others |= s->SpellFamilyFlags.Flags;
+        }
+        auto out = std::make_pair(mine & ~others, ids->empty() ? nullptr : std::shared_ptr<std::set<uint32> const>(ids));
+        cache.emplace(key, out);
+        return out;
     }
 
     // A spell of the player's class family, to own its modifiers (Player::ApplySpellMod and the
@@ -667,7 +711,8 @@ namespace
                 if (spell.state == PLAYERSPELL_REMOVED || !spell.active)
                     continue;
                 SpellEntry const* entry = sSpellTemplate.LookupEntry<SpellEntry>(id);
-                if (!entry || entry->SpellFamilyName != family || !Named(entry, def.targets) || player->IsSpellReady(*entry))
+                if (!entry || (entry->SpellFamilyName != family && entry->SpellFamilyName != SPELLFAMILY_GENERIC) ||
+                        !Named(entry, def.targets) || player->IsSpellReady(*entry))
                     continue;
                 player->RemoveSpellCooldown(*entry, true);
                 ++ended;
@@ -677,8 +722,13 @@ namespace
             return;
         }
         uint32 const owner = FamilyOwner(player);
-        uint64 const mask = MaskOf(family, def.targets);
-        if (!owner || !mask)
+        // "*" reaches every spell of the family by its bits; named targets by their ids.
+        bool const every = std::find_if(def.targets.begin(), def.targets.end(),
+                                        [](char const* t) { return !std::strcmp(t, "*"); }) != def.targets.end();
+        auto const named = every ? std::make_pair(uint64(0), std::shared_ptr<std::set<uint32> const>())
+                                 : SpellsNamed(family, def.targets);
+        uint64 const mask = every ? MaskOf(family, def.targets) : named.first;
+        if (!owner || (every ? !mask : !named.second))
             return;
         PlayerProcs& pp = sProcs[player->GetObjectGuid()];
         // Already readied and unspent: it waits longer, but does not stack.
@@ -711,12 +761,27 @@ namespace
             default:
                 return;
         }
+        mod->arpgSpells = named.second;
         player->AddSpellMod(mod, true);
         pp.readied.push_back({ row, mod, now + def.lasts });
         if (def.effect == EFFECT_DAMAGE)
             ReportProc(player, PROC_EFFECT, 0, def.name, "readies your next %s: +%d%% damage.", def.targetWords, int(def.value));
         else
             ReportProc(player, PROC_EFFECT, 0, def.name, "readies your next %s: %s.", def.targetWords, words);
+    }
+
+    // The trigger a generated power answers to for a wearer of `classId`: a critical heal on a
+    // class with no heals is its spell crit (a mage, a warlock) or its swing crit; a spell crit on
+    // a class with no damage spells to speak of is its swing crit. So no power is dead weight.
+    Trigger TriggerFor(Trigger trigger, uint8 classId)
+    {
+        bool const heals = classId == CLASS_PALADIN || classId == CLASS_PRIEST || classId == CLASS_DRUID || classId == CLASS_SHAMAN;
+        bool const casts = classId != CLASS_WARRIOR && classId != CLASS_ROGUE;
+        if (trigger == TRIG_HEAL_CRIT && !heals)
+            return casts && classId != CLASS_HUNTER ? TRIG_SPELL_CRIT : TRIG_SWING_CRIT;
+        if (trigger == TRIG_SPELL_CRIT && !casts)
+            return TRIG_SWING_CRIT;
+        return trigger;
     }
 
     // The generated powers of the uniques `player` wears (not broken), with their items' entries.
@@ -733,12 +798,14 @@ namespace
 
     // A generated power goes off: `victim` is the struck, slain or striking unit, `amount` the hit,
     // heal or blow (0 for a kill, whose numbers come from the slain's maximum health).
-    void PowerAct(Player* player, UniquePower const& p, Unit* victim, uint32 amount)
+    void PowerAct(Player* player, UniquePower const& p, Unit* victim, uint32 amount, Trigger fired)
     {
         bool const kill = p.trigger == TRIG_KILL;
         // A blow or a heal is vanilla-sized: sized for each creature it hits. A hit is sized
         // already; a share of a creature's health is too, held under a share of the player's own.
-        bool const flat = p.trigger == TRIG_STRUCK || p.trigger == TRIG_HEAL_CRIT;
+        // The trigger that fired (a power answers to its wearer's, TriggerFor) says what size the
+        // amount is.
+        bool const flat = fired == TRIG_STRUCK || fired == TRIG_HEAL_CRIT;
         auto basisOf = [&](int32 pct) -> uint32
         {
             if (kill)
@@ -795,7 +862,7 @@ namespace
                     break;
                 std::vector<Unit*> foes;
                 if (p.effect == PE_NOVA)
-                    foes = foesNear(kill && victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
+                    foes = foesNear(victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
                 else if (p.effect == PE_ARC && victim)
                 {
                     foes = foesNear(victim, POWER_ARC_RANGE, victim);
@@ -806,7 +873,7 @@ namespace
                 else if (p.effect == PE_EXPLODE && victim)
                     foes = foesNear(victim, POWER_RANGE * area, victim);
                 else if (p.effect == PE_AILMENTS)
-                    foes = foesNear(kill && victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
+                    foes = foesNear(victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
                 for (Unit* unit : foes)
                 {
                     if (p.effect == PE_AILMENTS)
@@ -917,7 +984,7 @@ namespace
             PlayerProcs& pp = sProcs[player->GetObjectGuid()];
             for (auto const& [entry, power] : worn)
             {
-                if (power->trigger != trigger)
+                if (TriggerFor(power->trigger, player->getClass()) != trigger)
                     continue;
                 auto ready = pp.powerReadyAt.find(entry);
                 if (ready != pp.powerReadyAt.end() && Later(ready->second, now))
@@ -928,7 +995,7 @@ namespace
         }
         for (UniquePower const* power : powers)
             if (player->IsAlive())
-                PowerAct(player, *power, victim, amount);
+                PowerAct(player, *power, victim, amount, trigger);
     }
 
     void Drop(Player* player, PlayerProcs& pp, size_t at)
@@ -959,8 +1026,9 @@ namespace
                             break;
                     }
                     break;
-                // A Judgement's damage comes from the Seal it releases.
-                case SPELL_EFFECT_DUMMY: case SPELL_EFFECT_TRIGGER_SPELL:
+                // A Judgement's damage comes from the Seal it releases (Judgement itself is a
+                // script effect).
+                case SPELL_EFFECT_DUMMY: case SPELL_EFFECT_TRIGGER_SPELL: case SPELL_EFFECT_SCRIPT_EFFECT:
                     return true;
                 default:
                     break;

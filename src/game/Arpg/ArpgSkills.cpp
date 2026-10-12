@@ -186,7 +186,7 @@ namespace
                   Key(208, SKILL_NODE_MODIFIER, 2, 3, 207, 3, "Avenging Light", "Healing yourself gives you 5% more damage per rank for 5 sec.", 20218, KEY_AVENGING_LIGHT),
                   Key(209, SKILL_NODE_CAPSTONE, 2, 4, 208, 1, "Holy Nova", "Your heals burst outward: every enemy within 8 yards takes 50% of the heal as Holy damage.", 2812, KEY_HOLY_NOVA),
               } },
-            { SKILL_JUDGEMENT, CLASS_PALADIN, "Judgement", "Unleash your Seal on an enemy.", 20271, { "Judgement" },
+            { SKILL_JUDGEMENT, CLASS_PALADIN, "Judgement", "Unleash your Seal on an enemy. Its damage nodes need a Seal whose Judgement deals damage: Righteousness or Command.", 20271, { "Judgement" },
               { "Chain", "Burst", "Verdict" },
               {
                   Kit(301, 0, 1, 0, 3, "Chain of Judgement", "Judgement chains to 1/2/3 more enemies within 10 yards, at 50%.", 20186,
@@ -624,7 +624,12 @@ namespace
         for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
         {
             SpellEntry const* spell = sSpellTemplate.LookupEntry<SpellEntry>(id);
-            if (!spell || spell->SpellFamilyName != family || !spell->SpellName[0])
+            if (!spell || !spell->SpellName[0])
+                continue;
+            // The class's spells, and generic ones of the name: Exorcism, Holy Wrath and Judgement
+            // of Command's hit carry no class family. Only the class's carry the client's bits.
+            bool const ownFamily = spell->SpellFamilyName == family;
+            if (!ownFamily && spell->SpellFamilyName != SPELLFAMILY_GENERIC)
                 continue;
             bool named = false;
             for (char const* want : names)
@@ -632,9 +637,10 @@ namespace
             if (named)
             {
                 spells->insert(id);
-                mine |= spell->SpellFamilyFlags.Flags;
+                if (ownFamily)
+                    mine |= spell->SpellFamilyFlags.Flags;
             }
-            else
+            else if (ownFamily)
                 others |= spell->SpellFamilyFlags.Flags;
         }
         if (spells->empty())
@@ -1390,6 +1396,13 @@ namespace Arpg
             }
             if (node->ailTag >= 0 && node->ailTag < 7 && skill->id < 16)
                 totals.skillAilment[skill->id][node->ailTag] += int32(node->ailPerRank) * rank;
+        }
+        // Avenger: Judgement keeps the Seal, for a doubled cooldown.
+        if (totals.rank[KEY_AVENGER])
+        {
+            NamedSpells const judgement = NamesMask(classId, { "Judgement" }, "Avenger");
+            if (judgement.spells)
+                totals.mods.push_back({ uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), 100, judgement.mask, judgement.spells });
         }
         for (auto const& [skillId, rune] : ActiveRunes(s))
         {

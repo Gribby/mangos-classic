@@ -108,10 +108,9 @@ struct spell_judgement : public SpellScript
             if (spellId2 <= 1)
                 continue;
 
-            // found, remove seal; ARPG: the Avenger keystone keeps it, for a doubled cooldown
-            if (Arpg::KeepsSealOnJudgement(caster))
-                caster->AddCooldown(*spell->m_spellInfo, nullptr, false, spell->m_spellInfo->RecoveryTime * 2);
-            else
+            // found, remove seal; ARPG: the Avenger keystone keeps it (its doubled cooldown is a
+            // spell modifier, Arpg/ArpgSkills.cpp, as the cooldown is already running here)
+            if (!Arpg::KeepsSealOnJudgement(caster))
                 caster->RemoveAurasDueToSpell((*itr)->GetId());
 
             break;

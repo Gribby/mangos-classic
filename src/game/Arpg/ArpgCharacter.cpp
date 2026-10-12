@@ -629,6 +629,10 @@ namespace
                 player->AddSpellMod(mod, false); // deletes it
         r.skillMods.clear();
         uint32 const owner = FamilySpell(player);
+        // No class spell known yet (the spellbook not loaded): nothing is held, so the next
+        // refresh tries again.
+        if (!owner)
+            return;
         for (SkillSpellMod const& spec : want)
         {
             SpellModifier* mod = nullptr;

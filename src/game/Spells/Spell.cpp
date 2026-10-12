@@ -1515,6 +1515,10 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, TargetInfo* target, 
         // Only unit caster to be passed here
         m_spellAuraHolder = CreateSpellAuraHolder(m_spellInfo, unit, m_trueCaster, m_CastItem, m_triggeredBySpellInfo);
         m_spellAuraHolder->setDiminishGroup(target->diminishGroup);
+        // ARPG: a unique's copy (a spread Polymorph or Entangling Roots) is one more, not the one:
+        // untracked, so it leaves the caster's first single-target aura where it is.
+        if (IsArpgSecondary())
+            m_spellAuraHolder->SetTrackedAuraType(TRACK_AURA_TYPE_NOT_TRACKED);
     }
     else
         m_spellAuraHolder = nullptr;
