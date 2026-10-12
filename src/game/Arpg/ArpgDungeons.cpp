@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgBases.h"
+#include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgPacks.h"
@@ -682,7 +683,10 @@ namespace Arpg
             caps = CAP_CHAMPION;
         else
             return 0;                                       // open-world mobs hit as vanilla
-        float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature);
+        // The cap moves with the level gap as the hit does (Arpg/ArpgDamage.h): out-levelling a
+        // boss makes its blows smaller, whatever share of the player's health they were capped at.
+        float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature) *
+                          LevelGapMod(attacker, victim);
         return std::max<uint32>(1, uint32(float(victim->GetMaxHealth()) * pct / 100.0f));
     }
 

@@ -76,6 +76,10 @@ namespace Arpg
     // gain taken from it (leech, Rune of Leech).
     uint32 FromDamage(Unit const* attacker, Unit const* victim, uint32 amount);
 
+    // The level gap on a creature's hit on an ARPG player (and on its damage cap): 10% less per
+    // level the player is above it, to 40%; 5% more per level below, to +25%. 1 for anything else.
+    float LevelGapMod(Unit const* attacker, Unit const* victim);
+
     // --- Critical strikes ---
 
     // What `attacker` adds to its critical strike multiplier with `spell` (nullptr: a swing).

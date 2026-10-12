@@ -55,6 +55,9 @@ namespace
     // At most this many added hits beside one main hit: the largest types.
     constexpr size_t ADDED_MAX = 2;
     constexpr uint32 UPDATE_MS = 200;
+    // The level gap on creature hits (LevelGapMod): per level above, its floor; per level below,
+    // its ceiling.
+    constexpr float GAP_ABOVE = 0.1f, GAP_FLOOR = 0.4f, GAP_BELOW = 0.05f, GAP_CEILING = 1.25f;
 
     struct Affliction
     {
@@ -305,6 +308,17 @@ namespace Arpg
     uint32 FromDamage(Unit const* attacker, Unit const* victim, uint32 amount)
     {
         return uint32(float(amount) / std::max(1.0f, DamageScale(attacker, victim)));
+    }
+
+    float LevelGapMod(Unit const* attacker, Unit const* victim)
+    {
+        if (!attacker || !victim || attacker->GetTypeId() != TYPEID_UNIT || victim->GetTypeId() != TYPEID_PLAYER ||
+                !Active(victim) || attacker->GetOwnerGuid().IsPlayer())
+            return 1.0f;
+        int32 const gap = int32(victim->GetLevel()) - int32(attacker->GetLevel());
+        if (gap > 0)
+            return std::max(GAP_FLOOR, 1.0f - GAP_ABOVE * float(gap));
+        return std::min(GAP_CEILING, 1.0f + GAP_BELOW * float(-gap));
     }
 
     float CritBonus(Unit const* attacker, SpellEntry const* spell)

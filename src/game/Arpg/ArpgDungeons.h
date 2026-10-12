@@ -17,7 +17,8 @@
  *   then spell): trash 6% / 12%, champions, rares and open-world elites 9% / 15%, dungeon bosses
  *   12% / 30%, raid and world bosses 15% / 35%. The cap follows the player's own health, so it
  *   never needs retuning by level; blows wear a player down, and what kills is standing in the
- *   big spells.
+ *   big spells. The level gap moves the cap and the hit alike (Arpg::LevelGapMod): a player
+ *   above the creature's level takes less, below it more.
  *
  *   Dungeon trash (not raids) rolls champions and rares as the open world's packs do: from level
  *   8, 6% of mobs a champion and 1.5% a rare, so a run meets a handful.

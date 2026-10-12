@@ -1004,7 +1004,8 @@ namespace Arpg
         // totem or guardian at its owner's size.
         if (attacker && attacker->GetTypeId() == TYPEID_UNIT)
         {
-            float mod = PackDamageMod(attacker) * DamageScale(attacker, victim);
+            // A player above the creature's level takes less from it, below it more.
+            float mod = PackDamageMod(attacker) * DamageScale(attacker, victim) * LevelGapMod(attacker, victim);
             // Damage taken, the victim's item affixes.
             if (victim && victim->GetTypeId() == TYPEID_PLAYER)
                 if (std::shared_ptr<WebTotals const> taken = TotalsOf(victim))

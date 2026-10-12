@@ -198,6 +198,33 @@ namespace
         return std::max(SCALE_MIN, std::min(SCALE_MAX, scale));
     }
 
+    // A flat affix (attributes, attack power, added damage, resistances...) grows with the item
+    // level as vanilla's own stats do (LevelScale). A percentage grows gently up to level 60, from
+    // 40% of its level 60 value at level 1 to all of it (a level 20 item rolls two thirds, a level
+    // 30 one 70%), then as the flat ones past it, for the raids.
+    bool Flat(AffixKind kind)
+    {
+        switch (kind)
+        {
+            case AK_STAT: case AK_ALL_STATS: case AK_ATTACK_POWER: case AK_SPELL_POWER: case AK_LIFE_ON_KILL:
+            case AK_MANA_ON_HIT: case AK_HEALTH_REGEN: case AK_MANA_REGEN: case AK_THORNS: case AK_RESIST:
+            case AK_ALL_RESIST: case AK_ADDED_ATTACK: case AK_ADDED_SPELL:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    constexpr float PCT_FLOOR = 0.4f;
+
+    float AffixScale(AffixKind kind, uint32 itemLevel, uint8 tier)
+    {
+        float level = LevelScale(itemLevel);
+        if (!Flat(kind) && itemLevel < uint32(SCALE_LEVEL))
+            level = PCT_FLOOR + (1.0f - PCT_FLOOR) * float(itemLevel) / SCALE_LEVEL;
+        return level * TIER_SCALE[std::min<uint8>(tier, MAX_TIER)];
+    }
+
     struct Rolled
     {
         AffixDef const* def;
@@ -326,7 +353,6 @@ namespace
             fixed.state = 0x9E3779B9u;
         Rng& picks = unique ? fixed : rng;
         uint32 const count = unique ? (bracket >= RARITY_PURPLE ? 6u : 4u) : AffixCount(proto, tier, bracket, rng);
-        float const scale = LevelScale(proto->ItemLevel) * TIER_SCALE[tier];
         std::vector<AffixDef const*> pool;
         // A unique's affixes come from the first pool whatever its row's: every copy has the same.
         size_t const size = PoolSize(unique ? uint8(POOL_FIRST) : affixPool);
@@ -340,7 +366,7 @@ namespace
             pool.erase(pool.begin() + pick);
             int32 const span = def->high - def->low;
             int32 const raw = def->low + int32(rng.Next() % uint32(span + 1));
-            int32 value = std::max<int32>(1, int32(float(raw) * scale + 0.5f));
+            int32 value = std::max<int32>(1, int32(float(raw) * AffixScale(def->kind, proto->ItemLevel, tier) + 0.5f));
             if (def->cap)
                 value = std::min(value, def->cap);
             out.push_back({ def, value });
@@ -956,12 +982,11 @@ namespace Arpg
         bool const unique = shown == RARITY_UNIQUE;
         uint8 const bracket = BracketOf(proto, shown);
         uint32 const most = bracket == RARITY_GREEN ? 2 : bracket == RARITY_BLUE ? 4 : bracket == RARITY_PURPLE ? 6 : 0;
-        float const scale = LevelScale(proto->ItemLevel) * TIER_SCALE[std::min<uint8>(s.tier, MAX_TIER)];
         Rng rng{ urand(1, 0x7FFFFFFF) };
 
         auto value = [&](AffixDef const* def, int32 raw)
         {
-            int32 v = std::max<int32>(1, int32(float(raw) * scale + 0.5f));
+            int32 v = std::max<int32>(1, int32(float(raw) * AffixScale(def->kind, proto->ItemLevel, s.tier) + 0.5f));
             return def->cap ? std::min(v, def->cap) : v;
         };
         auto rolled = [&](AffixDef const* def)
