@@ -59,6 +59,9 @@ namespace
         if (!proto || !proto->Name1 || proto->Class == ITEM_CLASS_QUEST || proto->Class == ITEM_CLASS_KEY ||
                 proto->Class == ITEM_CLASS_MONEY || proto->Class == ITEM_CLASS_PERMANENT)
             return false;
+        // The first base bank's items (no implicits) stay for those who hold them, but never drop.
+        if (proto->ItemId >= Arpg::OLD_BANK_FROM && proto->ItemId <= Arpg::OLD_BANK_TO)
+            return false;
         char const* name = proto->Name1;
         for (char const* junk : { "Monster", "Deprecated", "DEPRECATED", "TEST", "Test ", "[PH]", "OLD", "QA" })
             if (std::strncmp(name, junk, std::strlen(junk)) == 0)

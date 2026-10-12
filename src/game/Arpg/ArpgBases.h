@@ -7,9 +7,12 @@
  * (they scale from the base's own item level). The bank fills the gap: one base for every slot
  * and armour or weapon kind, at each of BANK_TIERS item levels from 64 to 92, written into
  * item_template at start (entries BANK_BASE_ENTRY and up), as the Codex's and the orbs' are.
- *   - A base is white, with no stats of its own: its armour (or damage, or a shield's block) is
- *     fitted from vanilla's own blues and epics of its kind, at its item level, a little under
- *     them, so the affixes it rolls make it a match for them.
+ *   - A base's armour (or damage, or a shield's block) is fitted from vanilla's own blues and epics
+ *     of its kind, at its item level, a little under them.
+ *   - Its implicits are vanilla's green suffixes, one family per base (so a kind comes as up to
+ *     three bases: "Molten Breastplate of the Bear", "... of the Tiger", "... of Healing"): two
+ *     attributes, or intellect with spell damage or healing as vanilla's own equip spells, on a
+ *     budget of its item level and slot. The affixes it rolls come on top.
  *   - It wears the look of a vanilla blue or epic of its kind near its item level, and a name of
  *     the content it belongs to ("Molten Breastplate", "Necrotic Greatsword").
  *   - It is never a unique: vanilla's named blues and purples are those.
@@ -29,7 +32,9 @@ class Map;
 
 namespace Arpg
 {
-    constexpr uint32 BANK_BASE_ENTRY = 93000;
+    constexpr uint32 BANK_BASE_ENTRY = 94000;
+    // The first bank's entries (no implicits), kept for items already held, never dropped.
+    constexpr uint32 OLD_BANK_FROM = 93000, OLD_BANK_TO = 93999;
     // From this item level a rolled drop's base comes from the bank.
     constexpr uint32 BANK_FROM = 64;
 

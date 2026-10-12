@@ -441,6 +441,19 @@ namespace Arpg
         return atEnemy;
     }
 
+    bool NeverMisses(Unit const* unit)
+    {
+        if (!unit)
+            return false;
+        if (unit->GetTypeId() == TYPEID_PLAYER)
+            return Active(unit);
+        ObjectGuid const owner = unit->GetOwnerGuid();
+        if (!owner.IsPlayer())
+            return false;
+        Player const* player = unit->GetMap() ? unit->GetMap()->GetPlayer(owner) : nullptr;
+        return player && Active(player);
+    }
+
     std::list<Unit*> EnemiesNear(WorldObject* center, float radius)
     {
         return EnemiesAround(center, radius);

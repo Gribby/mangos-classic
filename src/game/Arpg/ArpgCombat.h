@@ -80,6 +80,11 @@ namespace Arpg
     // mind-controlled ARPG player fights as its controller's AI makes it, the stock way.
     bool Active(WorldObject const* object);
 
+    // Whether `unit` never misses: an ARPG player, or a pet, totem or guardian of one. The ARPG
+    // has no hit stat: swings, shots and spells always connect (dodge, parry, block and
+    // resistances still apply).
+    bool NeverMisses(Unit const* unit);
+
     // The ARPG client said hello: mark the player and refresh its backpedal speed.
     void OnHello(Player* player);
 

@@ -36,33 +36,100 @@ namespace
         { 64, "Emberforged" }, { 68, "Molten" }, { 72, "Draconic" }, { 76, "Chromatic" },
         { 80, "Qiraji" }, { 84, "Obsidian" }, { 88, "Necrotic" }, { 92, "Frostbound" },
     };
-    constexpr uint32 BANK_SLOTS_PER_TIER = 100;
+    constexpr uint32 BANK_SLOTS_PER_TIER = 200;
+
+    // A base's implicits, vanilla's green suffixes: two attributes, or intellect with spell damage
+    // or healing (an equip spell, as vanilla's are). A kind comes in up to three of them.
+    enum Family : uint8 { F_NONE, F_BEAR, F_TIGER, F_MONKEY, F_EAGLE, F_OWL, F_SORCERY, F_HEALING, MAX_FAMILY };
+    struct FamilyDef { char const* suffix; uint8 statA, statB; bool spell, heal; };
+    FamilyDef const FAMILIES[MAX_FAMILY] =
+    {
+        { "", 0, 0, false, false },
+        { "of the Bear",    ITEM_MOD_STRENGTH,  ITEM_MOD_STAMINA,   false, false },
+        { "of the Tiger",   ITEM_MOD_STRENGTH,  ITEM_MOD_AGILITY,   false, false },
+        { "of the Monkey",  ITEM_MOD_AGILITY,   ITEM_MOD_STAMINA,   false, false },
+        { "of the Eagle",   ITEM_MOD_STAMINA,   ITEM_MOD_INTELLECT, false, false },
+        { "of the Owl",     ITEM_MOD_INTELLECT, ITEM_MOD_SPIRIT,    false, false },
+        { "of Sorcery",     ITEM_MOD_INTELLECT, 0,                  true,  false },
+        { "of Healing",     ITEM_MOD_INTELLECT, 0,                  false, true  },
+    };
+    // Its implicits' budget: item level x IMPLICIT_PER_LEVEL x the slot's weight, in vanilla's
+    // stat points (a point of spell damage costs 0.86 of one, of healing 0.45). A level 64 chest
+    // carries about +14/+15, a Naxxramas one about +20/+20.
+    constexpr float IMPLICIT_PER_LEVEL = 0.45f, SPELL_POINT = 0.86f, HEAL_POINT = 0.45f;
 
     // A base's kind: item class, subclass and inventory type (a robe counts as a chest, a main- or
-    // off-hand-only one-hander as a one-hander), and its name's noun.
-    struct Kind { uint8 cls; uint8 sub; uint8 inv; char const* noun; };
+    // off-hand-only one-hander as a one-hander), its name's noun, its slot's weight and its families.
+    struct Kind { uint8 cls; uint8 sub; uint8 inv; char const* noun; float weight; Family fam[3]; };
 
     enum : uint8 { CLOTH = 1, LEATHER = 2, MAIL = 3, PLATE = 4 };
+    constexpr float BIG = 1.0f, MID = 0.75f, SMALL = 0.56f, ONE_HAND = 0.42f, RANGED = 0.32f;
     Kind const KINDS[] =
     {
         // Armour: head, shoulders, chest, waist, legs, feet, wrists, hands.
-        { 4, CLOTH, 1, "Hood" }, { 4, CLOTH, 3, "Mantle" }, { 4, CLOTH, 5, "Robe" }, { 4, CLOTH, 6, "Sash" },
-        { 4, CLOTH, 7, "Leggings" }, { 4, CLOTH, 8, "Slippers" }, { 4, CLOTH, 9, "Cuffs" }, { 4, CLOTH, 10, "Gloves" },
-        { 4, LEATHER, 1, "Cap" }, { 4, LEATHER, 3, "Spaulders" }, { 4, LEATHER, 5, "Tunic" }, { 4, LEATHER, 6, "Belt" },
-        { 4, LEATHER, 7, "Pants" }, { 4, LEATHER, 8, "Boots" }, { 4, LEATHER, 9, "Bracers" }, { 4, LEATHER, 10, "Grips" },
-        { 4, MAIL, 1, "Coif" }, { 4, MAIL, 3, "Pauldrons" }, { 4, MAIL, 5, "Hauberk" }, { 4, MAIL, 6, "Girdle" },
-        { 4, MAIL, 7, "Legguards" }, { 4, MAIL, 8, "Sabatons" }, { 4, MAIL, 9, "Wristguards" }, { 4, MAIL, 10, "Gauntlets" },
-        { 4, PLATE, 1, "Helm" }, { 4, PLATE, 3, "Shoulderplates" }, { 4, PLATE, 5, "Breastplate" }, { 4, PLATE, 6, "Waistguard" },
-        { 4, PLATE, 7, "Legplates" }, { 4, PLATE, 8, "Greaves" }, { 4, PLATE, 9, "Vambraces" }, { 4, PLATE, 10, "Handguards" },
+        { 4, CLOTH, 1, "Hood", BIG, { F_SORCERY, F_HEALING, F_OWL } }, { 4, CLOTH, 3, "Mantle", MID, { F_SORCERY, F_HEALING, F_OWL } },
+        { 4, CLOTH, 5, "Robe", BIG, { F_SORCERY, F_HEALING, F_OWL } }, { 4, CLOTH, 6, "Sash", MID, { F_SORCERY, F_HEALING, F_OWL } },
+        { 4, CLOTH, 7, "Leggings", BIG, { F_SORCERY, F_HEALING, F_OWL } }, { 4, CLOTH, 8, "Slippers", MID, { F_SORCERY, F_HEALING, F_OWL } },
+        { 4, CLOTH, 9, "Cuffs", SMALL, { F_SORCERY, F_HEALING, F_OWL } }, { 4, CLOTH, 10, "Gloves", MID, { F_SORCERY, F_HEALING, F_OWL } },
+        { 4, LEATHER, 1, "Cap", BIG, { F_MONKEY, F_TIGER, F_HEALING } }, { 4, LEATHER, 3, "Spaulders", MID, { F_MONKEY, F_TIGER, F_HEALING } },
+        { 4, LEATHER, 5, "Tunic", BIG, { F_MONKEY, F_TIGER, F_HEALING } }, { 4, LEATHER, 6, "Belt", MID, { F_MONKEY, F_TIGER, F_HEALING } },
+        { 4, LEATHER, 7, "Pants", BIG, { F_MONKEY, F_TIGER, F_HEALING } }, { 4, LEATHER, 8, "Boots", MID, { F_MONKEY, F_TIGER, F_HEALING } },
+        { 4, LEATHER, 9, "Bracers", SMALL, { F_MONKEY, F_TIGER, F_HEALING } }, { 4, LEATHER, 10, "Grips", MID, { F_MONKEY, F_TIGER, F_HEALING } },
+        { 4, MAIL, 1, "Coif", BIG, { F_MONKEY, F_EAGLE, F_HEALING } }, { 4, MAIL, 3, "Pauldrons", MID, { F_MONKEY, F_EAGLE, F_HEALING } },
+        { 4, MAIL, 5, "Hauberk", BIG, { F_MONKEY, F_EAGLE, F_HEALING } }, { 4, MAIL, 6, "Girdle", MID, { F_MONKEY, F_EAGLE, F_HEALING } },
+        { 4, MAIL, 7, "Legguards", BIG, { F_MONKEY, F_EAGLE, F_HEALING } }, { 4, MAIL, 8, "Sabatons", MID, { F_MONKEY, F_EAGLE, F_HEALING } },
+        { 4, MAIL, 9, "Wristguards", SMALL, { F_MONKEY, F_EAGLE, F_HEALING } }, { 4, MAIL, 10, "Gauntlets", MID, { F_MONKEY, F_EAGLE, F_HEALING } },
+        { 4, PLATE, 1, "Helm", BIG, { F_BEAR, F_TIGER, F_HEALING } }, { 4, PLATE, 3, "Shoulderplates", MID, { F_BEAR, F_TIGER, F_HEALING } },
+        { 4, PLATE, 5, "Breastplate", BIG, { F_BEAR, F_TIGER, F_HEALING } }, { 4, PLATE, 6, "Waistguard", MID, { F_BEAR, F_TIGER, F_HEALING } },
+        { 4, PLATE, 7, "Legplates", BIG, { F_BEAR, F_TIGER, F_HEALING } }, { 4, PLATE, 8, "Greaves", MID, { F_BEAR, F_TIGER, F_HEALING } },
+        { 4, PLATE, 9, "Vambraces", SMALL, { F_BEAR, F_TIGER, F_HEALING } }, { 4, PLATE, 10, "Handguards", MID, { F_BEAR, F_TIGER, F_HEALING } },
         // Back, neck, finger, shield, held in the off hand.
-        { 4, CLOTH, 16, "Cloak" }, { 4, 0, 2, "Choker" }, { 4, 0, 11, "Band" }, { 4, 6, 14, "Bulwark" }, { 4, 0, 23, "Tome" },
+        { 4, CLOTH, 16, "Cloak", SMALL, { F_BEAR, F_MONKEY, F_SORCERY } }, { 4, 0, 2, "Choker", SMALL, { F_BEAR, F_SORCERY, F_HEALING } },
+        { 4, 0, 11, "Band", SMALL, { F_TIGER, F_SORCERY, F_HEALING } }, { 4, 6, 14, "Bulwark", SMALL, { F_BEAR, F_HEALING, F_NONE } },
+        { 4, 0, 23, "Tome", SMALL, { F_SORCERY, F_HEALING, F_OWL } },
         // Weapons.
-        { 2, 0, 13, "Hatchet" }, { 2, 1, 17, "Greataxe" }, { 2, 2, 15, "Longbow" }, { 2, 3, 26, "Rifle" },
-        { 2, 4, 13, "Mace" }, { 2, 5, 17, "Maul" }, { 2, 6, 17, "Halberd" }, { 2, 7, 13, "Blade" },
-        { 2, 8, 17, "Greatsword" }, { 2, 10, 17, "Staff" }, { 2, 13, 13, "Fist" }, { 2, 15, 13, "Dagger" },
-        { 2, 18, 26, "Crossbow" }, { 2, 19, 26, "Wand" },
+        { 2, 0, 13, "Hatchet", ONE_HAND, { F_TIGER, F_BEAR, F_NONE } }, { 2, 1, 17, "Greataxe", BIG, { F_BEAR, F_TIGER, F_NONE } },
+        { 2, 2, 15, "Longbow", RANGED, { F_MONKEY, F_EAGLE, F_NONE } }, { 2, 3, 26, "Rifle", RANGED, { F_MONKEY, F_EAGLE, F_NONE } },
+        { 2, 4, 13, "Mace", ONE_HAND, { F_BEAR, F_HEALING, F_SORCERY } }, { 2, 5, 17, "Maul", BIG, { F_BEAR, F_TIGER, F_NONE } },
+        { 2, 6, 17, "Halberd", BIG, { F_BEAR, F_TIGER, F_MONKEY } }, { 2, 7, 13, "Blade", ONE_HAND, { F_TIGER, F_MONKEY, F_SORCERY } },
+        { 2, 8, 17, "Greatsword", BIG, { F_BEAR, F_TIGER, F_NONE } }, { 2, 10, 17, "Staff", BIG, { F_SORCERY, F_HEALING, F_OWL } },
+        { 2, 13, 13, "Fist", ONE_HAND, { F_MONKEY, F_TIGER, F_NONE } }, { 2, 15, 13, "Dagger", ONE_HAND, { F_MONKEY, F_SORCERY, F_NONE } },
+        { 2, 18, 26, "Crossbow", RANGED, { F_MONKEY, F_EAGLE, F_NONE } }, { 2, 19, 26, "Wand", RANGED, { F_SORCERY, F_HEALING, F_OWL } },
     };
-    static_assert(sizeof(KINDS) / sizeof(KINDS[0]) < BANK_SLOTS_PER_TIER, "a tier's slots overflow its entries");
+    static_assert(sizeof(KINDS) / sizeof(KINDS[0]) * 3 <= BANK_SLOTS_PER_TIER, "a tier's slots overflow its entries");
+
+    // Vanilla's equip spells that add spell damage (all schools) or healing, by their amount.
+    std::map<int32, uint32> sSpellDamage, sHealing;
+
+    void FindEquipSpells()
+    {
+        for (uint32 id = 1; id < sSpellTemplate.GetMaxEntry(); ++id)
+        {
+            SpellEntry const* s = sSpellTemplate.LookupEntry<SpellEntry>(id);
+            if (!s || !s->HasAttribute(SPELL_ATTR_PASSIVE) || s->Effect[0] != SPELL_EFFECT_APPLY_AURA ||
+                    s->Effect[1] || s->Effect[2])
+                continue;
+            int32 const amount = s->CalculateSimpleValue(EFFECT_INDEX_0);
+            if (amount <= 0)
+                continue;
+            if (s->EffectApplyAuraName[0] == SPELL_AURA_MOD_DAMAGE_DONE && s->EffectMiscValue[0] == int32(SPELL_SCHOOL_MASK_MAGIC))
+                sSpellDamage.emplace(amount, id);
+            else if (s->EffectApplyAuraName[0] == SPELL_AURA_MOD_HEALING_DONE)
+                sHealing.emplace(amount, id);
+        }
+    }
+
+    // The equip spell nearest `amount` (at or under it when one is), and the amount it gives.
+    std::pair<uint32, int32> EquipSpell(std::map<int32, uint32> const& spells, int32 amount)
+    {
+        if (spells.empty())
+            return { 0, 0 };
+        auto it = spells.upper_bound(amount);
+        if (it == spells.begin())
+            return { it->second, it->first };
+        --it;
+        return { it->second, it->first };
+    }
 
     // A base sits this share of the way to vanilla's blues and epics of its kind.
     constexpr float BASE_SHARE = 0.9f;
@@ -88,7 +155,7 @@ namespace
         }
     }
 
-    struct Banked { uint32 entry; uint8 cls, sub, inv; uint32 level; };
+    struct Banked { uint32 entry; uint8 cls, sub, inv; uint32 level; uint8 family; };
     std::mutex sBankLock;
     std::vector<Banked> sBank;
 
@@ -162,6 +229,8 @@ namespace
             return false;
         if (proto->ItemId >= BANK_BASE_ENTRY && proto->ItemId < BANK_BASE_ENTRY + BANK_SLOTS_PER_TIER * std::size(BANK_TIERS))
             return false;
+        if (proto->ItemId >= OLD_BANK_FROM && proto->ItemId <= OLD_BANK_TO)
+            return false;
         for (UniqueMechanic const& u : Uniques())
             if (u.item == proto->ItemId)
                 return false;
@@ -172,16 +241,22 @@ namespace
     uint32 BaseLike(ItemPrototype const* proto, uint32 level)
     {
         uint8 const inv = InvGroup(proto->InventoryType);
-        uint32 best = 0, bestLevel = 0;
+        uint32 bestLevel = 0;
+        std::vector<uint32> best;
         std::lock_guard<std::mutex> guard(sBankLock);
         for (Banked const& b : sBank)
-            if (b.cls == proto->Class && b.sub == proto->SubClass && b.inv == inv && b.level <= std::max(level, BANK_FROM) &&
-                    b.level >= bestLevel)
+        {
+            if (b.cls != proto->Class || b.sub != proto->SubClass || b.inv != inv || b.level > std::max(level, BANK_FROM))
+                continue;
+            if (b.level > bestLevel)
             {
-                best = b.entry;
                 bestLevel = b.level;
+                best.clear();
             }
-        return best;
+            if (b.level == bestLevel)
+                best.push_back(b.entry);
+        }
+        return best.empty() ? 0 : best[urand(0, uint32(best.size() - 1))];
     }
 
     // Raids' drops: a trash foe's chance at a rolled base, a boss's count of them.
@@ -229,13 +304,19 @@ namespace Arpg
             while (result->NextRow());
         }
 
+        FindEquipSpells();
         std::vector<Banked> bank;
         for (size_t t = 0; t < std::size(BANK_TIERS); ++t)
         {
             BankTier const& tier = BANK_TIERS[t];
             for (size_t k = 0; k < std::size(KINDS); ++k)
+            for (uint8 f = 0; f < 3; ++f)
             {
                 Kind const& kind = KINDS[k];
+                Family const family = kind.fam[f];
+                if (family == F_NONE)
+                    continue;
+                FamilyDef const& fam = FAMILIES[family];
                 KindKey const key{ kind.cls, kind.sub, kind.inv };
                 // The look: a vanilla blue or epic (else a green) of its kind, nearest its level.
                 uint32 donor = 0, delay = 0;
@@ -250,8 +331,8 @@ namespace Arpg
                 }
                 if (!donor)
                     continue;
-                uint32 const entry = BANK_BASE_ENTRY + uint32(t) * BANK_SLOTS_PER_TIER + uint32(k);
-                std::string const name = std::string(tier.word) + " " + kind.noun;
+                uint32 const entry = BANK_BASE_ENTRY + uint32(t) * BANK_SLOTS_PER_TIER + uint32(k) * 3 + f;
+                std::string const name = std::string(tier.word) + " " + kind.noun + " " + fam.suffix;
                 std::map<std::string, std::string> set;
                 auto put = [&](char const* column, std::string const& value) { if (has(column)) set[column] = value; };
                 auto num = [&](char const* column, double value) { put(column, std::to_string(int64(std::llround(value)))); };
@@ -311,8 +392,38 @@ namespace Arpg
                     if (kind.sub == 6)
                         num("block", block[key].At(level) * BASE_SHARE);
                 }
+                // Its implicits: the family's attributes, and its spell damage or healing.
+                double const budget = level * IMPLICIT_PER_LEVEL * kind.weight;
+                int slot = 1;
+                auto stat = [&](uint8 type, double points)
+                {
+                    if (!type || points < 1.0)
+                        return;
+                    std::string const n = std::to_string(slot++);
+                    num(("stat_type" + n).c_str(), type);
+                    num(("stat_value" + n).c_str(), std::max(1.0, points));
+                };
+                if (fam.spell || fam.heal)
+                {
+                    stat(fam.statA, budget * 0.4);
+                    double const want = budget * 0.6 / (fam.spell ? SPELL_POINT : HEAL_POINT);
+                    auto const [spell, amount] = EquipSpell(fam.spell ? sSpellDamage : sHealing, int32(std::llround(want)));
+                    if (spell)
+                    {
+                        num("spellid_1", spell);
+                        num("spelltrigger_1", ITEM_SPELLTRIGGER_ON_EQUIP);
+                    }
+                    else
+                        stat(fam.statA, budget * 0.6);      // no such spell: all intellect
+                    (void)amount;
+                }
+                else
+                {
+                    stat(fam.statA, budget * 0.5);
+                    stat(fam.statB, budget * 0.5);
+                }
                 CopyRow(columns, entry, donor, set);
-                bank.push_back({ entry, kind.cls, kind.sub, kind.inv, tier.level });
+                bank.push_back({ entry, kind.cls, kind.sub, kind.inv, tier.level, uint8(family) });
             }
         }
         {

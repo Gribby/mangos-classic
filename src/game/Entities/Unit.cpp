@@ -3848,6 +3848,10 @@ float Unit::CalculateEffectiveCritChance(const Unit* victim, WeaponAttackType at
 
 float Unit::CalculateEffectiveMissChance(const Unit *victim, WeaponAttackType attType, const SpellEntry* ability) const
 {
+    // ARPG: an ARPG player (or its pet) never misses; there is no hit stat (Arpg/ArpgCombat.h).
+    if (Arpg::NeverMisses(this))
+        return 0.0f;
+
     float chance = 0.0f;
 
     chance += (ability ? victim->GetMissChance(ability, SPELL_SCHOOL_MASK_NORMAL) : victim->GetMissChance(attType));
@@ -3934,6 +3938,9 @@ float Unit::CalculateSpellCritChance(const Unit* victim, SpellSchoolMask schoolM
 float Unit::CalculateSpellMissChance(const Unit* victim, SpellSchoolMask schoolMask, const SpellEntry* spell) const
 {
     if (!spell || spell->HasAttribute(SPELL_ATTR_EX3_ALWAYS_HIT))
+        return 0.0f;
+    // ARPG: nor do its spells (the magic resist roll's hit share, too); resistances still resist.
+    if (Arpg::NeverMisses(this))
         return 0.0f;
 
     float chance = 0.0f;
