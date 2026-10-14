@@ -26,6 +26,7 @@
 #include "Log/Log.h"
 #include "World/World.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgThreats.h"
@@ -1548,6 +1549,9 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, TargetInfo* target, 
                     return;
                 }
             }
+
+            // ARPG: a creature's crowd control on an ARPG player is short (Arpg/ArpgDungeons.h).
+            duration = Arpg::CapControl(affectiveCaster, unit, m_spellInfo, duration);
 
             if (duration != originalDuration)
             {

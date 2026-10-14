@@ -661,6 +661,36 @@ namespace Arpg
         Apply(creature, kind, players);
     }
 
+    // The longest a creature's crowd control holds an ARPG player.
+    constexpr int32 CONTROL_CAP_MS = 2000;
+
+    int32 CapControl(Unit const* caster, Unit const* victim, SpellEntry const* spellInfo, int32 duration)
+    {
+        if (duration <= CONTROL_CAP_MS || !caster || !victim || !spellInfo || caster->GetTypeId() != TYPEID_UNIT ||
+                victim->GetTypeId() != TYPEID_PLAYER || !Active(victim) || PlayerOwned(static_cast<Creature const*>(caster)))
+            return duration;
+        for (int i = 0; i < MAX_EFFECT_INDEX; ++i)
+        {
+            if (spellInfo->Effect[i] != SPELL_EFFECT_APPLY_AURA)
+                continue;
+            switch (spellInfo->EffectApplyAuraName[i])
+            {
+                case SPELL_AURA_MOD_STUN:
+                case SPELL_AURA_MOD_ROOT:
+                case SPELL_AURA_MOD_FEAR:
+                case SPELL_AURA_MOD_CONFUSE:
+                case SPELL_AURA_MOD_CHARM:
+                case SPELL_AURA_MOD_POSSESS:
+                case SPELL_AURA_MOD_SILENCE:
+                case SPELL_AURA_MOD_PACIFY_SILENCE:
+                    return CONTROL_CAP_MS;
+                default:
+                    break;
+            }
+        }
+        return duration;
+    }
+
     uint32 DamageCap(Unit const* attacker, Unit const* victim, bool spell)
     {
         if (!DungeonsOn() || !attacker || !victim || attacker->GetTypeId() != TYPEID_UNIT || !Active(victim))

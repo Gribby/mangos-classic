@@ -182,6 +182,23 @@ namespace
         from->SendMessageToSet(data, true);
     }
 
+    // A cosmetic SMSG_SPELL_GO of `spellInfo` from `from` to a point: with no unit hit, the client
+    // flies the spell's missile to the point, as a bolt carrying on past its first target.
+    void SendPassVisual(Unit* from, float x, float y, float z, SpellEntry const* spellInfo)
+    {
+        WorldPacket data(SMSG_SPELL_GO, 40);
+        data << from->GetPackGUID();
+        data << from->GetPackGUID();
+        data << uint32(spellInfo->Id);
+        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint8(0);                                   // hit
+        data << uint8(0);                                   // missed
+        SpellCastTargets targets;
+        targets.setDestination(x, y, z);
+        data << targets;
+        from->SendMessageToSet(data, true);
+    }
+
     // The impact of `spellInfo` on `unit`, for the ARPG clients near it (SMSG_ARPG_IMPACT): an
     // added hit with no missile of its own (an arc, a burst, a cleave) still lands with the
     // spell's own hit visual. The client finds the kit, or its school's stock one.
@@ -744,11 +761,41 @@ namespace Arpg
             if (onward.size() > cap)
                 onward.resize(cap);
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
-            ObjectGuid from = victim->GetObjectGuid();
+            // One bolt carries on through the target along the line: out to the spell's range, or
+            // stopping in the last enemy it may pierce. Each enemy on the way is hit as it reaches
+            // it, not by a fresh bolt from the one before.
+            float const dirX = std::cos(bearing);
+            float const dirY = std::sin(bearing);
+            float stop = maxRange;
+            if (row->n && onward.size() >= cap && !onward.empty())
+            {
+                Unit const* last = onward.back();
+                stop = (last->GetPositionX() - caster->GetPositionX()) * dirX + (last->GetPositionY() - caster->GetPositionY()) * dirY;
+            }
+            if (stop > past && !onward.empty())
+            {
+                float const run = stop - past;
+                float const z = victim->GetPositionZ() + victim->GetCollisionHeight() * 0.5f;
+                SendPassVisual(victim, victim->GetPositionX() + dirX * run, victim->GetPositionY() + dirY * run, z, spellInfo);
+            }
             for (Unit* unit : onward)
             {
-                RelayHit(player, from, unit->GetObjectGuid(), spellInfo, mask, share, 0, 0.0f, GuidVector{});
-                from = unit->GetObjectGuid();
+                float const along = (unit->GetPositionX() - caster->GetPositionX()) * dirX + (unit->GetPositionY() - caster->GetPositionY()) * dirY;
+                uint32 const delay = spellInfo->speed > 0.0f
+                    ? uint32(std::max(0.0f, along - past) / spellInfo->speed * float(IN_MILLISECONDS)) : 0;
+                ObjectGuid const guid = unit->GetObjectGuid();
+                auto land = [guid, spellInfo, mask, share](Unit& owner)
+                {
+                    if (!owner.IsInWorld())
+                        return;
+                    Unit* target = owner.GetMap()->GetUnit(guid);
+                    if (target && target->IsAlive())
+                        DealShare(&owner, target, spellInfo, mask, share);
+                };
+                if (!delay)
+                    land(*player);
+                else
+                    player->m_events.AddEvent(new UnitLambdaEvent(*player, land), player->m_events.CalculateTime(delay));
             }
             if (!onward.empty())
                 ReportProc(player, PROC_DAMAGE, 0, MechanicName(row), "drives %s through %u more %s for %u each.",

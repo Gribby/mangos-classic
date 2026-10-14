@@ -91,6 +91,11 @@ namespace Arpg
     // The most one hit of `attacker`'s may deal `victim` (0: no cap). `spell` for spell damage.
     uint32 DamageCap(Unit const* attacker, Unit const* victim, bool spell);
 
+    // How long `caster`'s crowd control (`spellInfo`: a stun, root, fear, confuse, charm or
+    // silence) may hold `victim`: a creature's on an ARPG player is cut to a moment, as an ARPG
+    // keeps the player moving. Anything else keeps `duration`.
+    int32 CapControl(Unit const* caster, Unit const* victim, SpellEntry const* spellInfo, int32 duration);
+
     // Whether `creature` is fighting an ARPG player, which turns off its in-combat "can't reach
     // you" regeneration.
     bool NoEvadeRegen(Creature const* creature);
