@@ -140,6 +140,17 @@ namespace
         return n > 1 && want[n - 1] == 's' && std::strlen(have) == n - 1 && std::strncmp(have, want, n - 1) == 0;
     }
 
+    // A cosmetic GO's flags. One launched from an enemy (a chain's jump, a bolt carrying on, a
+    // shard) carries ARPG_CAST_FLAG_RELAY: the benilla ARPG client plays no cast for it and flies
+    // its missile from the enemy's body, not its hands, so it reads as the hit carrying on rather
+    // than the enemy casting. A stock client ignores the bit.
+    constexpr uint16 ARPG_CAST_FLAG_RELAY = 0x4000;
+    uint16 RelayFlags(Unit const* from)
+    {
+        uint16 const flags = CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG;
+        return from->GetTypeId() == TYPEID_PLAYER ? flags : uint16(flags | ARPG_CAST_FLAG_RELAY);
+    }
+
     // A cosmetic SMSG_SPELL_GO of `spellInfo` from `from` at the ground point (x, y, z): its
     // missile flies there and lands (a shard scattering with no enemy to strike).
     void SendGroundVisual(Unit* from, float x, float y, float z, SpellEntry const* spellInfo)
@@ -148,7 +159,7 @@ namespace
         data << from->GetPackGUID();
         data << from->GetPackGUID();
         data << uint32(spellInfo->Id);
-        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint16(RelayFlags(from));
         data << uint8(0);                                   // hit
         data << uint8(0);                                   // missed
         SpellCastTargets targets;
@@ -173,7 +184,7 @@ namespace
         data << from->GetPackGUID();
         data << from->GetPackGUID();
         data << uint32(spellInfo->Id);
-        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint16(RelayFlags(from));
         data << uint8(1);                                   // hit
         data << to->GetObjectGuid();
         data << uint8(0);                                   // missed
@@ -191,7 +202,7 @@ namespace
         data << from->GetPackGUID();
         data << from->GetPackGUID();
         data << uint32(spellInfo->Id);
-        data << uint16(CAST_FLAG_UNKNOWN9 | CAST_FLAG_HIDDEN_COMBATLOG);
+        data << uint16(RelayFlags(from));
         data << uint8(0);                                   // hit
         data << uint8(0);                                   // missed
         SpellCastTargets targets;
@@ -809,13 +820,13 @@ namespace Arpg
             if (onward.size() > cap)
                 onward.resize(cap);
             uint32 const share = std::max<uint32>(1, dealt * row->pct / 100);
-            // One bolt carries on through the target along the line: out to the spell's range, or
-            // stopping in the last enemy it may pierce. Each enemy on the way is hit as it reaches
-            // it, not by a fresh bolt from the one before.
+            // One bolt carries on through the target along the line and stops in the last enemy it
+            // passes through. Each enemy on the way is hit as the bolt reaches it, not by a fresh
+            // bolt from the one before.
             float const dirX = std::cos(bearing);
             float const dirY = std::sin(bearing);
-            float stop = maxRange;
-            if (row->n && onward.size() >= cap && !onward.empty())
+            float stop = 0.0f;
+            if (!onward.empty())
             {
                 Unit const* last = onward.back();
                 stop = (last->GetPositionX() - caster->GetPositionX()) * dirX + (last->GetPositionY() - caster->GetPositionY()) * dirY;

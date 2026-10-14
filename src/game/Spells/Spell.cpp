@@ -7000,6 +7000,10 @@ void Spell::Delayed()
     if (!m_trueCaster->IsPlayer())
         return;
 
+    // ARPG: no pushback; a blow never sets an ARPG player's cast back (Arpg/ArpgCombat.h).
+    if (Arpg::Active(m_trueCaster))
+        return;
+
     if (m_spellState == SPELL_STATE_TRAVELING)
         return;                                             // spell is active and can't be time-backed
 
@@ -7037,6 +7041,10 @@ void Spell::Delayed()
 void Spell::DelayedChannel()
 {
     if (!m_trueCaster->IsPlayer() || getState() != SPELL_STATE_CHANNELING)
+        return;
+
+    // ARPG: no pushback; a blow never shortens an ARPG player's channel (Arpg/ArpgCombat.h).
+    if (Arpg::Active(m_trueCaster))
         return;
 
     // check resist chance
