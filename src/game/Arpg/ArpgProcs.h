@@ -24,6 +24,7 @@
 #define MANGOS_ARPG_PROCS_H
 
 #include "Common.h"
+#include "Arpg/ArpgUniques.h"
 
 #include <string>
 #include <utility>
@@ -70,6 +71,10 @@ namespace Arpg
     void UpdateProcs(Player* player);
     // The player is leaving: its readied casts go.
     void ForgetProcs(Player* player);
+
+    // The uniques-kit rows `player`'s readied casts carry now (a synergy's burst, chain or spread on
+    // its next cast of a spell), for the kit lookups (Arpg/ArpgUniques.h).
+    std::vector<UniqueMechanic const*> ReadiedKits(Player const* player);
 }
 
 #endif

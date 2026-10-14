@@ -182,6 +182,9 @@ namespace Arpg
     // Whether `player` has `skill` in a slot.
     bool IsSpecialised(Player const* player, SkillId skill);
 
+    // `player`'s rank in skill node `node` (0: none, or its skill not slotted).
+    uint8 SkillNodeRank(Player const* player, uint16 node);
+
     // Whether `rune` is socketed, and in effect, in `player`'s `skill`.
     bool HasRune(Player const* player, SkillId skill, uint8 rune);
 

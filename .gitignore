@@ -100,3 +100,6 @@ src/modules/
 
 # ARPG: this machine's paths for the run and update scripts
 arpg-local.bat
+
+# The play statistics' own clone (send-arpg-stats.bat)
+.arpg-stats/

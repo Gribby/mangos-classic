@@ -34,6 +34,7 @@
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
+#include "Arpg/ArpgStats.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -3346,6 +3347,7 @@ SpellCastResult Spell::cast(bool skipCheck)
             SendSpellGo();
             // ARPG: a readied cast this fits is spent (Arpg/ArpgProcs.h).
             Arpg::OnProcCast(this);
+            Arpg::OnStatsCast(this);
             // A missed shot still breaks what any cast breaks (stealth, Feign Death).
             if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION))
                 m_caster->RemoveAurasOnCast(AURA_INTERRUPT_FLAG_ACTION_LATE, m_spellInfo);
@@ -3453,6 +3455,7 @@ SpellCastResult Spell::cast(bool skipCheck)
     SendSpellGo();                                          // we must send smsg_spell_go packet before m_castItem delete in TakeCastItem()...
     // ARPG: a readied cast this fits is spent (Arpg/ArpgProcs.h).
     Arpg::OnProcCast(this);
+    Arpg::OnStatsCast(this);
 
     InitializeDamageMultipliers();
 
@@ -4022,6 +4025,9 @@ void Spell::SendCastResult(SpellCastResult result) const
 
 void Spell::SendCastResult(Player const* caster, SpellEntry const* spellInfo, SpellCastResult result, bool isPetCastResult /*=false*/, uint32 param1 /*=0*/, uint32 param2 /*=0*/)
 {
+    // ARPG: play statistics, a cast refused for want of power (Arpg/ArpgStats.h).
+    Arpg::OnStatsCastFailed(caster, spellInfo, uint32(result));
+
     WorldPacket data(SMSG_CAST_RESULT, (4 + 1 + 1));
     data << uint32(spellInfo->Id);
 

@@ -11,6 +11,7 @@
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgStats.h"
 
 #include "AI/BaseAI/CreatureAI.h"
 #include "Entities/Creature.h"
@@ -1028,6 +1029,7 @@ namespace Arpg
         float const seconds = WorldTimer::getMSTimeDiff(it->second.aggroAt, WorldTimer::getMSTime()) / 1000.0f;
         sLog.outString("ARPG packs: a pack of %u %s (level %u) fell in %.1f s; it dealt %u damage",
                        uint32(members.size()), victim->GetName(), it->second.level, seconds, it->second.damage);
+        OnStatsPack(victim->GetName(), uint32(members.size()), it->second.level, seconds, it->second.damage);
         it->second.aggroAt = 0;
         it->second.damage = 0;
     }

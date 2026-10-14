@@ -48,6 +48,9 @@ if defined RUNNING (
     taskkill /f /pid %RUNNING% >nul 2>&1
 )
 
+rem The stopped server's play statistics go to the arpg-stats branch first (never stops the update).
+call "%~dp0send-arpg-stats.bat"
+
 if defined PULL (
     echo Pulling the latest code...
     git pull || goto :fail

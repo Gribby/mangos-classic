@@ -31,6 +31,7 @@
 #include <string>
 #include <unordered_map>
 #include "Arpg/ArpgSets.h"
+#include "Arpg/ArpgProcs.h"
 
 namespace
 {
@@ -1168,6 +1169,9 @@ namespace Arpg
         // The skill trees' and runes' rows, and the whole sets' powers (Arpg/ArpgSets.h).
         std::vector<UniqueMechanic const*> rows = SkillModifiers(player);
         for (UniqueMechanic const* row : SetModifiers(player))
+            rows.push_back(row);
+        // And the synergies' readied rows (Arpg/ArpgProcs.h).
+        for (UniqueMechanic const* row : ReadiedKits(player))
             rows.push_back(row);
         return rows;
     }

@@ -66,6 +66,7 @@
 #include "Arpg/ArpgEvents.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
+#include "Arpg/ArpgStats.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -930,6 +931,8 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
 
     // ARPG: the Martyr keystone strikes back with a share of the damage (Arpg/ArpgCharacter.h).
     Arpg::OnDamageTaken(victim, dealer, damage);
+    // ARPG: play statistics, damage dealt by spell and the blows before a death (Arpg/ArpgStats.h).
+    Arpg::OnStatsDamage(dealer, victim, damage, spellInfo);
 
     if (dealer)
     {
@@ -1438,6 +1441,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
 
     // ARPG: the kill's uniques (a DoT that spreads from the corpse, a fallen foe that rises), while
     // its auras still stand.
+    // ARPG: play statistics, a kill or a death (Arpg/ArpgStats.h).
+    Arpg::OnStatsKill(killer, victim);
     Arpg::OnKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
     // ARPG: life on kill, the Crusade keystone, a final boss's passive point (Arpg/ArpgCharacter.h).
     Arpg::OnCharacterKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);

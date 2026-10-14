@@ -7,6 +7,7 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgStats.h"
 
 #include "Chat/Chat.h"
 #include "Entities/Creature.h"
@@ -254,6 +255,7 @@ namespace Arpg
             s.dirty = true;
         }
         player->GetMotionMaster()->MoveCharge(end.x, end.y, end.z, DODGE_SPEED);
+        OnStatsRoll(player);
     }
 
     bool Dodging(Unit const* unit)
@@ -277,6 +279,7 @@ namespace Arpg
             --s.charges;
             s.dirty = true;
         }
+        OnStatsFlask(player);
         uint32 const max = player->GetMaxHealth();
         int32 const instant = int32(std::max<uint32>(1, uint32(float(max * FLASK_INSTANT_PCT / 100) * GlobeHealMod(player))));
         player->CastCustomSpell(player, SPELL_HEALING_POTION, &instant, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);

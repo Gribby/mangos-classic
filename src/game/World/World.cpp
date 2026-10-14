@@ -848,6 +848,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_BOOL_ARPG_DEV_TOOLS, "Arpg.DevTools", false);
     setConfig(CONFIG_UINT32_ARPG_DEV_CREATURE, "Arpg.DevTools.Creature", 721);
     setConfig(CONFIG_BOOL_ARPG_PACKS, "Arpg.Packs", true);
+    setConfig(CONFIG_BOOL_ARPG_STATS, "Arpg.Stats", true);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER, "Arpg.Packs.FollowerPower", 0.55f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_XP, "Arpg.Packs.FollowerXp", 0.3f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_LOOT, "Arpg.Packs.FollowerLoot", 0.5f);

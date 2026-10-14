@@ -1836,6 +1836,12 @@ Dummy.Debug2 = 0
 #        A follower's gold, and its chance to keep each item that isn't for a quest.
 #        Default: 0.5
 #
+#    Arpg.Stats
+#        Record ARPG play statistics (deaths and their causes, pack fight times, damage by spell,
+#        mana trouble, time per level) as JSON lines in arpg-stats/ beside mangosd, for tuning.
+#        update-arpg-server.bat sends them to the repository's arpg-stats branch.
+#        Default: 1
+#
 #    Arpg.Packs.Extra
 #        Outrider packs per open-world pack: each pack a vanilla spawn forms also places this many
 #        more (a fraction is a chance) 22-45 yards off, on open ground away from other spawns,
@@ -1885,6 +1891,7 @@ Arpg.Packs.FollowerPower = 0.55
 Arpg.Packs.FollowerXp = 0.3
 Arpg.Packs.FollowerLoot = 0.5
 Arpg.Packs.Extra = 1
+Arpg.Stats = 1
 Arpg.Dungeons = 1
 Arpg.Dungeons.SoloHealth = 0.35
 Arpg.Dungeons.PlayerHealth = 0.16

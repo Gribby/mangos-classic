@@ -55,6 +55,8 @@ namespace
         EFFECT_CRIT,          // ... is sure to critically strike
         EFFECT_FREE,          // ... costs nothing
         EFFECT_RESET,         // the targets' cooldowns end now
+        EFFECT_WIDE,          // ... has `value`% more area
+        EFFECT_KIT,           // ... carries the row's `kit` alone (a burst, a chain, a spread)
         // Done at once, not readied:
         EFFECT_HEAL,          // heal `value`% of maximum health
         EFFECT_MANA,          // restore `value`% of maximum mana
@@ -79,7 +81,38 @@ namespace
         uint32 lasts;                         // ms a readied cast waits
         char const* targetWords;              // "Holy Light or Flash of Light", for the lines
         char const* text;                     // the rune's or the item's line
+        // A skill tree's synergy node it comes from, by id (0: none): taken, it is the player's.
+        uint16 node = 0;
+        // An item's name, for an item by name (its entry found when the table is first read).
+        char const* itemName = nullptr;
+        // A uniques-kit row the readied cast also carries (kit 0: none), beside its effect.
+        UniqueMechanic kit{};
     };
+
+    // A row from a skill tree's synergy node: `trigger` from `from` readies `effect` (and `kit`)
+    // on the next cast of `targets` within `lasts` ms, once every `icd` ms.
+    ProcDef Synergy(uint16 node, char const* name, Trigger trigger, std::vector<char const*> from, Effect effect,
+                    std::vector<char const*> targets, int32 value, uint32 icd, uint32 lasts, char const* targetWords,
+                    char const* text, UniqueMechanic kit = {})
+    {
+        ProcDef def{ 0, 0, name, trigger, Arpg::SKILL_NONE, std::move(from), effect, std::move(targets), value, icd, lasts,
+                     targetWords, text };
+        def.node = node;
+        def.kit = kit;
+        return def;
+    }
+
+    // A row from an item by name.
+    ProcDef Worn(char const* item, Trigger trigger, std::vector<char const*> from, Effect effect,
+                 std::vector<char const*> targets, int32 value, uint32 icd, uint32 lasts, char const* targetWords,
+                 char const* text, UniqueMechanic kit = {})
+    {
+        ProcDef def{ 0, 0, item, trigger, Arpg::SKILL_NONE, std::move(from), effect, std::move(targets), value, icd, lasts,
+                     targetWords, text };
+        def.itemName = item;
+        def.kit = kit;
+        return def;
+    }
 
     // The stock spells whose hits stand for the powers' damage: Fire, Nature, Holy.
     constexpr uint32 EXPLODE_LOOK = 133, ARC_LOOK = 403, NOVA_LOOK = 2812;
@@ -93,7 +126,9 @@ namespace
 
     std::vector<ProcDef> const& Procs()
     {
-        static std::vector<ProcDef> const procs =
+        static std::vector<ProcDef> const procs = []()
+        {
+        std::vector<ProcDef> rows =
         {
             // --- Runes: socketed in the triggering skill ---
             { RUNE_GRACE, 0, "Rune of Grace", TRIG_SWING_CRIT, SKILL_STRIKE, {}, EFFECT_INSTANT,
@@ -132,8 +167,92 @@ namespace
               { "Sinister Strike", "Eviscerate", "Heroic Strike", "Mortal Strike" }, 0, 8000, 8000, "finishing strike",
               "A critical swing makes your next Sinister Strike, Eviscerate, Heroic Strike or Mortal Strike cost nothing (once every 8 sec)." },
 
+            // --- Synergies: the skill trees' synergy nodes (docs/ARPG-CHARACTER.md, "Synergies") ---
+            // The mage's.
+            Synergy(629, "Kindling Blast", TRIG_SPELL_CRIT, { "Fireball" }, EFFECT_DAMAGE, { "Fire Blast" }, 60, 3000, 4000,
+                    "Fire Blast", "Within 4 sec of a critical Fireball, your Fire Blast deals 60% more and bursts onto every enemy within 6 yards for 50%.",
+                    { 0, KIT_BURST, 2136, 0, 6.0f, 50, "", "Kindling Blast" }),
+            Synergy(130, "Hot Streak", TRIG_SPELL_CRIT, { "Fire Blast", "Scorch" }, EFFECT_INSTANT, { "Pyroblast" }, 0, 8000, 8000,
+                    "Pyroblast", "A critical Fire Blast or Scorch makes your next Pyroblast instant (once every 8 sec)."),
+            Synergy(226, "Winter's Grasp", TRIG_LANDED, { "Frost Nova" }, EFFECT_INSTANT, { "Frostbolt" }, 0, 6000, 6000,
+                    "Frostbolt", "Frost Nova makes your next Frostbolt instant, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.",
+                    { 0, KIT_FRAGMENTS, 116, 3, 10.0f, 50, "", "Winter's Grasp" }),
+            Synergy(327, "Arcane Echoes", TRIG_SPELL_CRIT, { "Arcane Explosion" }, EFFECT_FREE, { "Arcane Missiles" }, 0, 6000, 6000,
+                    "Arcane Missiles", "A critical Arcane Explosion makes your next Arcane Missiles cost no mana, and each missile jumps to 1 more enemy within 8 yards for 50%.",
+                    { 0, KIT_CHAIN, 5143, 1, 8.0f, 50, "", "Arcane Echoes" }),
+            Synergy(429, "Resonance", TRIG_SPELL_CRIT, { "Arcane Missiles", "Arcane Missile" }, EFFECT_WIDE, { "Arcane Explosion" }, 50, 4000, 5000,
+                    "Arcane Explosion", "A critical Arcane Missile makes your next Arcane Explosion 50% wider (once every 4 sec)."),
+            Synergy(525, "Firestorm", TRIG_SPELL_CRIT, { "Fire Blast", "Scorch" }, EFFECT_INSTANT, { "Flamestrike" }, 0, 6000, 6000,
+                    "Flamestrike", "A critical Fire Blast or Scorch makes your next Flamestrike instant (once every 6 sec)."),
+            // The paladin's.
+            Synergy(311, "Crusader's Verdict", TRIG_SWING_CRIT, {}, EFFECT_DAMAGE, { "Judgement", "Judgement of Righteousness", "Judgement of Command" }, 50,
+                    6000, 6000, "Judgement", "A critical swing makes your next Judgement deal 50% more (once every 6 sec)."),
+            Synergy(406, "Hallowed Strike", TRIG_SPELL_HIT, { "Judgement", "Judgement of Righteousness", "Judgement of Command" }, EFFECT_RESET, { "Consecration" }, 0, 10000, 0,
+                    "Consecration", "A Judgement that hits ends Consecration's cooldown (once every 10 sec)."),
+            Synergy(511, "Wrath of the Light", TRIG_SPELL_CRIT, { "Judgement", "Judgement of Righteousness", "Judgement of Command", "Exorcism" }, EFFECT_DAMAGE, { "Hammer of Wrath" }, 60, 6000, 8000,
+                    "Hammer of Wrath", "A critical Judgement or Exorcism makes your next Hammer of Wrath deal 60% more and fly through every enemy in its path for 60%.",
+                    { 0, KIT_PIERCE, 24275, 0, 0.0f, 60, "", "Wrath of the Light" }),
+            Synergy(610, "Righteous Thunder", TRIG_LANDED, { "Hammer of Justice" }, EFFECT_INSTANT, { "Holy Wrath" }, 0, 10000, 6000,
+                    "Holy Wrath", "Stunning an enemy with Hammer of Justice makes your next Holy Wrath instant (once every 10 sec)."),
+            Synergy(204, "Crusader's Grace", TRIG_SPELL_CRIT, { "Judgement", "Judgement of Righteousness", "Judgement of Command", "Exorcism", "Hammer of Wrath" }, EFFECT_INSTANT,
+                    { "Holy Light", "Flash of Light" }, 0, 8000, 8000, "Holy Light or Flash of Light",
+                    "A critical Judgement, Exorcism or Hammer of Wrath makes your next Holy Light or Flash of Light instant (once every 8 sec)."),
+            // The druid's.
+            Synergy(151, "Lunar Eclipse", TRIG_SPELL_CRIT, { "Wrath" }, EFFECT_INSTANT, { "Starfire" }, 0, 8000, 6000,
+                    "Starfire", "A critical Wrath makes your next Starfire instant, and it bursts onto every enemy within 6 yards for 40% (once every 8 sec).",
+                    { 0, KIT_BURST, 2912, 0, 6.0f, 40, "", "Lunar Eclipse" }),
+            Synergy(243, "Moonkissed", TRIG_SPELL_CRIT, { "Wrath", "Starfire" }, EFFECT_KIT, { "Moonfire" }, 0, 6000, 6000,
+                    "Moonfire", "A critical Wrath or Starfire makes your next Moonfire also land on the 3 nearest enemies within 8 yards (once every 6 sec).",
+                    { 0, KIT_SPREAD, 8921, 3, 8.0f, 100, "", "Moonkissed" }),
+            Synergy(343, "Gathering Storm", TRIG_SPELL_CRIT, { "Moonfire", "Starfire" }, EFFECT_FREE, { "Hurricane" }, 0, 10000, 8000,
+                    "Hurricane", "A critical Moonfire or Starfire makes your next Hurricane cost no mana (once every 10 sec)."),
+            Synergy(445, "Roaring Swipe", TRIG_LANDED, { "Demoralizing Roar" }, EFFECT_DAMAGE, { "Swipe" }, 60, 6000, 6000,
+                    "Swipe", "Demoralizing Roar makes your next Swipe deal 60% more (once every 6 sec)."),
+            Synergy(549, "Bloodied Bite", TRIG_SPELL_CRIT, { "Claw", "Shred" }, EFFECT_CRIT, { "Ferocious Bite" }, 0, 6000, 8000,
+                    "Ferocious Bite", "A critical Claw or Shred makes your next Ferocious Bite a sure critical strike (once every 6 sec)."),
+            Synergy(643, "Overgrowth's Gift", TRIG_LANDED, { "Entangling Roots" }, EFFECT_INSTANT, { "Regrowth", "Healing Touch" }, 0, 10000, 8000,
+                    "Regrowth or Healing Touch", "Entangling Roots makes your next Regrowth or Healing Touch instant (once every 10 sec)."),
+
+            // --- Synergy uniques, by name ---
+            Worn("Mana Igniting Cord", TRIG_SPELL_CRIT, { "Fireball" }, EFFECT_RESET, { "Fire Blast" }, 0, 6000, 0,
+                 "Fire Blast", "A critical Fireball ends Fire Blast's cooldown (once every 6 sec)."),
+            Worn("Robe of the Archmage", TRIG_LANDED, { "Frost Nova" }, EFFECT_CRIT, { "Fire Blast" }, 0, 10000, 6000,
+                 "Fire Blast", "Frost Nova makes your next Fire Blast a sure critical strike (once every 10 sec)."),
+            Worn("Wolfshead Helm", TRIG_SPELL_CRIT, { "Claw", "Shred" }, EFFECT_FREE, { "Rake", "Rip" }, 0, 6000, 6000,
+                 "Rake or Rip", "A critical Claw or Shred makes your next Rake or Rip cost no energy (once every 6 sec)."),
+            Worn("Staff of the Shadow Flame", TRIG_SPELL_CRIT, { "Wrath" }, EFFECT_DAMAGE, { "Starfire" }, 50, 6000, 6000,
+                 "Starfire", "A critical Wrath makes your next Starfire deal 50% more (once every 6 sec)."),
         };
+        // Items by name keep it: their entries are found when first needed (ItemOf), as the
+        // table is first read before the item templates load (a rune's text).
+        return rows;
+        }();
         return procs;
+    }
+
+    // A row's item entry: its own, or its name's once the item templates are loaded (0: none, or not
+    // in the database, logged once).
+    uint32 ItemOf(ProcDef const& def)
+    {
+        if (def.item || !def.itemName)
+            return def.item;
+        static std::mutex lock;
+        static std::map<std::string, uint32> found;
+        std::lock_guard<std::mutex> guard(lock);
+        auto it = found.find(def.itemName);
+        if (it != found.end())
+            return it->second;
+        if (!sItemStorage.GetMaxEntry())
+            return 0;                       // not loaded yet: ask again later
+        uint32 entry = 0;
+        for (uint32 id = 0; id < sItemStorage.GetMaxEntry() && !entry; ++id)
+            if (ItemPrototype const* proto = sItemStorage.LookupEntry<ItemPrototype>(id))
+                if (proto->Name1 && std::strcmp(proto->Name1, def.itemName) == 0)
+                    entry = id;
+        if (!entry)
+            sLog.outError("ARPG procs: no item named \"%s\"", def.itemName);
+        found[def.itemName] = entry;
+        return entry;
     }
 
     bool Named(SpellEntry const* spell, std::vector<char const*> const& names)
@@ -236,7 +355,7 @@ namespace
     struct Readied
     {
         size_t proc;                          // its row in Procs()
-        SpellModifier* mod;
+        SpellModifier* mod;                   // nullptr: a kit row alone, or the mod spent already
         uint32 expires;
         Spell const* spentBy = nullptr;       // compared only, never followed
         uint32 spentAt = 0;
@@ -274,7 +393,7 @@ namespace
             if (u.item == item)
                 return true;
         for (ProcDef const& def : Procs())
-            if (def.item == item)
+            if (ItemOf(def) == item && item)
                 return true;
         return false;
     }
@@ -610,8 +729,12 @@ namespace
     bool Has(Player const* player, size_t row, Sockets const& sockets)
     {
         ProcDef const& def = Procs()[row];
-        if (def.item)
-            return Wears(player, def.item);
+        if (def.node)
+            return SkillNodeRank(player, def.node) > 0;
+        if (uint32 const item = ItemOf(def))
+            return Wears(player, item);
+        if (def.itemName)
+            return false;
         return Socketed(sockets, Arpg::SKILL_NONE, def.rune);
     }
 
@@ -695,7 +818,8 @@ namespace
 
     bool Readies(Effect effect)
     {
-        return effect == EFFECT_INSTANT || effect == EFFECT_DAMAGE || effect == EFFECT_CRIT || effect == EFFECT_FREE;
+        return effect == EFFECT_INSTANT || effect == EFFECT_DAMAGE || effect == EFFECT_CRIT || effect == EFFECT_FREE ||
+               effect == EFFECT_WIDE || effect == EFFECT_KIT;
     }
 
     // A readying effect, or a cooldown reset; the caller holds sLock.
@@ -719,6 +843,19 @@ namespace
             }
             if (ended)
                 ReportProc(player, PROC_EFFECT, 0, def.name, "ends the cooldown of %s.", def.targetWords);
+            return;
+        }
+        if (def.effect == EFFECT_KIT)
+        {
+            PlayerProcs& pp = sProcs[player->GetObjectGuid()];
+            for (Readied& r : pp.readied)
+                if (r.proc == row && !r.spentBy)
+                {
+                    r.expires = now + def.lasts;
+                    return;
+                }
+            pp.readied.push_back({ row, nullptr, now + def.lasts });
+            ReportProc(player, PROC_EFFECT, 0, def.name, "readies your next %s.", def.targetWords);
             return;
         }
         uint32 const owner = FamilyOwner(player);
@@ -757,6 +894,10 @@ namespace
             case EFFECT_FREE:
                 mod = new SpellModifier(SPELLMOD_COST, SPELLMOD_PCT, -100, owner, mask);
                 words = "free";
+                break;
+            case EFFECT_WIDE:
+                mod = new SpellModifier(SPELLMOD_RADIUS, SPELLMOD_PCT, def.value, owner, mask);
+                words = "wider";
                 break;
             default:
                 return;
@@ -1058,8 +1199,8 @@ namespace Arpg
     {
         std::vector<std::pair<uint32, std::string>> out;
         for (ProcDef const& def : Procs())
-            if (def.item)
-                out.emplace_back(def.item, def.text);
+            if (uint32 const item = ItemOf(def))
+                out.emplace_back(item, def.text);
         return out;
     }
 
@@ -1169,8 +1310,33 @@ namespace Arpg
         for (size_t i = pp.readied.size(); i-- > 0;)
         {
             Readied& r = pp.readied[i];
-            if (r.spentBy || !r.mod || !r.mod->isAffectedOnSpell(info))
+            ProcDef const& def = Procs()[r.proc];
+            if (r.spentBy || !(r.mod ? r.mod->isAffectedOnSpell(info) : Named(info, def.targets)))
                 continue;
+            bool const carriesKit = def.kit.kit != UniqueKit(0);
+            if (!r.mod)
+            {
+                // A kit row alone waits for the hit, as damage does.
+                if (HitsOrHeals(info))
+                {
+                    r.spentBy = spell;
+                    r.spentAt = now;
+                }
+                continue;
+            }
+            if (carriesKit && (r.mod->op == SPELLMOD_CASTING_TIME || r.mod->op == SPELLMOD_COST))
+            {
+                // Its mod's work is done at the go, as below, but its kit row waits for the hit:
+                // the mod goes now, the row when the spell is done.
+                if (r.mod->op == SPELLMOD_CASTING_TIME ? (!hasCastTime || spell->GetCastTime() > 0)
+                                                       : (spell->GetPowerCost() > 0 || (!info->manaCost && !info->ManaCostPercentage)))
+                    continue;
+                player->AddSpellMod(r.mod, false); // deletes it
+                r.mod = nullptr;
+                r.spentBy = spell;
+                r.spentAt = now;
+                continue;
+            }
             if (r.mod->op == SPELLMOD_CASTING_TIME)
             {
                 // Spent only by a cast it made instant: not a spell instant anyway (a Seal after
@@ -1235,6 +1401,24 @@ namespace Arpg
             if (stale || !Has(player, r.proc, sockets))
                 Drop(player, pp, i);
         }
+    }
+
+    std::vector<UniqueMechanic const*> ReadiedKits(Player const* player)
+    {
+        std::vector<UniqueMechanic const*> out;
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sProcs.find(player->GetObjectGuid());
+        if (it == sProcs.end())
+            return out;
+        // Only a row a cast has spent, while that cast's hits land: an unspent one would reach
+        // a cast already under way (a Frostbolt in flight, a Starfire begun before the proc).
+        for (Readied const& r : it->second.readied)
+        {
+            UniqueMechanic const& kit = Procs()[r.proc].kit;
+            if (kit.kit != UniqueKit(0) && r.spentBy)
+                out.push_back(&kit);
+        }
+        return out;
     }
 
     void ForgetProcs(Player* player)
