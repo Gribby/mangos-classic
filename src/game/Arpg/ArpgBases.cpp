@@ -185,40 +185,6 @@ namespace
 
     using KindKey = std::tuple<uint8, uint8, uint8>;
 
-    std::string Escaped(std::string const& text)
-    {
-        std::string out;
-        for (char c : text)
-        {
-            if (c == '\'' || c == '\\')
-                out += '\\';
-            out += c;
-        }
-        return out;
-    }
-
-    // Copy item `donor`'s row to `entry`, every column but `overrides` (column -> SQL literal) as
-    // the donor has it; only the columns this database's item_template has are named.
-    void CopyRow(std::vector<std::string> const& columns, uint32 entry, uint32 donor, std::map<std::string, std::string> const& overrides)
-    {
-        std::string names, values;
-        for (std::string const& column : columns)
-        {
-            if (!names.empty())
-            {
-                names += ", ";
-                values += ", ";
-            }
-            names += "`" + column + "`";
-            auto it = overrides.find(column);
-            values += it != overrides.end() ? it->second : "`" + column + "`";
-        }
-        // INSERT ... SELECT from the same table is MySQL's documented way (not REPLACE).
-        WorldDatabase.DirectPExecute("DELETE FROM item_template WHERE entry = %u", entry);
-        WorldDatabase.DirectPExecute("INSERT INTO item_template (%s) SELECT %s FROM item_template WHERE entry = %u",
-                                     names.c_str(), values.c_str(), donor);
-    }
-
     // Whether `proto` is a white or green a raid's base swaps for: something to wear or wield,
     // with no mechanic of its own.
     bool Swappable(ItemPrototype const* proto)
@@ -265,6 +231,40 @@ namespace
 
 namespace Arpg
 {
+    std::string SqlEscaped(std::string const& text)
+    {
+        std::string out;
+        for (char c : text)
+        {
+            if (c == '\'' || c == '\\')
+                out += '\\';
+            out += c;
+        }
+        return out;
+    }
+
+    // Copy item `donor`'s row to `entry`, every column but `overrides` (column -> SQL literal) as
+    // the donor has it; only the columns this database's item_template has are named.
+    void CopyItemRow(std::vector<std::string> const& columns, uint32 entry, uint32 donor, std::map<std::string, std::string> const& overrides)
+    {
+        std::string names, values;
+        for (std::string const& column : columns)
+        {
+            if (!names.empty())
+            {
+                names += ", ";
+                values += ", ";
+            }
+            names += "`" + column + "`";
+            auto it = overrides.find(column);
+            values += it != overrides.end() ? it->second : "`" + column + "`";
+        }
+        // INSERT ... SELECT from the same table is MySQL's documented way (not REPLACE).
+        WorldDatabase.DirectPExecute("DELETE FROM item_template WHERE entry = %u", entry);
+        WorldDatabase.DirectPExecute("INSERT INTO item_template (%s) SELECT %s FROM item_template WHERE entry = %u",
+                                     names.c_str(), values.c_str(), donor);
+    }
+
     void EnsureBaseItems()
     {
         if (!sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
@@ -337,7 +337,7 @@ namespace Arpg
                 auto put = [&](char const* column, std::string const& value) { if (has(column)) set[column] = value; };
                 auto num = [&](char const* column, double value) { put(column, std::to_string(int64(std::llround(value)))); };
                 put("entry", std::to_string(entry));
-                put("name", "'" + Escaped(name) + "'");
+                put("name", "'" + SqlEscaped(name) + "'");
                 num("Quality", ITEM_QUALITY_NORMAL);
                 for (char const* zero : { "Flags", "BuyPrice", "RequiredSkill", "RequiredSkillRank", "requiredspell",
                                           "requiredhonorrank", "RequiredCityRank", "RequiredReputationFaction",
@@ -422,7 +422,7 @@ namespace Arpg
                     stat(fam.statA, budget * 0.5);
                     stat(fam.statB, budget * 0.5);
                 }
-                CopyRow(columns, entry, donor, set);
+                CopyItemRow(columns, entry, donor, set);
                 bank.push_back({ entry, kind.cls, kind.sub, kind.inv, tier.level, uint8(family) });
             }
         }

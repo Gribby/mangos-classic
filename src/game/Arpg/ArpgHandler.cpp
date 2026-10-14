@@ -54,6 +54,7 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgSets.h"
 
 #include "Server/WorldSession.h"
 #include "Server/WorldPacket.h"
@@ -92,6 +93,8 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             Arpg::OnHello(player);
             // The uniques' tooltip lines, with every hello: the client may have missed a first.
             Arpg::SendUniques(player);
+            // The item set catalog (Arpg/ArpgSets.h).
+            Arpg::SendSets(player);
             // The skill tree takes over from the talents, on the world thread (it teaches spells).
             GetMessager().AddMessage([](WorldSession* session)
             {

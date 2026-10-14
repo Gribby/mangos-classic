@@ -63,6 +63,7 @@
 #include <limits>
 #include <cstdarg>
 #include <cstring>
+#include "Arpg/ArpgSets.h"
 
 INSTANTIATE_SINGLETON_1(ObjectMgr);
 
@@ -2772,7 +2773,8 @@ void ObjectMgr::LoadItemPrototypes()
             const_cast<ItemPrototype*>(proto)->RandomProperty = 0;
         }
 
-        if (proto->ItemSet && !sItemSetStore.LookupEntry(proto->ItemSet))
+        // ARPG: a set of its own (Arpg/ArpgSets.h) is not ItemSet.dbc's.
+        if (proto->ItemSet && !sItemSetStore.LookupEntry(proto->ItemSet) && !Arpg::IsSetPiece(i))
         {
             sLog.outErrorDb("Item (Entry: %u) have wrong ItemSet (%u)", i, proto->ItemSet);
             const_cast<ItemPrototype*>(proto)->ItemSet = 0;

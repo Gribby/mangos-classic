@@ -25,11 +25,16 @@
 #include "Server/SQLStorages.h"
 #include "Loot/LootMgr.h"
 #include "Spells/SpellTargetDefines.h"
+#include "Arpg/ArpgSets.h"
 
 void AddItemsSetItem(Player* player, Item* item)
 {
     ItemPrototype const* proto = item->GetProto();
     uint32 setid = proto->ItemSet;
+
+    // ARPG: a set of its own works through the ARPG totals (Arpg/ArpgSets.h).
+    if (Arpg::IsSetPiece(proto->ItemId))
+        return;
 
     ItemSetEntry const* set = sItemSetStore.LookupEntry(setid);
 
@@ -89,6 +94,9 @@ void AddItemsSetItem(Player* player, Item* item)
 void RemoveItemsSetItem(Player* player, ItemPrototype const* proto)
 {
     uint32 setid = proto->ItemSet;
+
+    if (Arpg::IsSetPiece(proto->ItemId))
+        return;
 
     ItemSetEntry const* set = sItemSetStore.LookupEntry(setid);
 

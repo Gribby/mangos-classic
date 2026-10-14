@@ -36,6 +36,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include "Arpg/ArpgSets.h"
 
 namespace
 {
@@ -250,6 +251,9 @@ namespace
         if (!proto || proto->Quality < ITEM_QUALITY_NORMAL || proto->Quality > ITEM_QUALITY_EPIC)
             return false;
         if (proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR)
+            return false;
+        // A set's piece is as its set made it (Arpg/ArpgSets.h).
+        if (IsSetPiece(proto->ItemId))
             return false;
         switch (proto->InventoryType)
         {
@@ -673,6 +677,8 @@ namespace Arpg
         if (!loot || !looter || !Active(looter))
             return;
         tier = std::min<uint8>(tier, MAX_TIER);
+        // A piece of the looter's class's set, sometimes (Arpg/ArpgSets.h).
+        MaybeAddSetPiece(loot, looter, source);
         loot->ForEachArpgItem([tier, source](LootItem* item)
         {
             if (item->arpgSeed || !Takes(item->itemProto))
@@ -745,6 +751,8 @@ namespace Arpg
             if (item && !item->IsBroken())
                 AddAffixTotals(item, totals, 1);
         }
+        // The worn sets' bonuses (Arpg/ArpgSets.h).
+        AddSetTotals(player, totals);
     }
 
     uint32 AffixStateOf(Item const* item)

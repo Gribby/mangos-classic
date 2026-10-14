@@ -91,6 +91,7 @@
 #include <mutex>
 #include <cstdarg>
 #include <memory>
+#include "Arpg/ArpgSets.h"
 
 INSTANTIATE_SINGLETON_1(World);
 
@@ -1027,6 +1028,7 @@ void World::SetInitialWorldSettings()
     Arpg::EnsureCraftItems();
     // ARPG: and the raid-level base items (Arpg/ArpgBases.h).
     Arpg::EnsureBaseItems();
+    Arpg::EnsureSetItems();
     sLog.outString("Loading Item Templates...");            // must be after LoadRandomEnchantmentsTable and LoadPageTexts
     sObjectMgr.LoadItemPrototypes();
 

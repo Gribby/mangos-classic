@@ -27,6 +27,10 @@
 
 #include "Common.h"
 
+#include <map>
+#include <string>
+#include <vector>
+
 class Creature;
 class Map;
 
@@ -37,6 +41,14 @@ namespace Arpg
     constexpr uint32 OLD_BANK_FROM = 93000, OLD_BANK_TO = 93999;
     // From this item level a rolled drop's base comes from the bank.
     constexpr uint32 BANK_FROM = 64;
+
+    // `text` escaped for a quoted SQL literal.
+    std::string SqlEscaped(std::string const& text);
+
+    // Copy item `donor`'s row to `entry` in item_template, every column but `overrides` (column ->
+    // SQL literal) as the donor has it; only `columns`, the ones this database's table has, are named.
+    void CopyItemRow(std::vector<std::string> const& columns, uint32 entry, uint32 donor,
+                     std::map<std::string, std::string> const& overrides);
 
     // Write the bank into item_template; before the item templates load.
     void EnsureBaseItems();

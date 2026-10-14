@@ -30,6 +30,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "Arpg/ArpgSets.h"
 
 namespace
 {
@@ -61,6 +62,9 @@ namespace
             return false;
         // The first base bank's items (no implicits) stay for those who hold them, but never drop.
         if (proto->ItemId >= Arpg::OLD_BANK_FROM && proto->ItemId <= Arpg::OLD_BANK_TO)
+            return false;
+        // A set's pieces drop as sets do (Arpg/ArpgSets.h), never as a random item.
+        if (Arpg::IsSetPiece(proto->ItemId))
             return false;
         char const* name = proto->Name1;
         for (char const* junk : { "Monster", "Deprecated", "DEPRECATED", "TEST", "Test ", "[PH]", "OLD", "QA" })

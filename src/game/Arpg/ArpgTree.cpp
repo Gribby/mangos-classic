@@ -30,6 +30,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include "Arpg/ArpgSets.h"
 
 namespace
 {
@@ -1164,7 +1165,11 @@ namespace Arpg
 
     std::vector<UniqueMechanic const*> LearnedModifiers(Player const* player)
     {
-        return SkillModifiers(player);
+        // The skill trees' and runes' rows, and the whole sets' powers (Arpg/ArpgSets.h).
+        std::vector<UniqueMechanic const*> rows = SkillModifiers(player);
+        for (UniqueMechanic const* row : SetModifiers(player))
+            rows.push_back(row);
+        return rows;
     }
 
     bool HasKeystone(Unit const* unit, Keystone key)
