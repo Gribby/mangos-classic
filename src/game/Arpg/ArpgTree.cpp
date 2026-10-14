@@ -377,14 +377,87 @@ namespace
         return Assemble(regions, bridges, ring, bridgeSmall, { "Mage", "Your starting point. Every path leads out from here.", {}, 133 });
     }
 
+    // The druid's web: Balance, Feral and Restoration. Its notables teach the druid's own talents.
+    ClassWeb BuildDruid()
+    {
+        RegionSpec const regions[3] =
+        {
+            { "Balance", -150.0f,
+              { "Balance", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Starlight", "+4% Arcane damage", { TagFx(TAG_ARCANE, 4) } },
+                    { "Improved Wrath", "Your Wrath's cast time is 0.5 sec shorter.", {}, 0, "Improved Wrath", 5 },
+                    { "Celestial Focus", "30% more Arcane and Nature spell damage. Your attacks deal 40% less.", {}, 24858, nullptr, 0, KEY_CELESTIAL_FOCUS },
+                    true },
+                  { { "Insight", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                    { "Moonglow", "Your Moonfire, Starfire, Wrath and heals cost 9% less mana.", {}, 0, "Moonglow", 3 },
+                    { "Improved Moonfire", "+10% Moonfire damage and critical strike chance.", {}, 0, "Improved Moonfire", 5 },
+                    false },
+                  { { "Growth", "+4% Nature damage", { TagFx(TAG_NATURE, 4) } },
+                    { "Nature's Grace", "A spell critical strike makes your next cast 0.5 sec quicker.", {}, 0, "Nature's Grace", 1 },
+                    { "Nature's Bounty", "Your Poisons deal 50% more. Your hits deal 15% less.", {}, 5570, nullptr, 0, KEY_NATURES_BOUNTY },
+                    true },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Moonwell", "+4 Spirit and +3 mana on hit", { Stat(STAT_SPIRIT, 4), Of(FX_MANA_ON_HIT, 3) } } } },
+            { "Feral", -30.0f,
+              { "Feral", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Ferocity", "+4% Melee damage", { TagFx(TAG_MELEE, 4) } },
+                    { "Sharpened Claws", "+6% critical strike chance in Bear and Cat Form.", {}, 0, "Sharpened Claws", 3 },
+                    { "Predator", "Your Bleeds deal 60% more. Your spells deal 30% less.", {}, 1079, nullptr, 0, KEY_PREDATOR },
+                    true },
+                  { { "Hide", "+6 Stamina", { Stat(STAT_STAMINA, 6) } },
+                    { "Thick Hide", "+10% armour from items.", {}, 0, "Thick Hide", 5 },
+                    { "Heart of the Wild", "+20% Intellect; more Stamina in Bear Form and attack power in Cat Form.", {}, 0, "Heart of the Wild", 5 },
+                    false },
+                  { { "Claws", "+5 Agility", { Stat(STAT_AGILITY, 5) } },
+                    { "Predatory Strikes", "Attack power in Bear and Cat Form, 150% of your level.", {}, 0, "Predatory Strikes", 3 },
+                    { "King of the Jungle", "Each kill in the last 6 sec gives 4% more Melee damage, up to 10 kills. Your heals are 50% less.", {}, 5217, nullptr, 0, KEY_KING_OF_THE_JUNGLE },
+                    true },
+              },
+              { { "Swiftness", "+3% movement speed", { Of(FX_MOVE, 3) } },
+                { "Wildness", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } } } },
+            { "Restoration", 90.0f,
+              { "Restoration", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Blossom", "+4% healing", { TagFx(TAG_HEAL, 4) } },
+                    { "Improved Rejuvenation", "Your Rejuvenation heals 15% more.", {}, 0, "Improved Rejuvenation", 3 },
+                    { "Tree of Life", "Your heals are 50% more. Your damage is 20% less.", {}, 5185, nullptr, 0, KEY_TREE_OF_LIFE },
+                    true },
+                  { { "Spirit", "+4 Spirit", { Stat(STAT_SPIRIT, 4) } },
+                    { "Furor", "Rage or energy when you shift into Bear or Cat Form.", {}, 0, "Furor", 5 },
+                    { "Improved Healing Touch", "Your Healing Touch's cast time is 0.5 sec shorter.", {}, 0, "Improved Healing Touch", 5 },
+                    false },
+                  { { "Bark", "+4% armour and +2 Stamina", { Of(FX_ARMOUR, 4), Stat(STAT_STAMINA, 2) } },
+                    { "Improved Thorns", "Your Thorns deals 75% more damage.", {}, 0, "Improved Thorns", 3 },
+                    { "Living Thorns", "Your Thorns strikes every enemy within 8 yards each second for its damage. Your heals are 30% less.", {}, 467, nullptr, 0, KEY_LIVING_THORNS },
+                    true },
+              },
+              { { "Endurance", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } },
+                { "Tranquility", "+4% cooldown recovery", { Of(FX_COOLDOWN, 4) } } } },
+        };
+        BridgeSpec const bridges[3] =
+        {
+            { 0, 2, 1, 0, -90.0f, { "Natural Weapons", "+10% melee damage.", {}, 0, "Natural Weapons", 5 } },
+            { 1, 2, 2, 0, 30.0f, { "Leader of the Pack", "In Bear or Cat Form, your party has +3% critical strike chance.", {}, 0, "Leader of the Pack", 1 } },
+            { 2, 2, 0, 0, 150.0f, { "Gift of Nature", "+10% healing.", {}, 0, "Gift of Nature", 5 } },
+        };
+        Spec const ring = { "Wild", "+3% movement speed", { Of(FX_MOVE, 3) } };
+        Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+        return Assemble(regions, bridges, ring, bridgeSmall, { "Druid", "Your starting point. Every path leads out from here.", {}, 5176 });
+    }
+
     ClassWeb const* WebOf(uint8 classId)
     {
         static ClassWeb const paladin = BuildPaladin();
         static ClassWeb const mage = BuildMage();
+        static ClassWeb const druid = BuildDruid();
         switch (classId)
         {
             case CLASS_PALADIN: return &paladin;
             case CLASS_MAGE: return &mage;
+            case CLASS_DRUID: return &druid;
             default: return nullptr;
         }
     }
@@ -678,6 +751,20 @@ namespace
         }
     }
 
+    struct EarlySpell
+    {
+        uint8 classId;
+        uint32 spell;
+        uint32 level;
+    };
+
+    EarlySpell const EARLY_SPELLS[] =
+    {
+        { CLASS_DRUID, 5487, 10 },     // Bear Form (a quest in vanilla)
+        { CLASS_DRUID, 779, 10 },      // Swipe, rank 1 (16)
+        { CLASS_DRUID, 16914, 20 },    // Hurricane, rank 1 (40)
+    };
+
     // Drop the talent spells the character shouldn't have, and give it the free ones.
     void SettleTalentSpells(Player* player)
     {
@@ -689,6 +776,11 @@ namespace
         for (auto const& [spell, level] : TalentsOf(player->getClass()).free)
             if (player->GetLevel() >= level && !player->HasSpell(spell))
                 player->learnSpell(spell, false);
+        // A class's spells that come earlier than vanilla's (a quest's, or a trainer's later level),
+        // as the paladin's Consecration does: an ARPG character needs area damage early.
+        for (EarlySpell const& early : EARLY_SPELLS)
+            if (early.classId == player->getClass() && player->GetLevel() >= early.level && !player->HasSpell(early.spell))
+                player->learnSpell(early.spell, false);
         TeachClassSpells(player);
         Edit(player, [&](PlayerWeb& e) { e.level = player->GetLevel(); });
     }

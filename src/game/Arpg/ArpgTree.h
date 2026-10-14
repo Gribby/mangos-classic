@@ -146,6 +146,28 @@ namespace Arpg
         KEY_CHAIN_BLAST,       // a kill with Fire Blast readies it again
         KEY_SEARING_BRAND,     // Scorch brands the target with Fire Vulnerability
         KEY_DETONATE,          // Fire Blast sets off the target's Ignite at once, onto those near it
+        // The druid's web (ArpgDruid.cpp)
+        KEY_CELESTIAL_FOCUS,   // 30% more Arcane and Nature spell damage; attacks 40% less
+        KEY_NATURES_BOUNTY,    // Poisons 50% more; hits 15% less
+        KEY_PREDATOR,          // Bleeds 60% more; spells 30% less
+        KEY_KING_OF_THE_JUNGLE,// 4% more Melee damage per kill in the last 6 sec; heals 50% less
+        KEY_TREE_OF_LIFE,      // heals 50% more; damage 20% less
+        KEY_LIVING_THORNS,     // Thorns strikes every enemy within 8 yd each second; heals 30% less
+        // The druid's skill trees (ArpgDruid.cpp)
+        KEY_ECLIPSE,           // critical Wraths and Starfires restore mana and quicken the next cast
+        KEY_HIVE_MIND,         // Insect Swarm ticks Poison
+        KEY_LUNAR_TIDE,        // Moonfire and Insect Swarm ticks restore mana
+        KEY_TEMPEST,           // Hurricane strikes may call down a Wrath
+        KEY_BITING_HAIL,       // Hurricane strikes may chill, 5% per rank
+        KEY_EYE_OF_THE_WILD,   // Hurricane strikes heal 0.3% of max health per rank
+        KEY_BRISTLING_FUR,     // blows taken in Bear Form give 2 rage per rank
+        KEY_SURVIVAL_INSTINCTS,// Bear hits heal 2% of their damage per rank
+        KEY_THORNED_HIDE,      // in Bear Form, attackers take 30% of attack power as Nature
+        KEY_SAVAGE_FURY,       // critical Claws, Shreds and Rakes give an extra combo point
+        KEY_BLOOM,             // heals burst for 50% as Nature around you
+        KEY_NATURES_WRATH,     // heals strike the nearest enemy for 15% per rank as Nature
+        KEY_VERDANT_FURY,      // healing yourself: 5% more damage per rank for 5 sec
+        KEY_WRATH_OF_THE_WILD, // heals Poison every enemy within 8 yd
         MAX_KEYSTONE
     };
 

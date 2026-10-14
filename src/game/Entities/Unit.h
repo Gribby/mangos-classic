@@ -2426,6 +2426,8 @@ class Unit : public WorldObject
 
         void AddComboPoints(Unit* target, int8 count);
         void ClearComboPoints();
+        // ARPG: move the points held to `target`, as a finisher aimed at another enemy spends them there.
+        void RetargetComboPoints(Unit* target);
 
         uint32 GetDamageDoneByOthers() { return m_damageByOthers; }
         uint32 GetModifierXpBasedOnDamageReceived(uint32 xp);

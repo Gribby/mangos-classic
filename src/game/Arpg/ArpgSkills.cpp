@@ -363,6 +363,102 @@ namespace
                   Mod(630, 2, 2, 629, 4, "Blazing", "6% more Fire Blast and Scorch damage per rank.", 2136, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
                   Key(631, SKILL_NODE_CAPSTONE, 2, 3, 630, 1, "Detonate", "Fire Blast sets off your Ignite on its target at once: the burn left strikes it and every enemy within 6 yards.", 11113, KEY_DETONATE),
               } },
+            // --- The druid's six, numbered 40-59 within each skill's hundred. ---
+            { SKILL_DRUID_WRATH, CLASS_DRUID, "Wrath", "Wrath and Starfire: the druid's bolts of nature and starlight.", 5176, { "Wrath", "Starfire" },
+              { "Volley", "Starfall", "Grace" },
+              {
+                  Kit(141, 0, 1, 0, 3, "Splitting Wrath", "Wrath launches 1/1/2 extra bolts, at 45/60/60%.", 5176,
+                      KIT_EXTRA_PROJECTILES, 5176, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
+                  Mod(142, 0, 2, 141, 3, "Quick Wrath", "-0.1 sec Wrath cast time per rank.", 16814, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -100, "Wrath"),
+                  Ail(143, 0, 3, 142, 3, "Thorned Wrath", "Your Wrath and Starfire hits have an 8% chance per rank to Poison.", 467, TAG_NATURE, 8),
+                  KitCap(144, 0, 4, 143, "Wrath of Cenarius", "Wrath chains to 3 more enemies within 10 yards, at 60%.", 5176, KIT_CHAIN, 5176, 3, 10.0f, 60),
+                  Mod(145, 1, 1, 0, 4, "Lunar Fury", "6% more Starfire damage per rank.", 2912, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6, "Starfire"),
+                  Mod(146, 1, 2, 145, 3, "Quick Starfire", "-0.2 sec Starfire cast time per rank.", 16850, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Starfire"),
+                  Ail(147, 1, 3, 146, 3, "Moonstruck", "Your Wrath and Starfire hits have a 10% chance per rank to Overload.", 8921, TAG_ARCANE, 10),
+                  KitCap(148, 1, 4, 147, "Starfall", "Starfire bursts onto every enemy within 10 yards of its target, at 60%.", 20687, KIT_BURST, 2912, 0, 10.0f, 60),
+                  Mod(149, 2, 1, 0, 3, "Nature's Grace", "+3% Wrath and Starfire critical strike chance per rank.", 16880, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 3),
+                  Mod(150, 2, 2, 149, 3, "Moonfury", "Critical strikes deal 20% more of their bonus per rank.", 16896, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
+                  Mod(151, 2, 3, 150, 3, "Vengeance", "5% more Wrath and Starfire damage per rank.", 16909, SPELLMOD_DAMAGE, SPELLMOD_PCT, 5),
+                  Key(152, SKILL_NODE_CAPSTONE, 2, 4, 151, 1, "Eclipse", "Your critical Wraths and Starfires restore 2% of your maximum mana and make your next cast 0.5 sec quicker.", 16886, KEY_ECLIPSE),
+              } },
+            { SKILL_MOONFIRE, CLASS_DRUID, "Moonfire", "Moonfire and Insect Swarm: burns and swarms that spread.", 8921, { "Moonfire", "Insect Swarm" },
+              { "Lunar", "Swarm", "Moonglow" },
+              {
+                  Kit(241, 0, 1, 0, 3, "Spreading Moon", "Moonfire also lands on 1/2/3 more enemies within 8 yards.", 8921,
+                      KIT_SPREAD, 8921, { 1, 2, 3 }, { 8, 8, 8 }, { 100, 100, 100 }),
+                  Mod(242, 0, 2, 241, 3, "Lunar Burn", "Moonfire's burn deals 15% more per rank.", 16821, SPELLMOD_DOT, SPELLMOD_PCT, 15, "Moonfire"),
+                  Mod(243, 0, 3, 242, 3, "Bright Moon", "8% more Moonfire hit damage per rank.", 8921, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8, "Moonfire"),
+                  KitCap(244, 0, 4, 243, "Full Moon", "Moonfire spreads to every enemy within 10 yards when its target dies.", 20690, KIT_SPREAD, 8921, 0, 10.0f, 100),
+                  Kit(245, 1, 1, 0, 2, "Plague", "Insect Swarm also lands on 1/2 more enemies within 8 yards.", 5570,
+                      KIT_SPREAD, 5570, { 1, 2 }, { 8, 8 }, { 100, 100 }),
+                  Ail(246, 1, 2, 245, 3, "Locusts", "Your Moonfire hits have a 10% chance per rank to Poison.", 5570, TAG_NATURE, 10),
+                  Mod(247, 1, 3, 246, 3, "Swarm Fury", "10% more Insect Swarm damage per rank.", 5570, SPELLMOD_DOT, SPELLMOD_PCT, 10, "Insect Swarm"),
+                  Key(248, SKILL_NODE_CAPSTONE, 1, 4, 247, 1, "Hive Mind", "Every tick of your Insect Swarm Poisons its target.", 5570, KEY_HIVE_MIND),
+                  Mod(249, 2, 1, 0, 3, "Moonglow", "10% less mana cost per rank.", 16845, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Mod(250, 2, 2, 249, 2, "Long Night", "+3 sec Moonfire and Insect Swarm duration per rank.", 16821, SPELLMOD_DURATION, SPELLMOD_FLAT, 3000),
+                  Key(251, SKILL_NODE_CAPSTONE, 2, 3, 250, 1, "Lunar Tide", "Every tick of your Moonfire and Insect Swarm restores 0.5% of your maximum mana, 2% a second at most.", 16845, KEY_LUNAR_TIDE),
+              } },
+            { SKILL_HURRICANE, CLASS_DRUID, "Hurricane", "A storm of wind and hail on the ground. An ARPG druid has it from level 20.", 16914, { "Hurricane" },
+              { "Gale", "", "Hail" },
+              {
+                  Mod(341, 0, 1, 0, 3, "Wide Hurricane", "+12% Hurricane radius per rank.", 16914, SPELLMOD_RADIUS, SPELLMOD_PCT, 12),
+                  Mod(342, 0, 2, 341, 4, "Howling Gale", "8% more Hurricane damage per rank.", 16914, SPELLMOD_DOT, SPELLMOD_PCT, 8),
+                  Mod(343, 0, 3, 342, 3, "Thrifty Gale", "10% less Hurricane mana cost per rank.", 16845, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Key(344, SKILL_NODE_CAPSTONE, 0, 4, 343, 1, "Tempest", "Each Hurricane strike has a 10% chance to hurl a Wrath at the enemy struck, for three times the strike, 2 a second at most.", 5176, KEY_TEMPEST),
+                  Mod(345, 2, 1, 0, 2, "Grasping Winds", "+2 sec Hurricane duration per rank.", 16914, SPELLMOD_DURATION, SPELLMOD_FLAT, 2000),
+                  Key(346, SKILL_NODE_TRANSFORMER, 2, 2, 345, 3, "Biting Hail", "Each Hurricane strike has a 5% chance per rank to chill.", 12484, KEY_BITING_HAIL),
+                  Key(347, SKILL_NODE_SYNERGY, 2, 3, 346, 3, "Eye of the Wild", "Each enemy your Hurricane strikes heals you for 0.3% of your maximum health per rank, 3% a second at most.", 740, KEY_EYE_OF_THE_WILD),
+                  ModCap(348, 2, 4, 347, "Thunderhead", "Hurricane costs half the mana.", 16914, SPELLMOD_COST, SPELLMOD_PCT, -50),
+              } },
+            { SKILL_BEAR, CLASS_DRUID, "Bear", "Maul, Swipe and Demoralizing Roar: the bear. An ARPG druid has Bear Form and Swipe from level 10.", 5487, { "Maul", "Swipe", "Demoralizing Roar" },
+              { "Maul", "Swipe", "Guardian" },
+              {
+                  Mod(441, 0, 1, 0, 4, "Brutal Maul", "8% more Maul damage per rank.", 6807, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8, "Maul"),
+                  Kit(442, 0, 2, 441, 3, "Mauling Arc", "Maul strikes every enemy in front of you; the extras take 20/35/50%.", 6807,
+                      KIT_ARC, 6807, { 0, 0, 0 }, { 0, 0, 0 }, { 20, 35, 50 }),
+                  Ail(443, 0, 3, 442, 3, "Savage Maul", "Your Bear hits have a 10% chance per rank to cause Bleeding.", 16952, TAG_PHYSICAL, 10),
+                  KitCap(444, 0, 4, 443, "Earthshaker", "Maul sends a shockwave 10 yards ahead, at 60%.", 16940, KIT_SHOCKWAVE, 6807, 0, 10.0f, 60),
+                  Mod(445, 1, 1, 0, 4, "Feral Swipe", "8% more Swipe damage per rank.", 779, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8, "Swipe"),
+                  Mod(446, 1, 2, 445, 2, "Wide Swipe", "+15% Swipe area per rank.", 779, SPELLMOD_RADIUS, SPELLMOD_PCT, 15, "Swipe"),
+                  ModCap(447, 1, 3, 446, "Ravaging Swipe", "Swipe strikes up to 10 enemies.", 779, SPELLMOD_JUMP_TARGETS, SPELLMOD_FLAT, 7, "Swipe"),
+                  Key(448, SKILL_NODE_SYNERGY, 2, 1, 0, 3, "Bristling Fur", "In Bear Form, each blow you take gives you 2 rage per rank, once a second.", 5229, KEY_BRISTLING_FUR),
+                  Key(449, SKILL_NODE_MODIFIER, 2, 2, 448, 3, "Survival Instincts", "Your Bear hits heal you for 2% of their damage per rank.", 22842, KEY_SURVIVAL_INSTINCTS),
+                  Key(450, SKILL_NODE_CAPSTONE, 2, 3, 449, 1, "Thorned Hide", "In Bear Form, enemies that hit you take 30% of your attack power as Nature damage, once a second each.", 467, KEY_THORNED_HIDE),
+              } },
+            { SKILL_CAT, CLASS_DRUID, "Cat", "Claw, Shred, Rake, Rip and Ferocious Bite: the cat. Your combo points carry from enemy to enemy.", 768, { "Claw", "Shred", "Rake", "Rip", "Ferocious Bite" },
+              { "Claws", "Bleed", "Finisher" },
+              {
+                  Mod(541, 0, 1, 0, 4, "Sharpened Claws", "6% more Cat damage per rank.", 16942, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Kit(542, 0, 2, 541, 3, "Raking Claws", "Claw strikes every enemy in front of you; the extras take 20/35/50%.", 1082,
+                      KIT_ARC, 1082, { 0, 0, 0 }, { 0, 0, 0 }, { 20, 35, 50 }),
+                  Mod(543, 0, 3, 542, 2, "Light Paws", "Your Cat abilities cost 5 less energy per rank.", 17002, SPELLMOD_COST, SPELLMOD_FLAT, -5),
+                  KitCap(544, 0, 4, 543, "Stalker's Step", "A kill with Shred steps you behind the nearest enemy within 10 yards.", 5221, KIT_STEP, 5221, 0, 10.0f, 0),
+                  Mod(545, 1, 1, 0, 3, "Deep Wounds", "15% more Rake and Rip damage per rank.", 1822, SPELLMOD_DOT, SPELLMOD_PCT, 15),
+                  Ail(546, 1, 2, 545, 3, "Rending Claws", "Your Cat hits have an 8% chance per rank to cause Bleeding.", 16952, TAG_PHYSICAL, 8),
+                  Kit(547, 1, 3, 546, 2, "Spreading Rake", "Rake also lands on 1/2 more enemies within 8 yards.", 1822,
+                      KIT_SPREAD, 1822, { 1, 2 }, { 8, 8 }, { 100, 100 }),
+                  KitCap(548, 1, 4, 547, "Bloodletting", "Rip also lands on 4 more enemies within 8 yards.", 1079, KIT_SPREAD, 1079, 4, 8.0f, 100),
+                  Mod(549, 2, 1, 0, 3, "Ferocity", "10% more Ferocious Bite damage per rank.", 22568, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10, "Ferocious Bite"),
+                  Mod(550, 2, 2, 549, 3, "Savagery", "+4% Cat critical strike chance per rank.", 16998, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
+                  Key(551, SKILL_NODE_TRANSFORMER, 2, 3, 550, 1, "Savage Fury", "Your critical Claws, Shreds and Rakes give an extra combo point.", 16958, KEY_SAVAGE_FURY),
+                  KitCap(552, 2, 4, 551, "Feast", "Ferocious Bite strikes every enemy in front of you, at 60%.", 22568, KIT_ARC, 22568, 0, 0.0f, 60),
+              } },
+            { SKILL_REJUVENATION, CLASS_DRUID, "Rejuvenation", "Rejuvenation, Regrowth, Healing Touch and Entangling Roots: the druid's gifts, which its tree turns on your enemies too.", 774,
+              { "Rejuvenation", "Regrowth", "Healing Touch", "Entangling Roots" },
+              { "Bloom", "Wild", "Roots" },
+              {
+                  Mod(641, 0, 1, 0, 4, "Lush Growth", "6% more Regrowth and Healing Touch healing per rank.", 5185, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Mod(642, 0, 2, 641, 3, "Living Bloom", "Rejuvenation and Regrowth heal 10% more over time per rank.", 774, SPELLMOD_DOT, SPELLMOD_PCT, 10),
+                  Mod(643, 0, 3, 642, 3, "Quick Growth", "-0.2 sec Regrowth and Healing Touch cast time per rank.", 17069, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
+                  Key(644, SKILL_NODE_CAPSTONE, 0, 4, 643, 1, "Bloom", "Your heals burst outward: every enemy within 8 yards takes 50% of the heal as Nature damage.", 740, KEY_BLOOM),
+                  Key(645, SKILL_NODE_SYNERGY, 1, 1, 0, 3, "Nature's Wrath", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Nature damage.", 5176, KEY_NATURES_WRATH),
+                  Key(646, SKILL_NODE_MODIFIER, 1, 2, 645, 2, "Verdant Fury", "Healing yourself gives you 5% more damage per rank for 5 sec.", 17116, KEY_VERDANT_FURY),
+                  Key(647, SKILL_NODE_CAPSTONE, 1, 3, 646, 1, "Wrath of the Wild", "Your heals Poison every enemy within 8 yards, as a hit of 30% of the heal (once every 3 sec).", 5570, KEY_WRATH_OF_THE_WILD),
+                  Kit(648, 2, 1, 0, 2, "Living Root", "Entangling Roots also roots 1/2 more enemies within 6 yards.", 339,
+                      KIT_SPREAD, 339, { 1, 2 }, { 6, 6 }, { 100, 100 }),
+                  Mod(649, 2, 2, 648, 3, "Grasping Vines", "20% more Entangling Roots damage per rank.", 16918, SPELLMOD_DOT, SPELLMOD_PCT, 20, "Entangling Roots"),
+                  KitCap(650, 2, 3, 649, "Overgrowth", "Entangling Roots roots every enemy within 10 yards of its target.", 16689, KIT_SPREAD, 339, 10, 10.0f, 100),
+              } },
         };
         return skills;
     }
@@ -442,6 +538,24 @@ namespace
         { 624, 639,   "Edwin VanCleef, the Deadmines" },                // Chain Blast
         { 628, 10811, "Archivist Galford, Stratholme" },                // Searing Brand
         { 631, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Detonate
+        // The druid's
+        { 144, 11492, "Alzzin the Wildshaper, Dire Maul" },             // Wrath of Cenarius
+        { 148, 5709,  "Shade of Eranikus, the Temple of Atal'Hakkar" }, // Starfall
+        { 152, 12201, "Princess Theradras, Maraudon" },                 // Eclipse
+        { 244, 4832,  "Twilight Lord Kelris, Blackfathom Deeps" },      // Full Moon
+        { 248, 13282, "Noxxion, Maraudon" },                            // Hive Mind
+        { 251, 4829,  "Aku'mai, Blackfathom Deeps" },                   // Lunar Tide
+        { 344, 3654,  "Mutanus the Devourer, Wailing Caverns" },        // Tempest
+        { 348, 3673,  "Lord Serpentis, Wailing Caverns" },              // Thunderhead
+        { 444, 4421,  "Charlga Razorflank, Razorfen Kraul" },           // Earthshaker
+        { 447, 11489, "Tendris Warpwood, Dire Maul" },                  // Ravaging Swipe
+        { 450, 12225, "Celebras the Cursed, Maraudon" },                // Thorned Hide
+        { 544, 3669,  "Lord Cobrahn, Wailing Caverns" },                // Stalker's Step
+        { 548, 3975,  "Herod, Scarlet Monastery" },                     // Bloodletting
+        { 552, 11501, "King Gordok, Dire Maul" },                       // Feast
+        { 644, 5775,  "Verdan the Everliving, Wailing Caverns" },       // Bloom
+        { 647, 3671,  "Lady Anacondra, Wailing Caverns" },              // Wrath of the Wild
+        { 650, 3670,  "Lord Pythas, Wailing Caverns" },                 // Overgrowth
     };
 
     // Revision 2 of the trees renumbered the capstones: a page read for an old one is read for its
@@ -480,6 +594,7 @@ namespace
         uint32 pct;
         std::vector<std::tuple<uint8, uint8, int32>> mods; // RUNE_MODS: op, type, amount
         uint8 mageFits = 0;       // `fits` for a mage's skills (`fits` is a paladin's)
+        uint8 druidFits = 0;      // and a druid's
     };
 
     // The skills of `classId`'s a rune fits: a bit per SkillId (0: none, a rune of another class).
@@ -489,6 +604,7 @@ namespace
         {
             case CLASS_PALADIN: return rune.fits;
             case CLASS_MAGE: return rune.mageFits;
+            case CLASS_DRUID: return rune.druidFits;
             default: return 0;
         }
     }
@@ -501,27 +617,27 @@ namespace
         static std::vector<RuneDef> const runes =
         {
             { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on a chain its tree gives).", 20186,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)) },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE)) },
             { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on a burst its tree gives).", 24275,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)) },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)) },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) },
-              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)) },
+              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)), uint8(FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR)) },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
-              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)) },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)), uint8(FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_REJUVENATION)) },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_WRATH) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) },
               uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)) },
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)) },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) },
-              uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)) },
+              uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT) | FIT(SKILL_REJUVENATION)) },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
             // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
@@ -560,11 +676,26 @@ namespace
         }
     }
 
+    // A druid's skills' kit spells, for its kit runes.
+    std::vector<uint32> DruidKitSpellsOf(SkillId skill)
+    {
+        switch (skill)
+        {
+            case SKILL_DRUID_WRATH: return { 5176, 2912 };  // Wrath, Starfire
+            case SKILL_MOONFIRE: return { 8921 };
+            case SKILL_BEAR: return { 6807 };               // Maul
+            case SKILL_CAT: return { 1082, 5221 };          // Claw, Shred
+            default: return {};
+        }
+    }
+
     // The spells a rune's kit row lands on, by skill: the kit spells its tree's own rows use.
     std::vector<uint32> KitSpellsOf(uint8 classId, SkillId skill)
     {
         if (classId == CLASS_MAGE)
             return MageKitSpellsOf(skill);
+        if (classId == CLASS_DRUID)
+            return DruidKitSpellsOf(skill);
         if (classId != CLASS_PALADIN)
             return {};
         switch (skill)

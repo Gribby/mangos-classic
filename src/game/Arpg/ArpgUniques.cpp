@@ -23,6 +23,7 @@
 #include "Spells/SpellAuras.h"
 #include "Util/Timer.h"
 #include "Server/DBCStores.h"
+#include "Server/SQLStorages.h"
 
 #include <algorithm>
 #include <cmath>
@@ -314,7 +315,9 @@ namespace Arpg
     std::vector<UniqueMechanic> const& Uniques()
     {
         // item, kit, spell (rank 1), n, value, pct, tooltip line
-        static std::vector<UniqueMechanic> const table =
+        static std::vector<UniqueMechanic> const table = []()
+        {
+        std::vector<UniqueMechanic> rows =
         {
             // Emberstone Staff, Captain Greenskin (Deadmines): Fireball.
             { 5201,  KIT_EXTRA_PROJECTILES, 133,  1, 14.0f, 60, "Fireball launches 1 extra fireball. Each deals 60% damage." },
@@ -377,6 +380,51 @@ namespace Arpg
             // Perdition's Blade, Ragnaros (Molten Core): Sinister Strike.
             { 18816, KIT_STEP,              1752, 0, 10.0f, 0,  "A kill with Sinister Strike steps you behind the nearest enemy within 10 yards." },
         };
+        // Authored by the item's name, so the database decides its entry; a name it lacks is
+        // logged and left out. The druid's (docs/ARPG-UNIQUES.md, "The druid's").
+        struct NamedUnique
+        {
+            char const* item;
+            UniqueKit kit;
+            uint32 spell;
+            uint8 n;
+            float value;
+            uint32 pct;
+            char const* text;
+        };
+        static NamedUnique const NAMED[] =
+        {
+            // Manual Crowd Pummeler, Gnomeregan: Maul.
+            { "Manual Crowd Pummeler",     KIT_ARC,               6807, 0, 0.0f,  60,  "Maul strikes every enemy in front of you. The extra enemies take 60% damage." },
+            // Wolfshead Helm, crafted: Shred.
+            { "Wolfshead Helm",            KIT_ARC,               5221, 0, 0.0f,  50,  "Shred strikes every enemy in front of you. The extra enemies take 50% damage." },
+            // Staff of the Shadow Flame, Nefarian (Blackwing Lair): Starfire.
+            { "Staff of the Shadow Flame", KIT_ECHO,              2912, 3, 0.0f,  70,  "Every 3rd Starfire is echoed for free at 70% damage." },
+            // Will of Arlokk, High Priestess Arlokk (Zul'Gurub): Wrath.
+            { "Will of Arlokk",            KIT_EXTRA_PROJECTILES, 5176, 2, 15.0f, 50,  "Wrath fires 3 bolts in a 30 degree fan. Each extra deals 50% damage." },
+            // Warden Staff, world drop: Swipe.
+            { "Warden Staff",              KIT_BURST,             779,  0, 4.0f,  25,  "Each enemy your Swipe strikes bursts onto enemies within 4 yards for 25% damage." },
+            // Mooncloth Robe, tailored: Moonfire.
+            { "Mooncloth Robe",            KIT_SPREAD,            8921, 2, 8.0f,  100, "Moonfire also lands on 2 more enemies within 8 yards." },
+            // Rune of Metamorphosis, Broodlord Lashlayer (Blackwing Lair): Rake.
+            { "Rune of Metamorphosis",     KIT_SPREAD,            1822, 2, 6.0f,  100, "Rake also lands on 2 more enemies within 6 yards." },
+            // Hide of the Wild, leatherworked: Rip.
+            { "Hide of the Wild",          KIT_SPREAD,            1079, 0, 8.0f,  100, "Rip spreads to every enemy within 8 yards when its target dies." },
+        };
+        for (NamedUnique const& u : NAMED)
+        {
+            uint32 entry = 0;
+            for (uint32 id = 0; id < sItemStorage.GetMaxEntry() && !entry; ++id)
+                if (ItemPrototype const* proto = sItemStorage.LookupEntry<ItemPrototype>(id))
+                    if (proto->Name1 && std::strcmp(proto->Name1, u.item) == 0)
+                        entry = id;
+            if (entry)
+                rows.push_back({ entry, u.kit, u.spell, u.n, u.value, u.pct, u.text });
+            else
+                sLog.outError("ARPG uniques: no item named \"%s\"", u.item);
+        }
+        return rows;
+        }();
         // Checked once against the loaded data, so a wrong id shows in the log, not in play.
         static bool const checked = []()
         {

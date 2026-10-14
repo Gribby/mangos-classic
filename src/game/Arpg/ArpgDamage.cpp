@@ -5,6 +5,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgMage.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgTags.h"
@@ -54,6 +55,8 @@ namespace
     // The mage's keystones on ailments: Wildfire's weaker Ignites; Arcane Flux's and Overcharge's
     // bigger Overload bursts, and Arcane Flux's mana from each.
     constexpr uint32 WILDFIRE_LESS_PCT = 20, FLUX_MORE_PCT = 50, FLUX_MANA_PCT = 2, OVERCHARGE_MORE_PCT = 40;
+    // The druid's: Nature's Bounty's Poisons, Predator's Bleeds.
+    constexpr uint32 BOUNTY_MORE_PCT = 50, PREDATOR_MORE_PCT = 60;
     constexpr size_t BURST_MAX = 10;
     // An added hit rolls 60% to 140% of its affixes' average (ArpgAffixes.cpp shows the same range).
     constexpr uint32 ADDED_LOW_PCT = 60, ADDED_HIGH_PCT = 140;
@@ -370,9 +373,13 @@ namespace Arpg
         // The main hit's own ailments, and its skill tree's (a dead target takes none).
         if (victim->IsAlive())
             RollAilments(player, t, victim, tags, dealt, crit, uint8(SkillOfSpell(player->getClass(), spellInfo)));
-        // The mage's keystones on a spell's hit (Arpg/ArpgMage.h), the dead included.
+        // The mage's and the druid's keystones on a spell's hit (Arpg/ArpgMage.h, ArpgDruid.h), the
+        // dead included.
         if (spellInfo)
+        {
             OnMageHit(player, victim, spellInfo, dealt, crit);
+            OnDruidHit(player, victim, spellInfo, dealt, crit);
+        }
 
         // Added damage: attacks take the attack affixes, spells the spell ones. A Seal's hit rides
         // on a swing, which has its added damage already.
@@ -545,6 +552,11 @@ namespace Arpg
                 continue;
             if (!s.burst)
             {
+                // The druid's keystones: Nature's Bounty's Poisons, Predator's Bleeds.
+                if (totals && s.tag == TAG_NATURE && totals->Has(KEY_NATURES_BOUNTY))
+                    s.amount = s.amount * (100 + BOUNTY_MORE_PCT) / 100;
+                if (totals && s.tag == TAG_PHYSICAL && totals->Has(KEY_PREDATOR))
+                    s.amount = s.amount * (100 + PREDATOR_MORE_PCT) / 100;
                 uint32 const lookId = s.tag == TAG_PHYSICAL ? BLEED_LOOK : s.tag == TAG_FIRE ? IGNITE_LOOK : POISON_LOOK;
                 if (SpellEntry const* look = sSpellTemplate.LookupEntry<SpellEntry>(lookId))
                     StrikeTick(player, victim, look, SCHOOL_OF_TAG[s.tag], std::max<uint32>(1, s.amount));

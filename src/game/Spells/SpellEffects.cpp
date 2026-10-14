@@ -55,6 +55,7 @@
 #include "Loot/LootMgr.h"
 #include "Movement/MoveSpline.h"
 #include "Entities/Transports.h"
+#include "Arpg/ArpgDruid.h"
 
 pEffect SpellEffects[MAX_SPELL_EFFECTS] =
 {
@@ -4224,6 +4225,10 @@ void Spell::EffectAddComboPoints(SpellEffectIndex /*eff_idx*/)
         return;
 
     if (damage <= 0)
+        return;
+
+    // ARPG: a unique's free copy (a spread Rake) adds none (Arpg/ArpgUniques.h).
+    if (IsArpgSecondary())
         return;
 
     ((Player*)m_caster)->AddComboPoints(unitTarget, damage);

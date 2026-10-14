@@ -26,6 +26,7 @@
 #include "Log/Log.h"
 #include "World/World.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgCharacter.h"
@@ -3943,8 +3944,8 @@ void Spell::finish(bool ok)
 
     OnSuccessfulFinish();
 
-    // Clear combo at finish state
-    if (m_trueCaster->IsPlayer() && NeedsComboPoints(m_spellInfo))
+    // Clear combo at finish state (ARPG: not a unique's free copy, which spends none, Arpg/ArpgUniques.h)
+    if (m_trueCaster->IsPlayer() && NeedsComboPoints(m_spellInfo) && !IsArpgSecondary())
     {
         // Not drop combopoints if negative spell and if any miss on enemy exist
         bool needDrop = true;
@@ -4909,6 +4910,10 @@ SpellCastResult Spell::CheckCast(bool strict)
             if (m_spellInfo->HasAttribute(SPELL_ATTR_ONLY_STEALTHED) && !(m_caster->HasStealthAura()))
                 return SPELL_FAILED_ONLY_STEALTHED;
         }
+
+        // ARPG: a player's combo points are its own, spent on whichever enemy the finisher is aimed at.
+        if (!m_IsTriggeredSpell && NeedsComboPoints(m_spellInfo) && m_targets.getUnitTarget() && Arpg::CarriesComboPoints(m_caster))
+            m_caster->RetargetComboPoints(m_targets.getUnitTarget());
 
         if (!m_IsTriggeredSpell && NeedsComboPoints(m_spellInfo) && (!m_targets.getUnitTarget() || m_targets.getUnitTarget()->GetObjectGuid() != m_caster->GetComboTargetGuid()))
             // warrior not have real combo-points at client side but use this way for mark allow Overpower use

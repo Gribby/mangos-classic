@@ -52,6 +52,7 @@
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgUniques.h"
@@ -6440,7 +6441,8 @@ bool Unit::Attack(Unit* victim, bool meleeAttack)
 
 bool Unit::AttackStop(bool targetSwitch /*= false*/, bool includingCast /*= false*/, bool includingCombo /*= false*/, bool clientInitiated /*= false*/)
 {
-    if (includingCombo)
+    // ARPG: a player's combo points are its own, kept through a stop (Arpg/ArpgDruid.h).
+    if (includingCombo && !Arpg::CarriesComboPoints(this))
         ClearComboPoints();
 
     // interrupt cast only id includingCast == true and we have something to interrupt.
@@ -10449,7 +10451,8 @@ void Unit::ClearComboPointHolders()
         uint32 lowguid = *m_ComboPointHolders.begin();
 
         Player* plr = sObjectMgr.GetPlayer(ObjectGuid(HIGHGUID_PLAYER, lowguid));
-        if (plr && plr->GetComboTargetGuid() == GetObjectGuid())// recheck for safe
+        // ARPG: a player's combo points outlive the enemy they were built on (Arpg/ArpgDruid.h).
+        if (plr && plr->GetComboTargetGuid() == GetObjectGuid() && !Arpg::CarriesComboPoints(plr))// recheck for safe
             plr->ClearComboPoints();                        // remove also guid from m_ComboPointHolders;
         else
             m_ComboPointHolders.erase(lowguid);             // or remove manually
@@ -12186,14 +12189,31 @@ void Unit::AddComboPoints(Unit* target, int8 count)
             if (Unit* target2 = ObjectAccessor::GetUnit(*this, m_comboTargetGuid))
                 target2->RemoveComboPointHolder(GetGUIDLow());
 
+        // ARPG: a player's points carry on to the new enemy (Arpg/ArpgDruid.h).
+        int8 const carried = m_comboTargetGuid && Arpg::CarriesComboPoints(this) ? m_comboPoints : 0;
         m_comboTargetGuid = target->GetObjectGuid();
-        m_comboPoints = count;
+        m_comboPoints = carried + count;
 
         target->AddComboPointHolder(GetGUIDLow());
     }
 
     if (m_comboPoints > 5) m_comboPoints = 5;
     if (m_comboPoints < 0) m_comboPoints = 0;
+
+    if (IsPlayer())
+        static_cast<Player*>(this)->SendComboPoints();
+}
+
+void Unit::RetargetComboPoints(Unit* target)
+{
+    if (!target || !m_comboPoints || !m_comboTargetGuid || target->GetObjectGuid() == m_comboTargetGuid)
+        return;
+
+    if (Unit* old = ObjectAccessor::GetUnit(*this, m_comboTargetGuid))
+        old->RemoveComboPointHolder(GetGUIDLow());
+
+    m_comboTargetGuid = target->GetObjectGuid();
+    target->AddComboPointHolder(GetGUIDLow());
 
     if (IsPlayer())
         static_cast<Player*>(this)->SendComboPoints();

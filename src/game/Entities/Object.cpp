@@ -44,6 +44,7 @@
 #include "Loot/LootMgr.h"
 #include "Spells/SpellMgr.h"
 #include "MotionGenerators/PathFinder.h"
+#include "Arpg/ArpgDruid.h"
 
 Object::Object(): m_updateFlag(0), m_itsNewObject(false), m_dbGuid(0), m_scriptRef(this, NoopObjectDeleter())
 {
@@ -2965,7 +2966,9 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
     float value = basePoints;
 
     // random damage
-    if (comboDamage != 0.0f && unitPlayer && target && (target->GetObjectGuid() == unitPlayer->GetComboTargetGuid() || IsOnlySelfTargeting(spellProto)))
+    // ARPG: a druid's points are its own, so a spread copy of a finisher strikes with them too (Arpg/ArpgDruid.h).
+    if (comboDamage != 0.0f && unitPlayer && target && (target->GetObjectGuid() == unitPlayer->GetComboTargetGuid() || IsOnlySelfTargeting(spellProto) ||
+            Arpg::CarriesComboPoints(unitPlayer)))
         value += (int32)(comboDamage * comboPoints);
 
     if (unitCaster)

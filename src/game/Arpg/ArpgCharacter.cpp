@@ -5,6 +5,7 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCompare.h"
+#include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgEvents.h"
 #include "Arpg/ArpgMage.h"
@@ -43,6 +44,10 @@
 namespace
 {
     // The mage's web keystones' more and less damage (Arpg/ArpgMage.h).
+    // The druid's web keystones' more and less, in percent.
+    constexpr int32 CELESTIAL_PCT = 30, CELESTIAL_LESS_PCT = 40, BOUNTY_LESS_PCT = 15, PREDATOR_LESS_PCT = 30,
+                    KING_PER_KILL = 4, TREE_LESS_PCT = 20, TREE_HEAL_PCT = 50, KING_HEAL_LESS_PCT = 50,
+                    LIVING_THORNS_HEAL_LESS_PCT = 30;
     constexpr int32 PYROMANCER_PCT = 40, PYROMANCER_LESS_PCT = 30, PERMAFROST_LESS_PCT = 25, SHATTER_PCT = 40,
                     SHATTER_LESS_PCT = 15, FLUX_LESS_PCT = 10, BRIMMING_MAX_PCT = 25, BRIMMING_LESS_PCT = 15;
     // Rune of Leech: this share of the damage heals.
@@ -803,6 +808,26 @@ namespace
             more(manaPct >= 50 ? std::min(BRIMMING_MAX_PCT, (manaPct - 50) / 2) : -BRIMMING_LESS_PCT, "Brimming Mind");
         }
 
+        // The druid's web (Arpg/ArpgDruid.h).
+        uint32 const lunar = TagBit(TAG_ARCANE) | TagBit(TAG_NATURE);
+        if (t.Has(KEY_CELESTIAL_FOCUS))
+        {
+            if ((tags & TagBit(TAG_SPELL)) && (tags & lunar))
+                more(CELESTIAL_PCT, "Celestial Focus");
+            else if (tags & TagBit(TAG_MELEE))
+                more(-CELESTIAL_LESS_PCT, "Celestial Focus");
+        }
+        if (t.Has(KEY_NATURES_BOUNTY))
+            more(-BOUNTY_LESS_PCT, "Nature's Bounty");
+        if (t.Has(KEY_PREDATOR) && (tags & TagBit(TAG_SPELL)))
+            more(-PREDATOR_LESS_PCT, "Predator");
+        if (t.Has(KEY_KING_OF_THE_JUNGLE) && (tags & TagBit(TAG_MELEE)))
+            more(KING_PER_KILL * int32(KingStacks(player)), "King of the Jungle");
+        if (t.Has(KEY_TREE_OF_LIFE))
+            more(-TREE_LESS_PCT, "Tree of Life");
+        if (int32 const verdant = VerdantFuryPct(player))
+            more(verdant, "Verdant Fury");
+
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
         if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
         {
@@ -939,6 +964,7 @@ namespace Arpg
         ForgetProcs(player);
         ForgetAilments(player);
         ForgetMage(player);
+        ForgetDruid(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -952,6 +978,8 @@ namespace Arpg
         UpdateProcs(player);
         // The ailments this player inflicted tick and burst (Arpg/ArpgDamage.h).
         UpdateAilments(player);
+        // The druid's pulse (Living Thorns, Arpg/ArpgDruid.h).
+        UpdateDruid(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)
@@ -1106,6 +1134,21 @@ namespace Arpg
         }
         if (t.Has(KEY_CRUSADE))
             line(false, "Crusade: 4% more per kill in the last 5 sec, up to 10 kills");
+        // The druid's web.
+        if (t.Has(KEY_CELESTIAL_FOCUS) && (tags & TagBit(TAG_SPELL)) && (tags & (TagBit(TAG_ARCANE) | TagBit(TAG_NATURE))))
+            line(true, "Celestial Focus: 30% more");
+        if (t.Has(KEY_CELESTIAL_FOCUS) && (tags & TagBit(TAG_MELEE)))
+            line(true, "Celestial Focus: 40% less");
+        if (t.Has(KEY_NATURES_BOUNTY))
+            line(true, "Nature's Bounty: 15% less (Poisons 50% more)");
+        if (t.Has(KEY_PREDATOR) && (tags & TagBit(TAG_SPELL)))
+            line(true, "Predator: 30% less (Bleeds 60% more)");
+        if (t.Has(KEY_KING_OF_THE_JUNGLE) && (tags & TagBit(TAG_MELEE)))
+            line(KingStacks(player) > 0, "King of the Jungle: 4% more per kill in the last 6 sec, up to 10 kills");
+        if (t.Has(KEY_TREE_OF_LIFE))
+            line(true, "Tree of Life: 20% less");
+        if (uint8 const rank = t.Rank(KEY_VERDANT_FURY))
+            line(VerdantFuryPct(player) > 0, Format("Verdant Fury: %d%% more for 5 sec after healing yourself", 5 * rank).c_str());
         // The item affixes' bonuses against a kind of enemy.
         if (t.elitePct)
             line(false, Format("Gear: +%d%% increased to elites and bosses", t.elitePct).c_str());
@@ -1357,7 +1400,15 @@ namespace Arpg
         std::shared_ptr<WebTotals const> totals = TotalsOf(healer);
         if (!totals)
             return 1.0f;
-        return std::max(0.0f, 1.0f + (totals->healingPct + totals->tag[TAG_HEAL]) / 100.0f);
+        float mod = std::max(0.0f, 1.0f + (totals->healingPct + totals->tag[TAG_HEAL]) / 100.0f);
+        // The druid's keystones, each a "more" or "less" of its own.
+        if (totals->Has(KEY_TREE_OF_LIFE))
+            mod *= 1.0f + TREE_HEAL_PCT / 100.0f;
+        if (totals->Has(KEY_KING_OF_THE_JUNGLE))
+            mod *= 1.0f - KING_HEAL_LESS_PCT / 100.0f;
+        if (totals->Has(KEY_LIVING_THORNS))
+            mod *= 1.0f - LIVING_THORNS_HEAL_LESS_PCT / 100.0f;
+        return mod;
     }
 
     float HealingTakenMod(Unit const* target)
@@ -1457,6 +1508,9 @@ namespace Arpg
             r.recoveryUntil = WorldTimer::getMSTime() + RECOVERY_MS;
             r.lastRefresh = 0;
         }
+        // Rejuvenation's tree: the druid's heals that hurt (Arpg/ArpgDruid.h).
+        if (player->getClass() == CLASS_DRUID && SkillOfSpell(CLASS_DRUID, spell->m_spellInfo) == SKILL_REJUVENATION)
+            OnDruidHeal(spell, player, target, amount);
         // Holy Light's tree: heals that hurt.
         if (player->getClass() == CLASS_PALADIN && SkillOfSpell(player->getClass(), spell->m_spellInfo) == SKILL_HOLY_LIGHT)
             if (std::shared_ptr<WebTotals const> totals = TotalsOf(caster))
@@ -1548,7 +1602,10 @@ namespace Arpg
                     }
         }
         if (damage && victim && attacker && Active(victim))
+        {
             OnMageStruck(victim, attacker);
+            OnDruidStruck(victim, attacker);
+        }
         if (!damage || !victim || attacker == victim || !HasKeystone(victim, KEY_MARTYR))
             return;
         R(victim).martyrPending += damage * MARTYR_SHARE_PCT / 100;
@@ -1579,6 +1636,7 @@ namespace Arpg
         if (life > 0)
             ProcHeal(killer, "Life on kill", uint32(life));
         GiveManaPermille(killer, MANA_ON_KILL_PERMILLE);
+        OnDruidKill(killer);
         if (t.Has(KEY_CRUSADE))
         {
             Runtime& r = R(killer);

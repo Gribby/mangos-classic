@@ -82,6 +82,13 @@ namespace Arpg
         SKILL_ARCANE_EXPLOSION  = 4,
         SKILL_STORMS            = 5, // Blizzard and Flamestrike
         SKILL_FIRE_BLAST        = 6, // Fire Blast and Scorch
+        // A druid's.
+        SKILL_DRUID_WRATH       = 1, // Wrath and Starfire
+        SKILL_MOONFIRE          = 2, // Moonfire and Insect Swarm
+        SKILL_HURRICANE         = 3,
+        SKILL_BEAR              = 4, // Maul, Swipe, Demoralizing Roar
+        SKILL_CAT               = 5, // Claw, Shred, Rake, Rip, Ferocious Bite
+        SKILL_REJUVENATION      = 6, // Rejuvenation, Regrowth, Healing Touch, Entangling Roots
         // 7 and 8 (Holy Wrath, Hammer of Wrath alone) are folded into Wrath and Hammers.
     };
 

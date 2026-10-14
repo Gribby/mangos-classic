@@ -81,6 +81,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include "Arpg/ArpgDruid.h"
 
 #define ZONE_UPDATE_INTERVAL (1*IN_MILLISECONDS)
 
@@ -18072,6 +18073,12 @@ void Player::InitPrimaryProfessions()
 void Player::SendComboPoints()
 {
     Unit* combotarget = ObjectAccessor::GetUnit(*this, GetComboTargetGuid());
+    // ARPG: a druid's points outlive their target, so the count is sent with it gone too (Arpg/ArpgDruid.h).
+    if (!combotarget && Arpg::CarriesComboPoints(this))
+    {
+        SetGuidValue(PLAYER_FIELD_COMBO_TARGET, GetComboTargetGuid());
+        SetByteValue(PLAYER_FIELD_BYTES, 1, GetComboPoints());
+    }
     if (combotarget)
     {
         SetGuidValue(PLAYER_FIELD_COMBO_TARGET, combotarget->GetObjectGuid());

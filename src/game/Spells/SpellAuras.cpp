@@ -52,6 +52,7 @@
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgMage.h"
 
 #define NULL_AURA_SLOT 0xFF
@@ -4598,9 +4599,12 @@ void Aura::PeriodicTick()
 
             CleanDamage cleanDamage(pdamage, BASE_ATTACK, MELEE_HIT_NORMAL, pdamage || absorb);
             Unit::DealDamage(caster, target, pdamage, &cleanDamage, DOT, GetSpellSchoolMask(spellProto), spellProto, true);
-            // ARPG: a mage's keystone on a periodic tick (Arpg/ArpgMage.h).
+            // ARPG: a mage's or a druid's keystone on a periodic tick (Arpg/ArpgMage.h, ArpgDruid.h).
             if (pdamage)
+            {
                 Arpg::OnPeriodicHit(caster, target, spellProto);
+                Arpg::OnDruidTick(caster, target, spellProto, pdamage);
+            }
 
             Unit::ProcDamageAndSpell(ProcSystemArguments(caster, target, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, absorb, BASE_ATTACK, spellProto));
 
@@ -4746,6 +4750,9 @@ void Aura::PeriodicTick()
             int32 gain = target->ModifyHealth(pdamage);
             SpellPeriodicAuraLogInfo pInfo(this, pdamage, 0, 0, 0.0f);
             target->SendPeriodicAuraLog(&pInfo);
+            // ARPG: a druid's heal over time sets off its tree's heals that hurt (Arpg/ArpgDruid.h).
+            if (pdamage)
+                Arpg::OnDruidHotTick(pCaster, target, spellProto, pdamage);
 
             // Set trigger flag
             uint32 procAttacker = PROC_FLAG_DEAL_HARMFUL_PERIODIC;
