@@ -850,6 +850,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER, "Arpg.Packs.FollowerPower", 0.55f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_XP, "Arpg.Packs.FollowerXp", 0.3f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_LOOT, "Arpg.Packs.FollowerLoot", 0.5f);
+    setConfig(CONFIG_FLOAT_ARPG_PACK_EXTRA, "Arpg.Packs.Extra", 1.0f);
     setConfig(CONFIG_BOOL_ARPG_DUNGEONS, "Arpg.Dungeons", true);
     setConfig(CONFIG_FLOAT_ARPG_DUNGEON_SOLO_HEALTH, "Arpg.Dungeons.SoloHealth", 0.35f);
     setConfig(CONFIG_FLOAT_ARPG_DUNGEON_PLAYER_HEALTH, "Arpg.Dungeons.PlayerHealth", 0.16f);

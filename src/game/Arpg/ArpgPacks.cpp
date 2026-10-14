@@ -166,6 +166,7 @@ namespace
     std::unordered_map<ObjectGuid, ObjectGuid> sLeaderOf;   // follower and leader alike -> leader
     std::unordered_set<ObjectGuid> sFollowers;
     std::unordered_set<ObjectGuid> sForming;                // leaders with a formation pending
+    std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> sOutriders; // by the spawn that placed them
     std::unordered_map<ObjectGuid, Champion> sChampions;
     std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> sChampionsSent; // by player
 
@@ -463,17 +464,44 @@ namespace
                     follower->ForcedDespawn();
     }
 
+    constexpr uint32 FOLLOWER_WATCH_MS = 20 * IN_MILLISECONDS;
+
+    // Every FOLLOWER_WATCH_MS: a follower whose pack has gone (its leader dead, despawned or
+    // unloaded, or the pack formed afresh) leaves once out of combat. Followers never expire alive,
+    // so a pack left half-killed would otherwise stand for good.
+    void WatchFollower(Creature* follower, ObjectGuid leader)
+    {
+        follower->m_events.AddEvent(new UnitLambdaEvent(*follower, [leader](Unit& unit)
+        {
+            Creature* self = static_cast<Creature*>(&unit);
+            if (!self->IsInWorld() || !self->IsAlive())
+                return;
+            bool kept;
+            {
+                std::lock_guard<std::mutex> guard(sPacksLock);
+                auto it = sLeaderOf.find(self->GetObjectGuid());
+                kept = it != sLeaderOf.end() && it->second == leader;
+            }
+            if (kept)
+            {
+                Creature const* head = self->GetMap()->GetCreature(leader);
+                kept = head && head->IsAlive();
+            }
+            if (!kept && !self->IsInCombat())
+            {
+                self->ForcedDespawn();
+                return;
+            }
+            WatchFollower(self, leader);
+        }), follower->m_events.CalculateTime(FOLLOWER_WATCH_MS));
+    }
+
     enum Role : uint8 { ROLE_FOLLOWER, ROLE_CHAMPION, ROLE_RARE };
 
-    // `tier`: 0 by chance, 1 no champions, 2 a champion pack, 3 a rare (dev tools).
-    void FormPack(Creature* leader, uint32 size, uint8 tier = 0)
+    // `leader`'s pack, leader eligible already. `tier`: 0 by chance, 1 no champions, 2 a champion
+    // pack, 3 a rare (dev tools).
+    void FormPackAround(Creature* leader, uint32 size, uint8 tier)
     {
-        {
-            std::lock_guard<std::mutex> guard(sPacksLock);
-            sForming.erase(leader->GetObjectGuid());
-        }
-        if (!PacksOn() || !Eligible(leader))
-            return;
         Disband(leader);
 
         uint32 const level = leader->GetLevel();
@@ -569,6 +597,7 @@ namespace
                     break;
             }
             pack.followers.push_back(member->GetObjectGuid());
+            WatchFollower(member, leader->GetObjectGuid());
         }
         if (pack.followers.empty())
             return;
@@ -580,6 +609,149 @@ namespace
         for (ObjectGuid const& guid : lesser)
             sFollowers.insert(guid);
         sPacks[leaderGuid] = std::move(pack);
+    }
+
+    // Outriders: vanilla spreads its spawns for slow fights, and an ARPG clears them several times
+    // faster, so each pack a vanilla spawn forms also places Arpg.Packs.Extra more packs out on
+    // open ground near it: a copy of the spawn leading a pack of its own. They are temporary, like
+    // followers, and belong to the spawn that placed them: its next formation (a respawn) or its
+    // grid unloading sends them away once they're out of combat.
+    constexpr float OUTRIDER_MIN = 22.0f, OUTRIDER_MAX = 45.0f;
+    constexpr float OUTRIDER_CLEAR = 15.0f;     // no other creature this close
+    constexpr float OUTRIDER_UNSEEN = 50.0f;    // no town or NPC this close (players: their sight)
+    constexpr uint32 OUTRIDER_TRIES = 6;
+    constexpr uint32 OUTRIDER_WATCH_MS = 20 * IN_MILLISECONDS;
+
+    // Whether an outrider may stand at (x, y, z): open ground, clear of other creatures, and out
+    // of sight of players and of anyone friendly to them (a town, a camp of NPCs).
+    bool OutriderSpotClear(Creature* source, float x, float y, float z)
+    {
+        Map* map = source->GetMap();
+        for (auto const& ref : map->GetPlayers())
+            if (Player const* player = ref.getSource())
+                if (player->GetDistance(x, y, z) < std::max(OUTRIDER_UNSEEN, map->GetVisibilityDistance()))
+                    return false;
+        UnitList around;
+        MaNGOS::AnyUnitInObjectRangeCheck check(source, OUTRIDER_MAX + OUTRIDER_UNSEEN);
+        MaNGOS::UnitListSearcher<MaNGOS::AnyUnitInObjectRangeCheck> searcher(around, check);
+        Cell::VisitAllObjects(source, searcher, OUTRIDER_MAX + OUTRIDER_UNSEEN);
+        for (Unit* unit : around)
+        {
+            if (unit == source || unit->GetTypeId() != TYPEID_UNIT || !unit->IsAlive())
+                continue;
+            float const dist = unit->GetDistance(x, y, z);
+            if (dist < OUTRIDER_CLEAR)
+                return false;
+            if (dist >= OUTRIDER_UNSEEN)
+                continue;
+            Creature const* c = static_cast<Creature const*>(unit);
+            FactionTemplateEntry const* faction = c->GetFactionTemplateEntry();
+            if ((c->GetCreatureInfo() && c->GetCreatureInfo()->NpcFlags) || c->IsCivilian() || !faction ||
+                    (faction->friendGroupMask & FACTION_GROUP_MASK_PLAYER) || (faction->factionGroupMask & FACTION_GROUP_MASK_PLAYER))
+                return false;
+        }
+        return true;
+    }
+
+    bool IsOutriderOf(ObjectGuid source, ObjectGuid outrider)
+    {
+        std::lock_guard<std::mutex> guard(sPacksLock);
+        auto it = sOutriders.find(source);
+        return it != sOutriders.end() && std::find(it->second.begin(), it->second.end(), outrider) != it->second.end();
+    }
+
+    // Every OUTRIDER_WATCH_MS: an outrider whose spawn has gone (its grid unloaded) or has placed
+    // others since leaves, with its pack, once out of combat. A dead one is left to its corpse.
+    void WatchOutrider(Creature* outrider, ObjectGuid source)
+    {
+        outrider->m_events.AddEvent(new UnitLambdaEvent(*outrider, [source](Unit& unit)
+        {
+            Creature* self = static_cast<Creature*>(&unit);
+            if (!self->IsInWorld() || !self->IsAlive())
+                return;
+            bool const kept = self->GetMap()->GetCreature(source) && IsOutriderOf(source, self->GetObjectGuid());
+            if (!kept && !self->IsInCombat())
+            {
+                Disband(self);
+                self->ForcedDespawn();
+                return;
+            }
+            WatchOutrider(self, source);
+        }), outrider->m_events.CalculateTime(OUTRIDER_WATCH_MS));
+    }
+
+    // Send away `source`'s outriders (with their packs) that aren't fighting; a fighting one is
+    // forgotten and leaves when its fight ends (WatchOutrider).
+    void RecallOutriders(Creature* source)
+    {
+        std::vector<ObjectGuid> outriders;
+        {
+            std::lock_guard<std::mutex> guard(sPacksLock);
+            auto it = sOutriders.find(source->GetObjectGuid());
+            if (it == sOutriders.end())
+                return;
+            outriders = std::move(it->second);
+            sOutriders.erase(it);
+        }
+        for (ObjectGuid const& guid : outriders)
+            if (Creature* outrider = source->GetMap()->GetCreature(guid))
+                if (outrider->IsAlive() && !outrider->IsInCombat())
+                {
+                    Disband(outrider);
+                    outrider->ForcedDespawn();
+                }
+    }
+
+    void PlaceOutriders(Creature* source)
+    {
+        float const extra = std::max(0.0f, sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_EXTRA));
+        uint32 count = uint32(extra);
+        if (rand_norm() < extra - float(count))
+            ++count;
+        std::vector<ObjectGuid> placed;
+        for (uint32 n = 0; n < count; ++n)
+        {
+            for (uint32 attempt = 0; attempt < OUTRIDER_TRIES; ++attempt)
+            {
+                float x = source->GetPositionX(), y = source->GetPositionY(), z = source->GetPositionZ();
+                if (!source->GetMap()->GetReachableRandomPosition(source, x, y, z, OUTRIDER_MAX))
+                    continue;
+                float const dist = source->GetDistance(x, y, z);
+                // Only into a grid already loaded: loading one would form its spawns' packs and
+                // their outriders, and so on across the continent.
+                if (dist < OUTRIDER_MIN || !source->GetMap()->IsLoaded(x, y) || !OutriderSpotClear(source, x, y, z))
+                    continue;
+                Creature* outrider = source->SummonCreature(source->GetEntry(), x, y, z, frand(0.0f, 2.0f * float(M_PI)),
+                                     TEMPSPAWN_CORPSE_TIMED_DESPAWN, PACK_CORPSE_MS);
+                if (!outrider)
+                    break;
+                outrider->GetMotionMaster()->MoveRandomAroundPoint(x, y, z, FOLLOWER_WANDER * 2.0f);
+                placed.push_back(outrider->GetObjectGuid());
+                WatchOutrider(outrider, source->GetObjectGuid());
+                FormPackAround(outrider, 0, 0);
+                break;
+            }
+        }
+        if (placed.empty())
+            return;
+        std::lock_guard<std::mutex> guard(sPacksLock);
+        sOutriders[source->GetObjectGuid()] = std::move(placed);
+    }
+
+    // `leader`'s pack, if it may lead one, and, for a pack the world forms (not the dev tools'),
+    // its outriders. `tier` as FormPackAround's.
+    void FormPack(Creature* leader, uint32 size, uint8 tier = 0)
+    {
+        {
+            std::lock_guard<std::mutex> guard(sPacksLock);
+            sForming.erase(leader->GetObjectGuid());
+        }
+        if (!PacksOn() || !Eligible(leader))
+            return;
+        RecallOutriders(leader);
+        FormPackAround(leader, size, tier);
+        if (!size && !tier)
+            PlaceOutriders(leader);
     }
 
     // The leader of `unit`'s pack and its members (leader first), if it is in one.
@@ -941,6 +1113,8 @@ namespace Arpg
             sent.erase(guid);
         sFollowers.erase(guid);
         sForming.erase(guid);
+        // Its outriders leave once out of combat (WatchOutrider).
+        sOutriders.erase(guid);
         auto pack = sPacks.find(guid);
         if (pack != sPacks.end())
         {
