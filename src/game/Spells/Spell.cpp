@@ -35,6 +35,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgStats.h"
+#include "Arpg/ArpgResources.h"
 #include "Globals/ObjectMgr.h"
 #include "Spells/SpellMgr.h"
 #include "Entities/Player.h"
@@ -4739,6 +4740,13 @@ void Spell::TakePower()
 
     Powers powerType = Powers(m_spellInfo->powerType);
 
+    // ARPG: play statistics, a cast that took more than was left (Arpg/ArpgResources.h).
+    if (m_caster->GetPower(powerType) < m_powerCost && m_caster->GetTypeId() == TYPEID_PLAYER)
+    {
+        Arpg::OnStatsOverdraw(static_cast<Player*>(m_caster), m_spellInfo);
+        // It costs what was left, so a miss refunds a share of that, not of the full cost.
+        m_powerCost = m_caster->GetPower(powerType);
+    }
     m_caster->ModifyPower(powerType, -(int32)m_powerCost);
 
     // Set the five second timer
@@ -6711,6 +6719,8 @@ uint32 Spell::CalculatePowerCost(SpellEntry const* spellInfo, Unit* caster, Spel
                 return 0;
         }
     }
+    // ARPG: mana costs as a share of the pool (Arpg/ArpgResources.h).
+    powerCost = Arpg::ManaCost(caster, spellInfo, powerCost);
     SpellSchools school = GetFirstSchoolInMask(spell ? spell->m_spellSchoolMask : GetSpellSchoolMask(spellInfo));
     // Flat mod from caster auras by spell school
     powerCost += caster->GetInt32Value(static_cast<uint16>(UNIT_FIELD_POWER_COST_MODIFIER) + static_cast<uint16>(school));
@@ -6754,7 +6764,8 @@ SpellCastResult Spell::CheckPower(bool strict)
 
     // Check power amount
     Powers powerType = Powers(m_spellInfo->powerType);
-    if (m_caster->GetPower(powerType) < m_powerCost)
+    // ARPG: any mana or rage at all is enough; the cast empties what is left (Arpg/ArpgResources.h).
+    if (m_caster->GetPower(powerType) < m_powerCost && !Arpg::Overdraws(m_caster, powerType, m_powerCost))
         return SPELL_FAILED_NO_POWER;
 
     return SPELL_CAST_OK;

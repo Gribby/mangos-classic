@@ -18,6 +18,7 @@
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgStats.h"
+#include "Arpg/ArpgResources.h"
 
 #include "Entities/Creature.h"
 #include "Entities/DynamicObject.h"
@@ -967,6 +968,7 @@ namespace Arpg
         ForgetMage(player);
         ForgetDruid(player);
         FlushStats(player);
+        ForgetCosts(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -984,6 +986,8 @@ namespace Arpg
         UpdateDruid(player);
         // Play statistics (Arpg/ArpgStats.h).
         UpdateStats(player);
+        // The spells' costs, again when the pool or the spells changed (Arpg/ArpgResources.h).
+        SendCosts(player, true);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)

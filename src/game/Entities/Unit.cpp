@@ -64,6 +64,7 @@
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgResources.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgStats.h"
@@ -933,6 +934,9 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
     Arpg::OnDamageTaken(victim, dealer, damage);
     // ARPG: play statistics, damage dealt by spell and the blows before a death (Arpg/ArpgStats.h).
     Arpg::OnStatsDamage(dealer, victim, damage, spellInfo);
+    // ARPG: a filler's or a sealed swing's mana back (Arpg/ArpgResources.h).
+    if (damagetype == DIRECT_DAMAGE || damagetype == SPELL_DIRECT_DAMAGE)
+        Arpg::OnResourceHit(dealer, victim, damage, spellInfo);
 
     if (dealer)
     {

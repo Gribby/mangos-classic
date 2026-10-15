@@ -35,7 +35,7 @@ namespace
     constexpr uint32 SESSION_EVERY_MS = 5 * 60 * 1000;
     constexpr uint32 LAST_BLOWS_MS = 10000;       // a death's blows: the last this long
     constexpr size_t LAST_BLOWS_MAX = 12;
-    constexpr uint32 LOW_MANA_PCT = 15, LOW_HEALTH_PCT = 30;
+    constexpr uint32 LOW_MANA_PCT = 20, LOW_HEALTH_PCT = 35;
 
     struct SpellTally { uint32 casts = 0, hits = 0; uint64 damage = 0; };
     struct Blow { uint32 at; std::string source; std::string spell; uint32 amount; };
@@ -66,6 +66,7 @@ namespace
         std::map<std::string, SpellTally> dealt;  // by spell name ("Melee": swings)
         std::map<std::string, uint64> taken;      // by source name
         std::map<std::string, uint32> refused;    // casts refused for want of power, by spell
+        std::map<std::string, uint32> overdrew;   // casts that took more than was left, by spell
         std::deque<Blow> blows;
         uint32 combatSec = 0, lowManaSec = 0, lowHealthSec = 0;
         uint32 flasks = 0, rolls = 0;
@@ -247,6 +248,7 @@ namespace
         o << "],\"kills\":" << Counts(s.kills) << ",\"deaths\":" << s.deaths
           << ",\"combatSec\":" << s.combatSec << ",\"lowManaSec\":" << s.lowManaSec << ",\"lowHealthSec\":" << s.lowHealthSec
           << ",\"flasks\":" << s.flasks << ",\"rolls\":" << s.rolls << ",\"refusedForPower\":" << Counts(s.refused)
+          << ",\"overdraws\":" << Counts(s.overdrew)
           << ",\"zoneSec\":" << Counts(s.zoneSec) << ",\"dealt\":{";
         bool first = true;
         for (auto const& [name, t] : s.dealt)
@@ -380,6 +382,14 @@ namespace Arpg
             return;
         std::lock_guard<std::mutex> guard(sLock);
         ++SessionOf(caster, WorldTimer::getMSTime()).refused[spellInfo->SpellName[0] ? spellInfo->SpellName[0] : "?"];
+    }
+
+    void OnStatsOverdraw(Player const* caster, SpellEntry const* spellInfo)
+    {
+        if (!caster || !spellInfo || !Active(caster) || !On())
+            return;
+        std::lock_guard<std::mutex> guard(sLock);
+        ++SessionOf(caster, WorldTimer::getMSTime()).overdrew[spellInfo->SpellName[0] ? spellInfo->SpellName[0] : "?"];
     }
 
     void OnStatsFlask(Player const* player)

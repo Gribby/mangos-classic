@@ -23,6 +23,7 @@
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgResources.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -2361,7 +2362,10 @@ void Player::Regenerate(Powers power, uint32 diff)
         {
             bool recentCast = IsUnderLastManaUseEffect();
             float ManaIncreaseRate = sWorld.getConfig(CONFIG_FLOAT_RATE_POWER_MANA);
-            if (recentCast)
+            // ARPG: a share of the pool a second, cast or not (Arpg/ArpgResources.h).
+            if (Arpg::Active(this))
+                addvalue = Arpg::ManaRegen(this, diff) * ManaIncreaseRate;
+            else if (recentCast)
             {
                 // Mangos Updates Mana in intervals of 2s, which is correct
                 addvalue = m_modManaRegenInterrupt *  ManaIncreaseRate * uint32(float(diff) / 1000);

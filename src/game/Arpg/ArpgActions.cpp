@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgActions.h"
+#include "Arpg/ArpgResources.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgDungeons.h"
@@ -327,6 +328,9 @@ namespace Arpg
                 return;
         }
         ProcHeal(player, "Health Globe", std::max<uint32>(1, uint32(float(player->GetMaxHealth() * GLOBE_HEAL_PCT / 100) * GlobeHealMod(player))));
+        // And a share of mana (Arpg/ArpgResources.h).
+        if (player->GetMaxPower(POWER_MANA))
+            player->ModifyPower(POWER_MANA, int32(player->GetMaxPower(POWER_MANA) * GLOBE_MANA_PCT / 100));
         SendGlobe(player, GLOBE_GONE, id, g);
     }
 

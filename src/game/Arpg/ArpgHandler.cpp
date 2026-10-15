@@ -43,6 +43,7 @@
  */
 
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgResources.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgUniques.h"
 #include "Arpg/ArpgTree.h"
@@ -95,6 +96,8 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
             Arpg::SendUniques(player);
             // The item set catalog (Arpg/ArpgSets.h).
             Arpg::SendSets(player);
+            // The spells' costs (Arpg/ArpgResources.h).
+            Arpg::SendCosts(player);
             // The skill tree takes over from the talents, on the world thread (it teaches spells).
             GetMessager().AddMessage([](WorldSession* session)
             {

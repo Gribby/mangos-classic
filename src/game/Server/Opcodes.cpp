@@ -873,4 +873,5 @@ OpcodeHandler opcodeTable[NUM_MSG_TYPES] =
     /*0x34D*/ { "CMSG_ARPG_SHOWCASE_QUERY",         STATUS_AUTHED,    PROCESS_THREADUNSAFE, &WorldSession::HandleArpgShowcaseQueryOpcode},
     /*0x34E*/ { "SMSG_ARPG_SHOWCASE",               STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x34F*/ { "SMSG_ARPG_SETS",                   STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x350*/ { "SMSG_ARPG_COSTS",                  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
 };

@@ -14,8 +14,9 @@
  *     mana, flasks and rolls, the five spells that dealt the most;
  *   - "session": every 5 minutes and at logout, the session so far: minutes, levels gained and
  *     how long each took, kills by kind, deaths, damage dealt by spell (casts, hits, damage),
- *     damage taken by source, seconds in combat, seconds in combat below 15% mana and below 30%
- *     health, casts refused for want of mana or rage or energy (by spell), flasks drunk, rolls,
+ *     damage taken by source, seconds in combat, seconds in combat below 20% mana and below 35%
+ *     health, casts refused for want of mana or rage or energy (by spell), casts that overdrew
+ *     (cost more than was left, by spell), flasks drunk, rolls,
  *     minutes per zone. A later "session" line of the same id supersedes an earlier one.
  * update-arpg-server.bat sends the folder to the repository's arpg-stats branch (send-arpg-stats.bat).
  */
@@ -40,6 +41,8 @@ namespace Arpg
     void OnStatsCast(Spell const* spell);
     // `caster`'s cast of `spellInfo` was refused with `result` (a SpellCastResult).
     void OnStatsCastFailed(Player const* caster, SpellEntry const* spellInfo, uint32 result);
+    // A cast cost more mana or rage than was left, and took it all (overdraw).
+    void OnStatsOverdraw(Player const* caster, SpellEntry const* spellInfo);
     // A flask drunk, a roll made.
     void OnStatsFlask(Player const* player);
     void OnStatsRoll(Player const* player);
