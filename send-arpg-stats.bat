@@ -30,17 +30,12 @@ git pull -q --rebase origin arpg-stats
 if not exist stats mkdir stats
 copy /y "%RUN_DIR%\arpg-stats\*.jsonl" stats\ >nul
 git add stats
-git diff --cached --quiet && goto :nothing
 rem Its own author, so a PC with no git name or email set still sends.
-git -c user.name="ARPG stats" -c user.email="arpg-stats@users.noreply.github.com" commit -q -m "Play statistics %DATE% %TIME%" || goto :failpop
-git push -q origin arpg-stats || goto :failpop
+git diff --cached --quiet || git -c user.name="ARPG stats" -c user.email="arpg-stats@users.noreply.github.com" commit -q -m "Play statistics %DATE% %TIME%" || goto :failpop
+rem Pushed every time, so a commit an earlier failed push left behind goes now.
+git push origin arpg-stats || goto :failpop
 popd
 echo Sent the play statistics to the arpg-stats branch.
-goto :done
-
-:nothing
-popd
-echo No new play statistics to send.
 goto :done
 
 :failpop
