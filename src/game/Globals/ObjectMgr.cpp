@@ -3666,6 +3666,8 @@ void ObjectMgr::LoadPlayerInfo()
     // Warrior), a donor of the same side first.
     if (sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
         BuildArpgPlayerInfo();
+    if (sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE) && sWorld.getConfig(CONFIG_BOOL_ARPG_ACTS))
+        ArpgOneStartPerFaction();
 
     // Loading xp per level data
     {
@@ -3963,6 +3965,35 @@ void ObjectMgr::GetPlayerClassLevelInfo(uint32 class_, uint32 level, PlayerClass
         level = sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL);
 
     *info = pInfo->levelInfo[level - 1];
+}
+
+void ObjectMgr::ArpgOneStartPerFaction()
+{
+    PlayerInfo const human = playerInfo[RACE_HUMAN][CLASS_WARRIOR];
+    PlayerInfo const orc = playerInfo[RACE_ORC][CLASS_WARRIOR];
+    if (!human.displayId_m || !orc.displayId_m)
+        return;
+    uint32 moved = 0;
+    for (uint32 race = 1; race < MAX_RACES; ++race)
+    {
+        if (!(convertEnumToFlag(race) & RACEMASK_ALL_PLAYABLE))
+            continue;
+        PlayerInfo const& from = Player::TeamForRace(race) == ALLIANCE ? human : orc;
+        for (uint32 class_ = 1; class_ < MAX_CLASSES; ++class_)
+        {
+            PlayerInfo& info = playerInfo[race][class_];
+            if (!info.displayId_m)
+                continue;
+            info.mapId = from.mapId;
+            info.areaId = from.areaId;
+            info.positionX = from.positionX;
+            info.positionY = from.positionY;
+            info.positionZ = from.positionZ;
+            info.orientation = from.orientation;
+            ++moved;
+        }
+    }
+    sLog.outString(">> ARPG acts: %u race and class pairings start in their faction's one valley", moved);
 }
 
 void ObjectMgr::BuildArpgPlayerInfo()

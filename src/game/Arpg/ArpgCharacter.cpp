@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDruid.h"
@@ -972,6 +973,7 @@ namespace Arpg
         ForgetDruid(player);
         FlushStats(player);
         ForgetCosts(player);
+        ForgetActs(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -991,6 +993,8 @@ namespace Arpg
         UpdateStats(player);
         // The spells' costs, again when the pool or the spells changed (Arpg/ArpgResources.h).
         SendCosts(player, true);
+        // The act's road fills ahead (Arpg/ArpgActs.h).
+        UpdateActs(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)

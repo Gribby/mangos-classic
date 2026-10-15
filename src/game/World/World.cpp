@@ -22,6 +22,7 @@
 
 #include "World/World.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgBases.h"
 #include "Database/DatabaseEnv.h"
@@ -849,6 +850,7 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_UINT32_ARPG_DEV_CREATURE, "Arpg.DevTools.Creature", 721);
     setConfig(CONFIG_BOOL_ARPG_PACKS, "Arpg.Packs", true);
     setConfig(CONFIG_BOOL_ARPG_STATS, "Arpg.Stats", true);
+    setConfig(CONFIG_BOOL_ARPG_ACTS, "Arpg.Acts", true);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER, "Arpg.Packs.FollowerPower", 0.55f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_XP, "Arpg.Packs.FollowerXp", 0.3f);
     setConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_LOOT, "Arpg.Packs.FollowerLoot", 0.5f);
@@ -1129,10 +1131,14 @@ void World::SetInitialWorldSettings()
     sWeatherMgr.LoadWeatherZoneChances();
 
     sLog.outString("Loading Quests...");
+    // ARPG: the acts' story quests, written before quests load (Arpg/ArpgActs.h).
+    Arpg::EnsureActQuests();
     sObjectMgr.LoadQuests();                                // must be loaded after DBCs, creature_template, item_template, gameobject tables
 
     sLog.outString("Loading Quests Relations...");
     sObjectMgr.LoadQuestRelations();                        // must be after quest load
+    // ARPG: the vanilla quests an act retells leave their givers (Arpg/ArpgActs.h).
+    Arpg::AfterActQuestsLoaded();
     sLog.outString(">>> Quests Relations loaded");
     sLog.outString();
 

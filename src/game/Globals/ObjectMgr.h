@@ -530,6 +530,9 @@ class ObjectMgr
         void GetPlayerLevelInfo(uint32 race, uint32 class_, uint32 level, PlayerLevelInfo* info) const;
         // ARPG: build the race and class pairings the database lacks (LoadPlayerInfo).
         void BuildArpgPlayerInfo();
+        // ARPG acts: every Alliance character starts where a human does, every Horde one where an
+        // orc does, whatever its race (Arpg/ArpgActs.h).
+        void ArpgOneStartPerFaction();
 
         ObjectGuid GetPlayerGuidByName(std::string name) const;
         int32 GetPlayerMapIdByGUID(ObjectGuid const& guid) const;
@@ -1174,6 +1177,7 @@ class ObjectMgr
         }
 
         QuestRelationsMap& GetCreatureQuestRelationsMap() { return m_CreatureQuestRelations; }
+        QuestRelationsMap& GetGOQuestRelationsMap() { return m_GOQuestRelations; }
 
         std::pair<uint32, uint32> GetCreatureCooldownRange(uint32 entry, uint32 spellId) const
         {

@@ -57,6 +57,7 @@
 #include "Common.h"
 
 class Creature;
+class Loot;
 class Map;
 class Player;
 class Unit;
@@ -112,6 +113,9 @@ namespace Arpg
 
     // `victim`'s corpse loot was just made: a Warden's and a final boss's Cache are added to it.
     void OnDungeonLoot(Creature* victim);
+
+    // Add a rolled item of `rarity` at item level `level` to `loot` (a Warden's, a Cache's, an act's).
+    void AddLootPick(Loot* loot, uint8 rarity, uint32 level);
 
     // `creature` is leaving the world: forget its scaling.
     void ForgetScaled(Creature const* creature);

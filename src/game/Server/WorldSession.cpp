@@ -28,6 +28,7 @@
 #include "Server/Opcodes.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
+#include "Arpg/ArpgActs.h"
 #include "Entities/Player.h"
 #include "Globals/ObjectMgr.h"
 #include "Groups/Group.h"
@@ -762,6 +763,9 @@ void WorldSession::LogoutPlayer()
         // Remember player GUID for update SQL below
         uint32 guid = _player->GetGUIDLow();
 #endif
+
+        // ARPG: the character's road packs go with it.
+        Arpg::ForgetActs(_player);
 
         ///- Remove the player from the world
         // the player may not be in the world when logging out

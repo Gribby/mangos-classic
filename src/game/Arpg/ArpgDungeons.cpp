@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgAffixes.h"
@@ -814,12 +815,20 @@ namespace Arpg
         sPlayerTiers.erase(player->GetObjectGuid());
     }
 
+    void AddLootPick(Loot* loot, uint8 rarity, uint32 level)
+    {
+        if (loot)
+            AddPick(loot, rarity, level);
+    }
+
     void OnDungeonLoot(Creature* victim)
     {
         if (!victim || !victim->m_loot)
             return;
         if (!DungeonsOn() || !victim->GetMap()->IsDungeon())
         {
+            // An act's last leader: its guaranteed blue (Arpg/ArpgActs.h).
+            OnActBossLoot(victim);
             OnCodexLoot(victim, false, false, 0);
             return;
         }

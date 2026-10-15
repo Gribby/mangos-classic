@@ -129,6 +129,9 @@ namespace Arpg
 
     // Dev tools: the nearest eligible mob forms a pack of `size` (0: by level) and `tier`.
     void DevFormPack(Player* player, uint8 size, uint8 tier);
+
+    // An act's road placed `leader` (Arpg/ArpgActs.h): its pack forms round it, as the world's do.
+    void FormRoadPack(Creature* leader);
 }
 
 #endif

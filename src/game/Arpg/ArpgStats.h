@@ -26,6 +26,8 @@
 
 #include "Common.h"
 
+#include <string>
+
 class Player;
 class Spell;
 class Unit;
@@ -41,6 +43,8 @@ namespace Arpg
     void OnStatsCast(Spell const* spell);
     // `caster`'s cast of `spellInfo` was refused with `result` (a SpellCastResult).
     void OnStatsCastFailed(Player const* caster, SpellEntry const* spellInfo, uint32 result);
+    // A dev note on the act's road ("#note ...", Arpg/ArpgActs.h), with where the character stands.
+    void OnStatsNote(Player const* player, std::string const& text);
     // A cast cost more mana or rage than was left, and took it all (overdraw).
     void OnStatsOverdraw(Player const* caster, SpellEntry const* spellInfo);
     // A flask drunk, a roll made.

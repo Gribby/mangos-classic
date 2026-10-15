@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgAffixes.h"
@@ -407,6 +408,8 @@ namespace
             return "in combat";
         if (creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData())
             return "not a database spawn";
+        if (IsActLeader(creature->GetEntry()))
+            return "an act's leader";
         if (creature->IsPet() || creature->IsTotem())
             return "a pet or totem";
         if (creature->GetMap()->Instanceable())
@@ -782,6 +785,8 @@ namespace Arpg
 {
     void OnCreatureAdded(Creature* creature)
     {
+        // An act's named leaders are crowned (Arpg/ArpgActs.h).
+        OnActCreatureAdded(creature);
         // Instances and open-world elites: group scaling and dungeon champions (Arpg/ArpgDungeons.h).
         OnScalableCreatureAdded(creature);
         if (!PacksOn() || !creature || creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC ||
@@ -796,6 +801,16 @@ namespace Arpg
         {
             FormPack(static_cast<Creature*>(&unit), 0);
         }), creature->m_events.CalculateTime(urand(FORM_DELAY_MIN, FORM_DELAY_MAX)));
+    }
+
+    void FormRoadPack(Creature* leader)
+    {
+        // A summon, so not Eligible (a database spawn): it only has to be standing free.
+        if (!leader || !PacksOn() || !leader->IsInWorld() || !leader->IsAlive() || leader->IsInCombat())
+            return;
+        leader->GetMotionMaster()->MoveRandomAroundPoint(leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
+                                                         FOLLOWER_WANDER * 2.0f);
+        FormPackAround(leader, 0, 0);
     }
 
     bool IsPackFollower(Unit const* unit)

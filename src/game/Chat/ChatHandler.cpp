@@ -17,6 +17,7 @@
  */
 
 #include "Common.h"
+#include "Arpg/ArpgActs.h"
 #include "Log/Log.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
@@ -180,6 +181,10 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
+                break;
+
+            // ARPG: a dev note on the act's road, written to the play statistics, not said.
+            if (Arpg::OnActChat(GetPlayer(), msg))
                 break;
 
             if (!CheckChatMessage(msg))

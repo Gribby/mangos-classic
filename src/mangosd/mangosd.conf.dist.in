@@ -1881,6 +1881,11 @@ Dummy.Debug2 = 0
 #        the increased and more damage, added damage and ailments a character builds up.
 #        Default: 0.5
 #
+#    Arpg.Acts
+#        The acts: the story's quest chains, the road's packs, one start valley per faction, the
+#        dev notes ("#note ..." with Arpg.DevTools). The client's docs/ARPG-ACT-1.md.
+#        Default: 1
+#
 #    Arpg.Difficulty.Damage
 #    Arpg.Difficulty.DamagePerLevel
 #    Arpg.Difficulty.DungeonDamage
@@ -1907,6 +1912,7 @@ Arpg.Dungeons.PlayerHealth = 0.16
 Arpg.Dungeons.EliteSoloHealth = 0.5
 Arpg.Power.PerLevel = 0.1
 Arpg.Power.HealthGrowth = 0.5
+Arpg.Acts = 1
 Arpg.Difficulty.Damage = 1.3
 Arpg.Difficulty.DamagePerLevel = 0.008
 Arpg.Difficulty.DungeonDamage = 1.25

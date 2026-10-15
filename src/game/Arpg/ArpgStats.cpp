@@ -384,6 +384,18 @@ namespace Arpg
         ++SessionOf(caster, WorldTimer::getMSTime()).refused[spellInfo->SpellName[0] ? spellInfo->SpellName[0] : "?"];
     }
 
+    void OnStatsNote(Player const* player, std::string const& text)
+    {
+        if (!player || !On())
+            return;
+        std::ostringstream o;
+        o << "{\"type\":\"note\",\"at\":" << Json(Stamp(std::time(nullptr))) << "," << Who(player)
+          << ",\"zone\":" << Json(ZoneName(player)) << ",\"map\":" << player->GetMapId()
+          << ",\"x\":" << player->GetPositionX() << ",\"y\":" << player->GetPositionY() << ",\"z\":" << player->GetPositionZ()
+          << ",\"text\":" << Json(text) << "}";
+        Write(o.str());
+    }
+
     void OnStatsOverdraw(Player const* caster, SpellEntry const* spellInfo)
     {
         if (!caster || !spellInfo || !Active(caster) || !On())
