@@ -114,10 +114,16 @@ namespace Arpg
     // the extra projectiles its caster's uniques add. Added projectiles add none.
     void OnLineLaunch(Spell* spell, Unit* struck);
 
-    // Whether `spell` flies as a piercing bolt (Spell::IsArpgPierceBolt): its caster's worn,
-    // learned or skill pierce fits it. `cap`: the most enemies it strikes, the first included;
-    // `pct`: the damage share of each after the first.
+    // Whether `spell`, an ARPG skillshot, flies as a bolt (Spell::IsArpgPierceBolt) that strikes
+    // what it reaches: one whose every effect strikes the enemy, not cast from an item. `cap`: the
+    // most enemies it strikes, the first included (1 without a pierce, which its caster's worn,
+    // learned or skill pierce raises); `pct`: the damage share of each after the first.
     bool BoltPierce(Spell* spell, uint32& cap, uint32& pct);
+
+    // A bolt from `caster` of `spellInfo` stopped in an enemy at (`x`, `y`, `z`): the ARPG clients
+    // near end its missile there (SMSG_ARPG_BOLT_STOP, 0x351: uint64 caster, uint32 spell, float
+    // x, y, z).
+    void SendBoltStop(Unit* caster, SpellEntry const* spellInfo, float x, float y, float z);
 
     // The fair enemies a bolt from (`x`, `y`, `z`) along `bearing` crosses between `fromDist` and
     // `toDist` yards out (the skillshot's width plus each one's reach), in the bolt's sight,

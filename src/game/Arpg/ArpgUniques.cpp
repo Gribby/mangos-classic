@@ -703,12 +703,30 @@ namespace Arpg
         for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
             if (info->Effect[i] && info->EffectImplicitTargetA[i] != TARGET_UNIT_ENEMY)
                 return false;
-        UniqueMechanic const* row = WornMechanicFrom(player, KIT_PIERCE, info, LearnedModifiers(player));
-        if (!row)
-            return false;
-        cap = 1 + (row->n ? uint32(row->n) : uint32(BURST_MAX));
-        pct = row->pct;
+        // Every skillshot flies as a bolt and can miss; a pierce lets it on through more.
+        cap = 1;
+        pct = 100;
+        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_PIERCE, info, LearnedModifiers(player)))
+        {
+            cap = 1 + (row->n ? uint32(row->n) : uint32(BURST_MAX));
+            pct = row->pct;
+        }
         return true;
+    }
+
+    void SendBoltStop(Unit* caster, SpellEntry const* spellInfo, float x, float y, float z)
+    {
+        if (!caster || !spellInfo || !caster->IsInWorld())
+            return;
+        WorldPacket data(SMSG_ARPG_BOLT_STOP, 8 + 4 + 12);
+        data << caster->GetObjectGuid();
+        data << uint32(spellInfo->Id);
+        data << x << y << z;
+        // Only to ARPG clients: a stock client knows no such opcode.
+        for (auto const& ref : caster->GetMap()->GetPlayers())
+            if (Player* player = ref.getSource())
+                if (Active(player) && player->IsWithinDist3d(x, y, z, IMPACT_SEEN))
+                    player->GetSession()->SendPacket(data);
     }
 
     std::vector<Unit*> UnitsCrossed(Unit* caster, float x, float y, float z, float bearing, float fromDist, float toDist)

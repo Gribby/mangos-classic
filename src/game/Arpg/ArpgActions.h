@@ -8,7 +8,9 @@
  * hostile spells aimed at the player are dodged. Not while
  * rooted, stunned, feared, confused, mounted, on a taxi, swimming or falling.
  *
- * Flask (kind 18): a charge heals 15% of maximum health at once and 25% more over three seconds.
+ * Flask (kind 18): a charge heals 15% of maximum health at once and 25% more over three seconds,
+ * and gives back mana alike (FLASK_MANA_INSTANT_PCT at once, FLASK_MANA_OVER_TIME_PCT over the
+ * same three seconds), so running dry is a flask away, never a dead stop.
  * It holds FLASK_MAX charges and starts full. Kills fill it: a pack follower 1 point, a mob 2,
  * an elite 4, a champion 5, a rare 10, a boss 20; FLASK_CHARGE_POINTS points make a charge. Out
  * of combat it refills a charge every FLASK_REST_MS.

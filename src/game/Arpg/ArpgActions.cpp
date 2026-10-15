@@ -51,6 +51,7 @@ namespace
     constexpr uint32 FLASK_CHARGE_POINTS = 10;
     constexpr uint32 FLASK_INSTANT_PCT = 15, FLASK_OVER_TIME_PCT = 25;
     constexpr uint32 FLASK_TICKS = 6, FLASK_TICK_MS = 500;
+    constexpr uint32 FLASK_MANA_INSTANT_PCT = 15, FLASK_MANA_OVER_TIME_PCT = 25;
     constexpr uint32 FLASK_REST_MS = 12000;
     // Healing Potion: its cast plays the drink's sound and visual, and names the heal in the log.
     constexpr uint32 SPELL_HEALING_POTION = 441;
@@ -285,14 +286,21 @@ namespace Arpg
         int32 const instant = int32(std::max<uint32>(1, uint32(float(max * FLASK_INSTANT_PCT / 100) * GlobeHealMod(player))));
         player->CastCustomSpell(player, SPELL_HEALING_POTION, &instant, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED);
         uint32 const tick = std::max<uint32>(1, uint32(float(max * FLASK_OVER_TIME_PCT / 100 / FLASK_TICKS) * GlobeHealMod(player)));
+        // Mana alike, for any mana pool (a druid in a form included).
+        uint32 const mana = player->GetMaxPower(POWER_MANA);
+        if (mana)
+            player->ModifyPower(POWER_MANA, int32(mana * FLASK_MANA_INSTANT_PCT / 100));
+        int32 const manaTick = int32(mana * FLASK_MANA_OVER_TIME_PCT / 100 / FLASK_TICKS);
         for (uint32 i = 1; i <= FLASK_TICKS; ++i)
         {
-            player->m_events.AddEvent(new UnitLambdaEvent(*player, [tick](Unit& unit)
+            player->m_events.AddEvent(new UnitLambdaEvent(*player, [tick, manaTick](Unit& unit)
             {
                 if (!unit.IsAlive() || !unit.IsInWorld())
                     return;
                 if (SpellEntry const* potion = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_HEALING_POTION))
                     unit.DealHeal(&unit, tick, potion);
+                if (manaTick > 0)
+                    unit.ModifyPower(POWER_MANA, manaTick);
             }), player->m_events.CalculateTime(i * FLASK_TICK_MS));
         }
     }

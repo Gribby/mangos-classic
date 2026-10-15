@@ -9,7 +9,8 @@
  *     (Fireball 9%, Arcane Missiles 18%, Consecration 22%...); any other mana spell its vanilla
  *     share of base mana, halved, of maximum mana. Talents and gear's cost cuts still apply.
  *   - A free filler per class that gives mana back on a hit: the mage's Frostbolt and the druid's
- *     Wrath (3% each), and a paladin's melee swing while a Seal is on (2%). Shapeshifting is free.
+ *     Wrath (3% each), and a paladin's melee swing while a Seal is on (2%). Shapeshifting is free,
+ *     and a bear comes in with 20 rage (Spells/SpellAuras.cpp, the shapeshift).
  *   - Regeneration: 1.5% of maximum mana a second, and the gear's mana per 5 seconds, whether or
  *     not the player cast lately (no five-second rule); out of combat the rest refills it
  *     (Arpg/ArpgCharacter.h). A health globe also gives back GLOBE_MANA_PCT of maximum mana.
@@ -31,6 +32,8 @@ struct SpellEntry;
 namespace Arpg
 {
     constexpr uint32 GLOBE_MANA_PCT = 8;
+    // Rage a bear starts with (rage counts in tenths: 200 is 20).
+    constexpr uint32 BEAR_ENTRY_RAGE = 200;
 
     // The mana cost of `spellInfo` for `caster`, from its vanilla base cost `vanilla` (before any
     // cost modifier); `vanilla` itself for a non-ARPG caster or a spell not costing mana.

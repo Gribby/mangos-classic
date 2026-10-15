@@ -3303,10 +3303,11 @@ SpellCastResult Spell::cast(bool skipCheck)
     // stepped in front takes it, and a target that died meanwhile no longer stops it. With the
     // line clear the spell still flies: it is spent (cooldown, power, reagents) and its missile
     // flies on to a bare point past the aim, as a Diablo skillshot that misses does.
-    // ARPG: a piercing skillshot picks no target at launch: it flies its whole range along the
-    // line, to a wall at the most, as a bolt, and strikes whatever it reaches as it goes (an enemy
-    // that stepped into its path included), each after the first for the pierce's share
-    // (HandleArpgBolt).
+    // ARPG: a skillshot picks no target at launch: it flies its whole range along the line, to a
+    // wall at the most, as a bolt, and strikes whatever it reaches as it goes (an enemy that
+    // stepped into its path included, one that stepped out of it missed). Without a pierce it
+    // stops in the first; with one it goes on through more, each after the first for the
+    // pierce's share (HandleArpgBolt). The clients end its missile where it stops.
     uint32 pierceCap = 0, piercePct = 0;
     if (m_arpgLine && IsDelayedSpell() && Arpg::BoltPierce(this, pierceCap, piercePct))
     {
@@ -3763,6 +3764,10 @@ uint64 Spell::HandleArpgBolt(uint64 t_offset)
             if (hit->missCondition == SPELL_MISS_NONE)
                 Arpg::ShowSpellImpact(unit, m_spellInfo, m_spellSchoolMask);
             DoAllEffectOnTarget(&*hit);
+            // Its last strike: the missile ends in this enemy, not at the far end.
+            if (m_arpgBoltHits >= m_arpgBoltCap)
+                Arpg::SendBoltStop(bolter, m_spellInfo, unit->GetPositionX(), unit->GetPositionY(),
+                                   unit->GetPositionZ() + unit->GetCollisionHeight() * 0.5f);
         }
     }
     m_arpgBoltFlown = flown;

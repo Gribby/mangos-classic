@@ -903,10 +903,11 @@ enum Opcodes
     // ARPG: the item set catalog (Arpg/ArpgSets.h)
     SMSG_ARPG_SETS                                  = 0x34F,
     SMSG_ARPG_COSTS                                 = 0x350,
+    SMSG_ARPG_BOLT_STOP                             = 0x351,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x351
+#define NUM_MSG_TYPES 0x352
 
 /// Player state
 enum SessionStatus

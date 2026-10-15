@@ -17,6 +17,7 @@
  */
 
 #include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgResources.h"
 #include "Common.h"
 #include "Database/DatabaseEnv.h"
 #include "Server/WorldPacket.h"
@@ -1920,6 +1921,12 @@ void Aura::HandleAuraModShapeshift(bool apply, bool Real)
                         target->SetPower(POWER_RAGE, remainingRage);
                     break;
                 }
+                // ARPG: a bear comes in with rage to spend (Arpg/ArpgResources.h).
+                case FORM_BEAR:
+                case FORM_DIREBEAR:
+                    if (Arpg::Active(target) && target->GetPower(POWER_RAGE) < Arpg::BEAR_ENTRY_RAGE)
+                        target->SetPower(POWER_RAGE, Arpg::BEAR_ENTRY_RAGE);
+                    break;
                 default:
                     break;
             }
