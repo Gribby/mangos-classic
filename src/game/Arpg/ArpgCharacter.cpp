@@ -4,6 +4,7 @@
 
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgActs.h"
+#include "Arpg/ArpgScenes.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDruid.h"
@@ -974,6 +975,7 @@ namespace Arpg
         FlushStats(player);
         ForgetCosts(player);
         ForgetActs(player);
+        ForgetScenes(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -995,6 +997,8 @@ namespace Arpg
         SendCosts(player, true);
         // The act's road fills ahead (Arpg/ArpgActs.h).
         UpdateActs(player);
+        // A scene starts, acts or ends (Arpg/ArpgScenes.h).
+        UpdateScenes(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)

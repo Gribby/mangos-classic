@@ -64,6 +64,7 @@
 #include "Log/Log.h"
 #include "Spells/SpellMgr.h"
 #include "Spells/Spell.h"
+#include "Arpg/ArpgScenes.h"
 
 #include <cmath>
 
@@ -74,6 +75,12 @@ void WorldSession::HandleArpgActionOpcode(WorldPacket& recvPacket)
 
     Player* player = GetPlayer();
     if (!player || !sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+    {
+        recvPacket.rpos(recvPacket.wpos());
+        return;
+    }
+    // Watching a scene: nothing but the hello (Arpg/ArpgScenes.h).
+    if (kind != Arpg::ACTION_HELLO && Arpg::InScene(player))
     {
         recvPacket.rpos(recvPacket.wpos());
         return;

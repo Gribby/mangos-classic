@@ -41,6 +41,7 @@
 #include "Entities/Pet.h"
 #include "Social/SocialMgr.h"
 #include "GMTickets/GMTicketMgr.h"
+#include "Arpg/ArpgScenes.h"
 
 void WorldSession::HandleRepopRequestOpcode(WorldPacket& recv_data)
 {
@@ -884,6 +885,8 @@ void WorldSession::HandleCompleteCinematic(WorldPacket& /*recv_data*/)
     DEBUG_LOG("WORLD: Received opcode CMSG_COMPLETE_CINEMATIC");
     // If player has sight bound to visual waypoint NPC we should remove it
     GetPlayer()->StopCinematic();
+    // ARPG: the client closes a scene as it does a cinematic (Arpg/ArpgScenes.h).
+    Arpg::OnSceneDone(GetPlayer());
 }
 
 void WorldSession::HandleNextCinematicCamera(WorldPacket& /*recv_data*/)

@@ -30,6 +30,7 @@
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
 #include "Groups/Group.h"
 #include "Tools/Formulas.h"
+#include "Arpg/ArpgScenes.h"
 
 #ifdef BUILD_DEPRECATED_PLAYERBOT
 #include "PlayerBot/Base/PlayerbotAI.h"
@@ -156,6 +157,8 @@ void WorldSession::HandleQuestgiverAcceptQuestOpcode(WorldPacket& recv_data)
         if (_player->CanAddQuest(qInfo, true))
         {
             _player->AddQuest(qInfo, pObject);              // pObject (if it item) can be destroyed at call
+            // ARPG: an act quest's scene (Arpg/ArpgScenes.h).
+            Arpg::OnSceneQuestAccepted(_player, quest);
 
             if (qInfo->HasQuestFlag(QUEST_FLAGS_PARTY_ACCEPT))
             {
