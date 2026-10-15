@@ -1029,7 +1029,9 @@ namespace Arpg
         float const seconds = WorldTimer::getMSTimeDiff(it->second.aggroAt, WorldTimer::getMSTime()) / 1000.0f;
         sLog.outString("ARPG packs: a pack of %u %s (level %u) fell in %.1f s; it dealt %u damage",
                        uint32(members.size()), victim->GetName(), it->second.level, seconds, it->second.damage);
-        OnStatsPack(victim->GetName(), uint32(members.size()), it->second.level, seconds, it->second.damage);
+        // Only a pack a player brought down: one that fell to guards or other creatures is not play.
+        if (static_cast<Creature*>(victim)->GetLootRecipient())
+            OnStatsPack(victim->GetName(), uint32(members.size()), it->second.level, seconds, it->second.damage);
         it->second.aggroAt = 0;
         it->second.damage = 0;
     }

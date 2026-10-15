@@ -19,7 +19,8 @@ if not exist stats mkdir stats
 copy /y "%RUN_DIR%\arpg-stats\*.jsonl" stats\ >nul
 git add stats
 git diff --cached --quiet && goto :nothing
-git commit -q -m "Play statistics %DATE% %TIME%" || goto :failpop
+rem Its own author, so a PC with no git name or email set still sends.
+git -c user.name="ARPG stats" -c user.email="arpg-stats@users.noreply.github.com" commit -q -m "Play statistics %DATE% %TIME%" || goto :failpop
 git push -q origin arpg-stats || goto :failpop
 popd
 echo Sent the play statistics to the arpg-stats branch.

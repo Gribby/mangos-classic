@@ -7,7 +7,11 @@
  *   - "death": who killed the character (name, entry, level, elite, champion tier, boss), the
  *     last blows taken within 10 sec (source, spell, amount), where, its level, mana left;
  *   - "pack": a pack fight from its first aggro to its last member's death (size, level, seconds,
- *     the damage it dealt), as the server log's "ARPG packs:" line;
+ *     the damage it dealt), as the server log's "ARPG packs:" line; only a pack a player killed;
+ *   - "fight": each fight a character takes part in, from entering combat to leaving it or dying
+ *     (one with a kill, a death or at least 3 seconds): seconds, kills by kind and foes by name,
+ *     damage dealt and per second, damage taken (and as a share of max health), lowest health and
+ *     mana, flasks and rolls, the five spells that dealt the most;
  *   - "session": every 5 minutes and at logout, the session so far: minutes, levels gained and
  *     how long each took, kills by kind, deaths, damage dealt by spell (casts, hits, damage),
  *     damage taken by source, seconds in combat, seconds in combat below 15% mana and below 30%

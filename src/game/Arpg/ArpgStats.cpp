@@ -40,8 +40,22 @@ namespace
     struct SpellTally { uint32 casts = 0, hits = 0; uint64 damage = 0; };
     struct Blow { uint32 at; std::string source; std::string spell; uint32 amount; };
 
+    // One fight: from entering combat to leaving it (or dying).
+    struct Fight
+    {
+        bool on = false;
+        uint32 startMs = 0;
+        uint64 dealt = 0, taken = 0;
+        uint32 minHealthPct = 100, startManaPct = 100, minManaPct = 100;
+        uint32 flasks = 0, rolls = 0;
+        std::map<std::string, uint32> kills;      // by kind
+        std::map<std::string, uint32> foes;       // slain, by name
+        std::map<std::string, uint64> spells;     // dealt, by spell
+    };
+
     struct Session
     {
+        Fight fight;
         std::string id;                           // guid and login time
         std::time_t started = 0;
         uint32 startMs = 0, lastSample = 0, lastWrite = 0;
@@ -185,6 +199,42 @@ namespace
         return out + "}";
     }
 
+    uint32 Pct(uint32 part, uint32 whole)
+    {
+        return whole ? uint32(uint64(part) * 100 / whole) : 100;
+    }
+
+    // The fight just over, as a line: only one that came to something (a kill, a death, or a few
+    // seconds of trading blows).
+    std::string FightLine(Player const* player, Session& s, uint32 now, bool died)
+    {
+        Fight& f = s.fight;
+        f.on = false;
+        float const seconds = WorldTimer::getMSTimeDiff(f.startMs, now) / 1000.0f;
+        if (!died && f.kills.empty() && seconds < 3.0f)
+        {
+            f = Fight();
+            return std::string();
+        }
+        std::vector<std::pair<std::string, uint64>> spells(f.spells.begin(), f.spells.end());
+        std::sort(spells.begin(), spells.end(), [](auto const& a, auto const& b) { return a.second > b.second; });
+        if (spells.size() > 5)
+            spells.resize(5);
+        std::ostringstream o;
+        o << "{\"type\":\"fight\",\"session\":" << Json(s.id) << ",\"at\":" << Json(Stamp(std::time(nullptr))) << "," << Who(player)
+          << ",\"zone\":" << Json(ZoneName(player)) << ",\"seconds\":" << seconds << ",\"died\":" << (died ? "true" : "false")
+          << ",\"kills\":" << Counts(f.kills) << ",\"foes\":" << Counts(f.foes) << ",\"dealt\":" << f.dealt
+          << ",\"dps\":" << (seconds > 0.0f ? uint64(f.dealt / seconds) : 0) << ",\"taken\":" << f.taken
+          << ",\"takenPctOfMax\":" << (player->GetMaxHealth() ? f.taken * 100 / player->GetMaxHealth() : 0)
+          << ",\"minHealthPct\":" << f.minHealthPct << ",\"startManaPct\":" << f.startManaPct << ",\"minManaPct\":" << f.minManaPct
+          << ",\"flasks\":" << f.flasks << ",\"rolls\":" << f.rolls << ",\"topSpells\":{";
+        for (size_t i = 0; i < spells.size(); ++i)
+            o << (i ? "," : "") << Json(spells[i].first) << ":" << spells[i].second;
+        o << "}}";
+        f = Fight();
+        return o.str();
+    }
+
     std::string SessionLine(Player const* player, Session const& s, uint32 now, bool logout)
     {
         float const minutes = WorldTimer::getMSTimeDiff(s.startMs, now) / 60000.0f;
@@ -232,15 +282,24 @@ namespace Arpg
         std::lock_guard<std::mutex> guard(sLock);
         if (hitter && victim->GetTypeId() == TYPEID_UNIT)
         {
-            SpellTally& t = SessionOf(hitter, now).dealt[dealer == hitter ? spellName : std::string("Pet: ") + spellName];
+            Session& s = SessionOf(hitter, now);
+            std::string const key = dealer == hitter ? spellName : std::string("Pet: ") + spellName;
+            SpellTally& t = s.dealt[key];
             ++t.hits;
             t.damage += damage;
+            if (s.fight.on)
+            {
+                s.fight.dealt += damage;
+                s.fight.spells[key] += damage;
+            }
         }
         if (hurt)
         {
             Session& s = SessionOf(hurt, now);
             std::string const source = dealer->GetName() ? dealer->GetName() : "?";
             s.taken[source] += damage;
+            if (s.fight.on)
+                s.fight.taken += damage;
             s.blows.push_back({ now, source, spellName, damage });
             while (s.blows.size() > LAST_BLOWS_MAX || (!s.blows.empty() && WorldTimer::getMSTimeDiff(s.blows.front().at, now) > LAST_BLOWS_MS))
                 s.blows.pop_front();
@@ -254,6 +313,7 @@ namespace Arpg
         uint32 const now = WorldTimer::getMSTime();
         if (Player* dead = Tracked(victim))
         {
+            std::string fight;
             std::ostringstream o;
             o << "{\"type\":\"death\",\"at\":" << Json(Stamp(std::time(nullptr))) << "," << Who(dead)
               << ",\"zone\":" << Json(ZoneName(dead)) << ",\"map\":" << dead->GetMapId()
@@ -283,14 +343,23 @@ namespace Arpg
                 }
                 o << "]}";
                 s.blows.clear();
+                fight = s.fight.on ? FightLine(dead, s, now, true) : std::string();
             }
             Write(o.str());
+            if (!fight.empty())
+                Write(fight);
         }
         if (Player* slayer = Tracked(killer ? killer->GetBeneficiaryPlayer() : nullptr))
             if (victim->GetTypeId() == TYPEID_UNIT)
             {
                 std::lock_guard<std::mutex> guard(sLock);
-                ++SessionOf(slayer, now).kills[KindOf(victim)];
+                Session& s = SessionOf(slayer, now);
+                ++s.kills[KindOf(victim)];
+                if (s.fight.on)
+                {
+                    ++s.fight.kills[KindOf(victim)];
+                    ++s.fight.foes[victim->GetName() ? victim->GetName() : "?"];
+                }
             }
     }
 
@@ -318,7 +387,10 @@ namespace Arpg
         if (!player || !On())
             return;
         std::lock_guard<std::mutex> guard(sLock);
-        ++SessionOf(player, WorldTimer::getMSTime()).flasks;
+        Session& s = SessionOf(player, WorldTimer::getMSTime());
+        ++s.flasks;
+        if (s.fight.on)
+            ++s.fight.flasks;
     }
 
     void OnStatsRoll(Player const* player)
@@ -326,7 +398,10 @@ namespace Arpg
         if (!player || !On())
             return;
         std::lock_guard<std::mutex> guard(sLock);
-        ++SessionOf(player, WorldTimer::getMSTime()).rolls;
+        Session& s = SessionOf(player, WorldTimer::getMSTime());
+        ++s.rolls;
+        if (s.fight.on)
+            ++s.fight.rolls;
     }
 
     void OnStatsPack(char const* name, uint32 size, uint32 level, float seconds, uint32 damage)
@@ -352,7 +427,25 @@ namespace Arpg
                 return;
             s.lastSample = now;
             ++s.zoneSec[ZoneName(player)];
-            if (player->IsInCombat() && player->IsAlive())
+            bool const fighting = player->IsInCombat() && player->IsAlive();
+            uint32 const healthPct = Pct(player->GetHealth(), player->GetMaxHealth());
+            uint32 const manaPct = Pct(player->GetPower(POWER_MANA), player->GetMaxPower(POWER_MANA));
+            if (fighting && !s.fight.on)
+            {
+                s.fight = Fight();
+                s.fight.on = true;
+                s.fight.startMs = now;
+                s.fight.startManaPct = s.fight.minManaPct = manaPct;
+                s.fight.minHealthPct = healthPct;
+            }
+            else if (!fighting && s.fight.on && player->IsAlive())
+                line = FightLine(player, s, now, false);
+            if (s.fight.on)
+            {
+                s.fight.minHealthPct = std::min(s.fight.minHealthPct, healthPct);
+                s.fight.minManaPct = std::min(s.fight.minManaPct, manaPct);
+            }
+            if (fighting)
             {
                 ++s.combatSec;
                 if (player->GetMaxPower(POWER_MANA) && player->GetPower(POWER_MANA) * 100 < player->GetMaxPower(POWER_MANA) * LOW_MANA_PCT)
