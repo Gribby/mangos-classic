@@ -3,11 +3,23 @@ rem Send the ARPG server's play statistics (arpg-stats\ in RUN_DIR, written by m
 rem src\game\Arpg\ArpgStats.h) to this repository's arpg-stats branch, where they are read to tune
 rem the game. update-arpg-server.bat runs this; running it by hand is safe too. It keeps its own
 rem clone of that branch in .arpg-stats (git ignores it), so your checkout is never touched.
+rem Run by hand (double-clicked), it waits for a key at the end so you can read what it did.
 setlocal
 cd /d "%~dp0"
-if not exist "%~dp0arpg-local.bat" goto :eof
+set "PAUSE_AT_END=1"
+if /i "%~1"=="fromupdate" set "PAUSE_AT_END="
+if not exist "%~dp0arpg-local.bat" (
+    echo No arpg-local.bat here, so the run folder is unknown. Run update-arpg-server.bat once to make it.
+    goto :done
+)
 call "%~dp0arpg-local.bat"
-if not exist "%RUN_DIR%\arpg-stats\*.jsonl" goto :eof
+echo Looking for play statistics in %RUN_DIR%\arpg-stats
+if not exist "%RUN_DIR%\arpg-stats\*.jsonl" (
+    echo None there. The server writes them into the folder it runs from, with Arpg.Stats = 1 in
+    echo mangosd.conf. If you start mangosd some other way than run-arpg-server.bat, look for an
+    echo arpg-stats folder next to that mangosd.exe.
+    goto :done
+)
 set "STATS=%~dp0.arpg-stats"
 if exist "%STATS%\.git" goto :have
 for /f "delims=" %%U in ('git remote get-url origin') do set "ORIGIN=%%U"
@@ -24,15 +36,18 @@ git -c user.name="ARPG stats" -c user.email="arpg-stats@users.noreply.github.com
 git push -q origin arpg-stats || goto :failpop
 popd
 echo Sent the play statistics to the arpg-stats branch.
-goto :eof
+goto :done
 
 :nothing
 popd
 echo No new play statistics to send.
-goto :eof
+goto :done
 
 :failpop
 popd
 :fail
-echo Could not send the play statistics; the update goes on.
+echo Could not send the play statistics; see above.
+
+:done
+if defined PAUSE_AT_END pause
 exit /b 0

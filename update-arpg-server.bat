@@ -49,7 +49,7 @@ if defined RUNNING (
 )
 
 rem The stopped server's play statistics go to the arpg-stats branch first (never stops the update).
-call "%~dp0send-arpg-stats.bat"
+call "%~dp0send-arpg-stats.bat" fromupdate
 
 if defined PULL (
     echo Pulling the latest code...
