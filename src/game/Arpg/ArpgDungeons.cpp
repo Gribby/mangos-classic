@@ -716,7 +716,7 @@ namespace Arpg
         // The cap moves with the level gap as the hit does (Arpg/ArpgDamage.h): out-levelling a
         // boss makes its blows smaller, whatever share of the player's health they were capped at.
         float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature) *
-                          LevelGapMod(attacker, victim);
+                          LevelGapMod(attacker, victim) * std::sqrt(DifficultyDamageMod(attacker));
         return std::max<uint32>(1, uint32(float(victim->GetMaxHealth()) * pct / 100.0f));
     }
 
@@ -783,6 +783,20 @@ namespace Arpg
                 PlayerOwned(static_cast<Creature const*>(attacker)))
             return 1.0f;
         return TIER_DAMAGE[TierOf(attacker->GetMap())] * EnrageMod(attacker);
+    }
+
+    float DifficultyDamageMod(Unit const* attacker)
+    {
+        if (!attacker || attacker->GetTypeId() != TYPEID_UNIT || PlayerOwned(static_cast<Creature const*>(attacker)) ||
+                !sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+            return 1.0f;
+        float mod = std::max(0.1f, sWorld.getConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DAMAGE)) *
+                    (1.0f + std::max(0.0f, sWorld.getConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DAMAGE_PER_LEVEL)) *
+                     float(std::min<uint32>(attacker->GetLevel(), 60)));
+        Map const* map = attacker->GetMap();
+        if (map && map->IsDungeon() && !map->IsRaid())
+            mod *= std::max(0.1f, sWorld.getConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DUNGEON_DAMAGE));
+        return mod;
     }
 
     float TierXpMod(Unit const* victim)

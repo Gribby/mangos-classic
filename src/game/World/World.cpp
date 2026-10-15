@@ -859,6 +859,9 @@ void World::LoadConfigSettings(bool reload)
     setConfig(CONFIG_FLOAT_ARPG_ELITE_SOLO_HEALTH, "Arpg.Dungeons.EliteSoloHealth", 0.5f);
     setConfig(CONFIG_FLOAT_ARPG_POWER_PER_LEVEL, "Arpg.Power.PerLevel", 0.1f);
     setConfig(CONFIG_FLOAT_ARPG_POWER_HEALTH_GROWTH, "Arpg.Power.HealthGrowth", 0.5f);
+    setConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DAMAGE, "Arpg.Difficulty.Damage", 1.3f);
+    setConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DAMAGE_PER_LEVEL, "Arpg.Difficulty.DamagePerLevel", 0.008f);
+    setConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DUNGEON_DAMAGE, "Arpg.Difficulty.DungeonDamage", 1.25f);
 
     sLog.outString();
 }

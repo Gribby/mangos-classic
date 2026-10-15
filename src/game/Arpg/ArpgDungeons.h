@@ -39,6 +39,10 @@
  * affixes (one more from Brutal, two from Torment II), XP (x1.15 to x2), and the Warden's and
  * the Cache's drops: item levels, purple chances, and an extra blue per two tiers.
  *
+ * Difficulty: every creature hits Arpg.Difficulty.Damage times harder, 1 + DamagePerLevel more
+ * per level of the creature, and DungeonDamage more in a dungeon; the caps rise by the square
+ * root of that. The knobs are tuned from the play statistics.
+ *
  * Enrage timers keep a damage check: a dungeon boss still fighting after 4 minutes (a raid boss
  * after 6) enrages, +50% damage and cap, and a stack more every 30 seconds, up to ten. The
  * players there are told; leaving combat ends it.
@@ -77,6 +81,9 @@ namespace Arpg
 
     // The multipliers a dungeon's tier puts on its creatures' damage, and on their kills' XP.
     float TierDamageMod(Unit const* attacker);
+    // The difficulty knobs on a creature's damage (Arpg.Difficulty.*): the base, its level's ramp,
+    // and a dungeon's extra; 1 for anything a player owns.
+    float DifficultyDamageMod(Unit const* attacker);
     float TierXpMod(Unit const* victim);
 
     // A logged-out player's tiers.

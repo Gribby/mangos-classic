@@ -811,7 +811,7 @@ namespace Arpg
     {
         if (!attacker || attacker->GetTypeId() != TYPEID_UNIT)
             return 1.0f;
-        float const tier = TierDamageMod(attacker);
+        float const tier = TierDamageMod(attacker) * DifficultyDamageMod(attacker);
         if (IsPackFollower(attacker))
             return sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_FOLLOWER_POWER) * tier;
         Champion const c = ChampionOf(attacker);
