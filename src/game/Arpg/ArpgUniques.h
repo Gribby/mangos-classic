@@ -114,6 +114,22 @@ namespace Arpg
     // the extra projectiles its caster's uniques add. Added projectiles add none.
     void OnLineLaunch(Spell* spell, Unit* struck);
 
+    // Whether `spell` flies as a piercing bolt (Spell::IsArpgPierceBolt): its caster's worn,
+    // learned or skill pierce fits it. `cap`: the most enemies it strikes, the first included;
+    // `pct`: the damage share of each after the first.
+    bool BoltPierce(Spell* spell, uint32& cap, uint32& pct);
+
+    // The fair enemies a bolt from (`x`, `y`, `z`) along `bearing` crosses between `fromDist` and
+    // `toDist` yards out (the skillshot's width plus each one's reach), in the bolt's sight,
+    // nearest first. `caster` is whose bolt it is.
+    std::vector<Unit*> UnitsCrossed(Unit* caster, float x, float y, float z, float bearing, float fromDist, float toDist);
+
+    // The hit visual of `spellInfo` on `unit`, for the ARPG clients near it (SMSG_ARPG_IMPACT).
+    void ShowSpellImpact(Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask);
+
+    // A piercing bolt steps along its line this often, in ms.
+    constexpr uint32 BOLT_STEP = 50;
+
     // `spell` hit `victim` for `dealt` (after mitigation, absorbs included): apply the caster's
     // on-hit kits (fragments, chain, burst, arc, pierce, shockwave, step). Extra projectiles and
     // echoes set them off too; the kits' own added hits set off none.

@@ -486,6 +486,8 @@ class Spell
         // handlers
         void handle_immediate();
         uint64 handle_delayed(uint64 t_offset);
+        // ARPG: a piercing bolt's flight, step by step: strikes what it reached since the last.
+        uint64 HandleArpgBolt(uint64 t_offset);
         // handler helpers
         void _handle_immediate_phase();
         void _handle_finish_phase();
@@ -583,6 +585,10 @@ class Spell
         void SetArpgSecondary(uint32 pct, ObjectGuid exclude) { m_arpgSecondaryPct = pct; m_arpgExclude = exclude; }
         bool IsArpgSecondary() const { return m_arpgSecondaryPct != 0; }
         bool IsArpgLine() const { return m_arpgLine; }
+        // ARPG: a piercing skillshot flying as a bolt: it strikes whatever it reaches along its
+        // line as it flies, not a target picked at launch (Arpg::BoltPierce).
+        bool IsArpgPierceBolt() const { return m_arpgPierceBolt; }
+        uint32 GetArpgBoltHits() const { return m_arpgBoltHits; }
         bool HasArpgAim() const { return m_arpgAimSet; }
         SpellSchoolMask GetSchoolMask() const { return m_spellSchoolMask; }
 
@@ -964,6 +970,17 @@ class Spell
         bool m_arpgAimSet;
         uint32 m_arpgSecondaryPct;
         ObjectGuid m_arpgExclude;
+        // ARPG: a piercing bolt's flight: where it left from, how far it flies and has flown, how
+        // many it has struck of the most it may, and the share each after the first takes.
+        bool m_arpgPierceBolt;
+        float m_arpgBoltFrom[3];
+        float m_arpgBoltReach;
+        float m_arpgBoltFlown;
+        uint32 m_arpgBoltHits;
+        uint32 m_arpgBoltCap;
+        uint32 m_arpgBoltPct;
+        uint32 m_arpgBoltMap;
+        uint32 m_arpgBoltInstance;
 
         uint32 m_affectedTargetCount;
         float m_jumpRadius;

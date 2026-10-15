@@ -442,6 +442,15 @@ Spell::Spell(WorldObject* caster, SpellEntry const* info, uint32 triggeredFlags,
     m_arpgAimDist = 0.0f;
     m_arpgAimSet = false;
     m_arpgSecondaryPct = 0;
+    m_arpgPierceBolt = false;
+    m_arpgBoltFrom[0] = m_arpgBoltFrom[1] = m_arpgBoltFrom[2] = 0.0f;
+    m_arpgBoltReach = 0.0f;
+    m_arpgBoltFlown = 0.0f;
+    m_arpgBoltHits = 0;
+    m_arpgBoltCap = 0;
+    m_arpgBoltPct = 100;
+    m_arpgBoltMap = 0;
+    m_arpgBoltInstance = 0;
     m_TriggerSpells.clear();
     m_preCastSpells.clear();
     m_IsTriggeredSpell = triggeredFlags & TRIGGERED_OLD_TRIGGERED;
@@ -3293,6 +3302,82 @@ SpellCastResult Spell::cast(bool skipCheck)
     // stepped in front takes it, and a target that died meanwhile no longer stops it. With the
     // line clear the spell still flies: it is spent (cooldown, power, reagents) and its missile
     // flies on to a bare point past the aim, as a Diablo skillshot that misses does.
+    // ARPG: a piercing skillshot picks no target at launch: it flies its whole range along the
+    // line, to a wall at the most, as a bolt, and strikes whatever it reaches as it goes (an enemy
+    // that stepped into its path included), each after the first for the pierce's share
+    // (HandleArpgBolt).
+    uint32 pierceCap = 0, piercePct = 0;
+    if (m_arpgLine && IsDelayedSpell() && Arpg::BoltPierce(this, pierceCap, piercePct))
+    {
+        if (!skipCheck && !m_ignoreCosts)
+        {
+            SpellCastResult const power = CheckPower(false);
+            if (power != SPELL_CAST_OK)
+            {
+                StopCast(power);
+                return power;
+            }
+        }
+        float const reach = GetMinMaxRange(false).second;
+        float const x0 = m_trueCaster->GetPositionX();
+        float const y0 = m_trueCaster->GetPositionY();
+        float const z0 = m_trueCaster->GetPositionZ() + 1.5f;
+        float x = x0 + std::cos(m_arpgAim) * reach;
+        float y = y0 + std::sin(m_arpgAim) * reach;
+        float z = z0;
+        m_trueCaster->GetMap()->GetHitPosition(x0, y0, z0, x, y, z, -0.5f);
+        m_arpgPierceBolt = true;
+        m_arpgBoltFrom[0] = x0;
+        m_arpgBoltFrom[1] = y0;
+        m_arpgBoltFrom[2] = z0;
+        m_arpgBoltReach = std::sqrt((x - x0) * (x - x0) + (y - y0) * (y - y0));
+        // Short of the caster, so an enemy pressed up against it is still reached.
+        m_arpgBoltFlown = -10.0f;
+        m_arpgBoltHits = 0;
+        m_arpgBoltCap = pierceCap;
+        m_arpgBoltPct = piercePct;
+        m_arpgBoltMap = m_trueCaster->GetMapId();
+        m_arpgBoltInstance = m_trueCaster->GetInstanceId();
+        m_targets = SpellCastTargets();
+        m_targets.setDestination(x, y, z);
+        // A unique's added projectiles leave with this one (Arpg/ArpgUniques.h).
+        Arpg::OnLineLaunch(this, nullptr);
+
+        // The miss path's bookkeeping: spent, and shown flying at its far point.
+        spellModController.SetSuccess();
+        if (!m_arpgSecondaryPct)
+            SendSpellCooldown();
+        if (m_notifyAI && m_caster && m_caster->AI())
+            m_caster->AI()->OnSpellCooldownAdded(m_spellInfo);
+        TakePower();
+        TakeReagents();
+        TakeAmmo();
+        SendCastResult(SPELL_CAST_OK);
+        SendSpellGo();
+        Arpg::OnProcCast(this);
+        Arpg::OnStatsCast(this);
+        InitializeDamageMultipliers();
+        OnCast();
+        if (!m_spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION))
+            m_caster->RemoveAurasOnCast(AURA_INTERRUPT_FLAG_ACTION_LATE, m_spellInfo);
+        {
+            // The stock cast-end procs, as a delayed spell's.
+            uint32 procAttacker;
+            uint32 procVictim;
+            PrepareMasksForProcSystem(EFFECT_MASK_ALL, procAttacker, procVictim, m_trueCaster, nullptr);
+            Unit::ProcDamageAndSpell(ProcSystemArguments(m_caster, m_caster, procAttacker, 0, PROC_EX_CAST_END, 0, 0, m_attackType, m_spellInfo));
+        }
+
+        // In flight: the spell's event steps it (handle_delayed, HandleArpgBolt).
+        m_spellState = SPELL_STATE_TRAVELING;
+        SetDelayStart(0);
+        m_delayMoment = Arpg::BOLT_STEP;
+        SetSpellStartTravelling(m_caster->GetMap()->GetCurrentMSTime());
+        m_trueCaster->DecreaseCastCounter();
+        SetExecutedCurrently(false);
+        return SPELL_CAST_OK;
+    }
+
     if (m_arpgLine)
     {
         std::pair<float, float> const range = GetMinMaxRange(false);
@@ -3557,6 +3642,9 @@ uint64 Spell::handle_delayed(uint64 t_offset)
 {
     SpellModRAII spellModController(this, m_trueCaster->GetSpellModOwner(), true);
 
+    if (m_arpgPierceBolt)
+        return HandleArpgBolt(t_offset);
+
     uint64 next_time = 0;
 
     if (m_destTargetInfo.effectMaskProcessed != m_destTargetInfo.effectMask)
@@ -3614,6 +3702,76 @@ uint64 Spell::handle_delayed(uint64 t_offset)
     }
     // spell is unfinished, return next execution time
     return next_time;
+}
+
+uint64 Spell::HandleArpgBolt(uint64 t_offset)
+{
+    float const flown = std::min(m_arpgBoltReach, GetSpellSpeed() * float(t_offset) / 1000.0f);
+    // The effects that land on a unit; none, and the bolt only flies.
+    uint8 unitMask = 0;
+    auto const& data = SpellTargetMgr::GetSpellTargetingData(m_spellInfo->Id);
+    for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
+        if (m_spellInfo->Effect[i] && data.implicitType[i] == TARGET_TYPE_UNIT &&
+                m_spellInfo->EffectImplicitTargetA[i] == TARGET_UNIT_ENEMY)
+            unitMask |= (1 << i);
+    Unit* bolter = dynamic_cast<Unit*>(m_trueCaster);
+    // The caster left the bolt's map, or was moved far from it: the bolt is gone.
+    float const awayX = m_trueCaster->GetPositionX() - m_arpgBoltFrom[0];
+    float const awayY = m_trueCaster->GetPositionY() - m_arpgBoltFrom[1];
+    bool const lost = !m_trueCaster->IsInWorld() || m_trueCaster->GetMapId() != m_arpgBoltMap ||
+        m_trueCaster->GetInstanceId() != m_arpgBoltInstance ||
+        awayX * awayX + awayY * awayY > (m_arpgBoltReach + 40.0f) * (m_arpgBoltReach + 40.0f);
+    if (bolter && unitMask && !lost && m_arpgBoltHits < m_arpgBoltCap)
+    {
+        for (Unit* unit : Arpg::UnitsCrossed(bolter, m_arpgBoltFrom[0], m_arpgBoltFrom[1], m_arpgBoltFrom[2],
+                                             m_arpgAim, m_arpgBoltFlown, flown))
+        {
+            if (m_arpgBoltHits >= m_arpgBoltCap)
+                break;
+            // Killed earlier this step (a burst off the one before).
+            if (!unit->IsInWorld() || !unit->IsAlive())
+                continue;
+            ObjectGuid const guid = unit->GetObjectGuid();
+            if (std::any_of(m_UniqueTargetInfo.begin(), m_UniqueTargetInfo.end(),
+                            [guid](TargetInfo const& t) { return t.targetGUID == guid; }))
+                continue;
+            // Every enemy after the first takes the pierce's share.
+            // Its damage only: a slow or a stun keeps its strength.
+            if (m_arpgBoltHits == 1)
+                for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
+                    if (m_spellInfo->Effect[i] == SPELL_EFFECT_SCHOOL_DAMAGE ||
+                            (m_spellInfo->Effect[i] == SPELL_EFFECT_APPLY_AURA &&
+                             m_spellInfo->EffectApplyAuraName[i] == SPELL_AURA_PERIODIC_DAMAGE))
+                        m_damageMultipliers[i] *= float(m_arpgBoltPct) / 100.0f;
+            AddUnitTarget(unit, unitMask);
+            auto hit = std::find_if(m_UniqueTargetInfo.begin(), m_UniqueTargetInfo.end(),
+                                    [guid](TargetInfo const& t) { return t.targetGUID == guid; });
+            if (hit == m_UniqueTargetInfo.end())
+                continue;
+            ++m_arpgBoltHits;
+            // Reached now, wherever it stands: worked out as a launch would, and landed at once.
+            hit->timeDelay = t_offset;
+            hit->arpgBolt = false;
+            // A reflect's procs (its charge) go now; the reflected copy comes straight back.
+            if (hit->procReflect)
+            {
+                hit->procReflect = false;
+                ProcReflectProcs(*hit);
+            }
+            HandleImmediateEffectExecution(&*hit);
+            if (hit->missCondition == SPELL_MISS_NONE)
+                Arpg::ShowSpellImpact(unit, m_spellInfo, m_spellSchoolMask);
+            DoAllEffectOnTarget(&*hit);
+        }
+    }
+    m_arpgBoltFlown = flown;
+    if (flown >= m_arpgBoltReach || lost || m_arpgBoltHits >= m_arpgBoltCap)
+    {
+        _handle_finish_phase();
+        finish(true);
+        return 0;
+    }
+    return t_offset + Arpg::BOLT_STEP;
 }
 
 void Spell::_handle_immediate_phase()

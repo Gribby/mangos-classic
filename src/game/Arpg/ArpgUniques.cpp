@@ -687,9 +687,74 @@ namespace Arpg
         }
     }
 
+    bool BoltPierce(Spell* spell, uint32& cap, uint32& pct)
+    {
+        if (!spell)
+            return false;
+        Unit* caster = spell->GetCaster();
+        if (!Active(caster))
+            return false;
+        Player* player = static_cast<Player*>(caster);
+        // Only a bolt whose every effect strikes the enemy: one with a self-buff, a targetless
+        // effect or an item behind it keeps the stock path.
+        SpellEntry const* info = spell->m_spellInfo;
+        if (spell->GetCastItem())
+            return false;
+        for (uint8 i = 0; i < MAX_EFFECT_INDEX; ++i)
+            if (info->Effect[i] && info->EffectImplicitTargetA[i] != TARGET_UNIT_ENEMY)
+                return false;
+        UniqueMechanic const* row = WornMechanicFrom(player, KIT_PIERCE, info, LearnedModifiers(player));
+        if (!row)
+            return false;
+        cap = 1 + (row->n ? uint32(row->n) : uint32(BURST_MAX));
+        pct = row->pct;
+        return true;
+    }
+
+    std::vector<Unit*> UnitsCrossed(Unit* caster, float x, float y, float z, float bearing, float fromDist, float toDist)
+    {
+        float const dirX = std::cos(bearing);
+        float const dirY = std::sin(bearing);
+        // Around the caster, out past the bolt's far end however far the caster has moved since.
+        float const fromCaster = std::sqrt((caster->GetPositionX() - x) * (caster->GetPositionX() - x) +
+                                           (caster->GetPositionY() - y) * (caster->GetPositionY() - y));
+        std::vector<std::pair<float, Unit*>> found;
+        for (Unit* unit : Arpg::EnemiesNear(caster, fromCaster + toDist + 10.0f))
+        {
+            if (!unit->IsAlive() || !Arpg::MayCatchUnit(caster, unit, nullptr))
+                continue;
+            float const reach = unit->GetCombatReach();
+            float const offX = unit->GetPositionX() - x;
+            float const offY = unit->GetPositionY() - y;
+            float const along = offX * dirX + offY * dirY;
+            float const across = std::fabs(offX * dirY - offY * dirX);
+            // Reached by now: the bolt's head is past the unit's near edge, and was not already past
+            // its far edge last step (one running at the caster is caught, not tunnelled through).
+            if (along - reach > toDist || along + reach <= fromDist || along + reach <= 0.0f ||
+                    across > Arpg::LINE_HALF_WIDTH + reach)
+                continue;
+            if (!unit->IsWithinLOS(x, y, z))
+                continue;
+            found.emplace_back(along, unit);
+        }
+        std::sort(found.begin(), found.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+        std::vector<Unit*> units;
+        for (auto const& [along, unit] : found)
+            units.push_back(unit);
+        return units;
+    }
+
+    void ShowSpellImpact(Unit* unit, SpellEntry const* spellInfo, SpellSchoolMask mask)
+    {
+        ShowImpact(unit, spellInfo, mask);
+    }
+
     void OnSpellDamage(Spell* spell, Unit* caster, Unit* victim, uint32 dealt)
     {
         if (!spell || !victim || !dealt || !Active(caster))
+            return;
+        // A piercing bolt sets off its on-hit kits with its first hit only, as one cast.
+        if (spell->IsArpgPierceBolt() && spell->GetArpgBoltHits() > 1)
             return;
         // The skill trees' on-hit nodes (Seals, Judgement), before the kits': the main hit only.
         // An extra projectile or an echo (a secondary) still sets off the on-hit kits below, which
@@ -806,8 +871,12 @@ namespace Arpg
                            spellInfo->SpellName[0], uint32(done), Plural(done, "enemy", "enemies"), share);
         }
 
-        // Pierce (B): on along the line past the target, out to the spell's range.
-        if (UniqueMechanic const* row = WornMechanicFrom(player, KIT_PIERCE, spellInfo, learned))
+        // Pierce (B): on along the line past the target, out to the spell's range. A bolt that
+        // flies piercing (Spell::IsArpgPierceBolt) strikes along its line itself; this carries
+        // on a hit that was not one (a pierce readied only as the cast went off).
+        UniqueMechanic const* pierce = spell->IsArpgPierceBolt() ? nullptr
+            : WornMechanicFrom(player, KIT_PIERCE, spellInfo, learned);
+        if (UniqueMechanic const* row = pierce)
         {
             float const bearing = spell->IsArpgLine() ? spell->GetArpgAim() : caster->GetAngle(victim);
             float maxRange = GetSpellMaxRange(sSpellRangeStore.LookupEntry(spellInfo->rangeIndex));
