@@ -791,6 +791,9 @@ namespace
             more(CRUSADE_PER_KILL * int32(CrusadeStacks(R(player), now)), "Crusade");
         // The mage's web.
         uint32 const fire = TagBit(TAG_FIRE), coldOrArcane = TagBit(TAG_FROST) | TagBit(TAG_ARCANE);
+        // Thermal Shock, every mage's: fire on a chilled enemy (Frostbolt sets it up).
+        if (player->getClass() == CLASS_MAGE && (tags & fire) && Chilled(victim))
+            more(THERMAL_SHOCK_PCT, "Thermal Shock, chilled");
         if (t.Has(KEY_PYROMANCER))
         {
             if (tags & fire)

@@ -577,10 +577,14 @@ namespace
         return RARITY_PURPLE;
     }
 
+    // Added damage's size against the skills it rides on: vanilla's stat growth leaves a bare
+    // affix at about 2% of a skill's hit; this puts it near a fifth, worth an affix slot.
+    constexpr float ADDED_DAMAGE_SIZE = 8.0f;
+
     // Added damage's range at the ARPG's size for an item of `itemLevel` (Arpg/ArpgDamage.h).
     void AddedRange(int32 average, uint32 itemLevel, int32& low, int32& high)
     {
-        float const size = PowerScaleAt(std::min<uint32>(itemLevel, 60));
+        float const size = PowerScaleAt(std::min<uint32>(itemLevel, 60)) * ADDED_DAMAGE_SIZE;
         low = std::max<int32>(1, int32(average * 0.6f * size + 0.5f));
         high = std::max<int32>(low, int32(average * 1.4f * size + 0.5f));
     }

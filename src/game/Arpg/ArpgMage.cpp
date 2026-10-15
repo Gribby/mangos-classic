@@ -107,6 +107,10 @@ namespace Arpg
         if (t.Has(KEY_DEEP_FREEZE) && Named(spellInfo, "Cone of Cold") && victim->IsAlive() && !Frozen(victim))
             Chill(player, victim, true);
 
+        // Frostbolt, the mage's filler, always chills: the set-up for Thermal Shock's fire.
+        if (Named(spellInfo, "Frostbolt") && victim->IsAlive() && !Chilled(victim))
+            Chill(player, victim, false);
+
         if (t.Has(KEY_ARCANE_SIPHON) && (Named(spellInfo, "Arcane Missiles") || Named(spellInfo, "Arcane Missile")))
             ProcMana(player, "Arcane Siphon", std::max<uint32>(1, player->GetMaxPower(POWER_MANA) * SIPHON_PERMILLE / 1000));
 

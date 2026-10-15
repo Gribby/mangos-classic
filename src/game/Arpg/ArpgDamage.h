@@ -112,6 +112,9 @@ namespace Arpg
     // Every player update: the ailments `player` inflicted tick, burst and wear off.
     void UpdateAilments(Player* player);
 
+    // Thermal Shock: a mage's fire deals this much more to a chilled enemy.
+    constexpr int32 THERMAL_SHOCK_PCT = 30;
+
     // Whether `unit` is frozen (a freeze, or any root, as Frost Nova's) or chilled.
     bool Frozen(Unit const* unit);
     bool Chilled(Unit const* unit);
