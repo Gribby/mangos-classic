@@ -16,11 +16,9 @@
  * Names, not numbers: the NPCs, creatures and vanilla quests are found by name in the world
  * database, so a name it lacks drops that objective (logged) and the act still loads.
  *
- * The road: each act quest runs from its giver to where it sends the character (its leader's
- * spawn, or the middle of its first creature's spawns nearest the giver, or the next giver). The
- * map's own pathfinding draws the walkable way between them, and while the quest is under way the
- * corridor fills ahead of the character, just out of sight, with packs of the creatures that live
- * along it: the way forward is always a fight. They leave when the character is far past them.
+ * Packs ahead: out in the open world, as an ARPG character travels, packs of the creatures that
+ * live where it is heading appear ahead of it, just out of sight, never in or near a town; they
+ * leave when it is far past them. (It replaced a per-quest road, which did not read as one.)
  *
  * The chapter's named leaders are champions, its last one (Hogger, Zalazane) a rare with a
  * guaranteed blue: on the existing champion, telegraph and loot code.
@@ -62,10 +60,10 @@ namespace Arpg
     // An act's last leader fell: its guaranteed drop. True when `victim` was one.
     bool OnActBossLoot(Creature* victim);
 
-    // Every update of an ARPG character: its act quest's corridor fills ahead of it.
+    // Every update of an ARPG character: packs are placed ahead of it in the open world.
     void UpdateActs(Player* player);
 
-    // A logged-out character's corridor packs go.
+    // A logged-out character's packs ahead go.
     void ForgetActs(Player* player);
 
     // A chat line: true when it was a dev note (written to the statistics, not said).

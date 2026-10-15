@@ -254,8 +254,9 @@ namespace
 
     // Warden loot: two blues and a chance at a purple; a Cache's per player: a blue, a green and
     // a chance at a purple.
-    constexpr uint32 WARDEN_EPIC_PCT = 30, CACHE_EPIC_PCT = 25;
-    constexpr uint32 WARDEN_UNIQUE_PCT = 35, CACHE_UNIQUE_PCT = 50;
+    // With the rolled drops, about one purple and one unique every other run (Jeff).
+    constexpr uint32 WARDEN_EPIC_PCT = 12, CACHE_EPIC_PCT = 15;
+    constexpr uint32 WARDEN_UNIQUE_PCT = 10, CACHE_UNIQUE_PCT = 12;
     constexpr uint32 WARDEN_ITEM_LEVELS = 3, CACHE_ITEM_LEVELS = 5;
 
     std::mutex sWardenLock;

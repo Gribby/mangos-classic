@@ -1848,6 +1848,12 @@ Dummy.Debug2 = 0
 #        towns and players. 1 doubles the packs; 0 leaves vanilla's spawns alone.
 #        Default: 1
 #
+#    Arpg.Packs.Dungeon
+#        The chance (0-1) a dungeon's trash creature leads an escort of one or two lesser copies of
+#        itself (never a boss, a scripted creature or a formation's member). 0 leaves dungeons as
+#        vanilla spawns them.
+#        Default: 0.6
+#
 #    Arpg.Dungeons
 #        With Arpg.Enable on, instances and open-world elites are scaled for one to five ARPG
 #        players: health by the players present, each hit on an ARPG player capped at a share of
@@ -1905,6 +1911,7 @@ Arpg.Packs.FollowerPower = 0.55
 Arpg.Packs.FollowerXp = 0.3
 Arpg.Packs.FollowerLoot = 0.5
 Arpg.Packs.Extra = 1
+Arpg.Packs.Dungeon = 0.6
 Arpg.Stats = 1
 Arpg.Dungeons = 1
 Arpg.Dungeons.SoloHealth = 0.35

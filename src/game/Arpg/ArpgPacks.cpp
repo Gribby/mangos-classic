@@ -164,13 +164,26 @@ namespace
     };
 
     std::mutex sPacksLock;
-    std::unordered_map<ObjectGuid, Pack> sPacks;            // by leader
-    std::unordered_map<ObjectGuid, ObjectGuid> sLeaderOf;   // follower and leader alike -> leader
-    std::unordered_set<ObjectGuid> sFollowers;
-    std::unordered_set<ObjectGuid> sForming;                // leaders with a formation pending
-    std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> sOutriders; // by the spawn that placed them
-    std::unordered_map<ObjectGuid, Champion> sChampions;
+    // The records of one map copy (a continent, or one instance of a dungeon): guids repeat between
+    // copies (a dungeon's spawns keep their database guids in every copy, and summon counters start
+    // alike), so each copy keeps its own.
+    struct MapRecords
+    {
+        std::unordered_map<ObjectGuid, Pack> packs;            // by leader
+        std::unordered_map<ObjectGuid, ObjectGuid> leaderOf;   // follower and leader alike -> leader
+        std::unordered_set<ObjectGuid> followers;
+        std::unordered_set<ObjectGuid> forming;                // leaders with a formation pending
+        std::unordered_map<ObjectGuid, std::vector<ObjectGuid>> outriders; // by the spawn that placed them
+        std::unordered_map<ObjectGuid, Champion> champions;
+    };
+    std::unordered_map<uint64, MapRecords> sRecords;            // by map id << 32 | instance id
     std::unordered_map<ObjectGuid, std::unordered_set<ObjectGuid>> sChampionsSent; // by player
+
+    // `object`'s map copy's records; sPacksLock held.
+    MapRecords& RecordsOf(WorldObject const* object)
+    {
+        return sRecords[(uint64(object->GetMapId()) << 32) | object->GetInstanceId()];
+    }
 
     // A copy of `unit`'s champion record; tier TIER_NONE for an ordinary mob.
     Champion ChampionOf(Unit const* unit)
@@ -178,8 +191,9 @@ namespace
         if (!unit || unit->GetTypeId() != TYPEID_UNIT)
             return Champion();
         std::lock_guard<std::mutex> guard(sPacksLock);
-        auto it = sChampions.find(unit->GetObjectGuid());
-        return it == sChampions.end() ? Champion() : it->second;
+        MapRecords& rec = RecordsOf(unit);
+        auto it = rec.champions.find(unit->GetObjectGuid());
+        return it == rec.champions.end() ? Champion() : it->second;
     }
 
     std::vector<Affix> RollAffixes(uint32 count)
@@ -224,7 +238,7 @@ namespace
         bool const fast = c.Has(AFFIX_EXTRA_FAST);
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            sChampions[creature->GetObjectGuid()] = std::move(c);
+            RecordsOf(creature).champions[creature->GetObjectGuid()] = std::move(c);
         }
         if (fast)
         {
@@ -256,7 +270,7 @@ namespace
                 victim->GetNearPoint(champion, x, y, z, champion->GetObjectBoundingRadius(), 2.0f, victim->GetAngle(champion));
                 champion->NearTeleportTo(x, y, z, champion->GetAngle(victim));
                 std::lock_guard<std::mutex> guard(sPacksLock);
-                sChampions[champion->GetObjectGuid()].lastTeleport = now;
+                RecordsOf(champion).champions[champion->GetObjectGuid()].lastTeleport = now;
             }
             if (c.Has(AFFIX_HEALER) && WorldTimer::getMSTimeDiff(c.lastHeal, now) >= HEAL_EVERY)
             {
@@ -264,13 +278,14 @@ namespace
                 std::vector<ObjectGuid> members;
                 {
                     std::lock_guard<std::mutex> guard(sPacksLock);
-                    sChampions[champion->GetObjectGuid()].lastHeal = now;
-                    auto it = sLeaderOf.find(champion->GetObjectGuid());
-                    if (it != sLeaderOf.end())
+                    MapRecords& rec = RecordsOf(champion);
+                    rec.champions[champion->GetObjectGuid()].lastHeal = now;
+                    auto it = rec.leaderOf.find(champion->GetObjectGuid());
+                    if (it != rec.leaderOf.end())
                     {
                         leader = it->second;
-                        auto pack = sPacks.find(leader);
-                        if (pack != sPacks.end())
+                        auto pack = rec.packs.find(leader);
+                        if (pack != rec.packs.end())
                         {
                             members.push_back(leader);
                             members.insert(members.end(), pack->second.followers.begin(), pack->second.followers.end());
@@ -319,7 +334,7 @@ namespace
             {
                 {
                     std::lock_guard<std::mutex> guard(sPacksLock);
-                    sChampions[champion->GetObjectGuid()].novaDone = true;
+                    RecordsOf(champion).champions[champion->GetObjectGuid()].novaDone = true;
                 }
                 // The nova is shown on the ground first, then cast where it was shown: the
                 // champion holds still (a scripted one is left to its script) and a move, a stun
@@ -449,19 +464,23 @@ namespace
         std::vector<ObjectGuid> followers;
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            auto it = sPacks.find(leader->GetObjectGuid());
-            if (it == sPacks.end())
+            MapRecords& rec = RecordsOf(leader);
+            auto it = rec.packs.find(leader->GetObjectGuid());
+            if (it == rec.packs.end())
                 return;
             followers = it->second.followers;
-            sPacks.erase(it);
-            sLeaderOf.erase(leader->GetObjectGuid());
+            rec.packs.erase(it);
+            rec.leaderOf.erase(leader->GetObjectGuid());
             for (ObjectGuid const& guid : followers)
             {
-                sLeaderOf.erase(guid);
-                sFollowers.erase(guid);
-                sChampions.erase(guid);
+                rec.leaderOf.erase(guid);
+                rec.followers.erase(guid);
+                rec.champions.erase(guid);
             }
         }
+        // A dungeon's followers stay (WatchFollower).
+        if (leader->GetMap()->IsDungeon())
+            return;
         for (ObjectGuid const& guid : followers)
             if (Creature* follower = leader->GetMap()->GetCreature(guid))
                 if (!follower->IsInCombat())
@@ -483,14 +502,19 @@ namespace
             bool kept;
             {
                 std::lock_guard<std::mutex> guard(sPacksLock);
-                auto it = sLeaderOf.find(self->GetObjectGuid());
-                kept = it != sLeaderOf.end() && it->second == leader;
+                MapRecords& rec = RecordsOf(self);
+                auto it = rec.leaderOf.find(self->GetObjectGuid());
+                kept = it != rec.leaderOf.end() && it->second == leader;
             }
             if (kept)
             {
                 Creature const* head = self->GetMap()->GetCreature(leader);
                 kept = head && head->IsAlive();
             }
+            // A dungeon's escort stays when its leader falls: an instance script may count it, and
+            // one despawned alive would never be counted dead.
+            if (!kept && self->GetMap()->IsDungeon())
+                return;
             if (!kept && !self->IsInCombat())
             {
                 self->ForcedDespawn();
@@ -606,13 +630,14 @@ namespace
         if (pack.followers.empty())
             return;
         std::lock_guard<std::mutex> guard(sPacksLock);
+        MapRecords& rec = RecordsOf(leader);
         ObjectGuid const leaderGuid = leader->GetObjectGuid();
-        sLeaderOf[leaderGuid] = leaderGuid;
+        rec.leaderOf[leaderGuid] = leaderGuid;
         for (ObjectGuid const& guid : pack.followers)
-            sLeaderOf[guid] = leaderGuid;
+            rec.leaderOf[guid] = leaderGuid;
         for (ObjectGuid const& guid : lesser)
-            sFollowers.insert(guid);
-        sPacks[leaderGuid] = std::move(pack);
+            rec.followers.insert(guid);
+        rec.packs[leaderGuid] = std::move(pack);
     }
 
     // Outriders: vanilla spreads its spawns for slow fights, and an ARPG clears them several times
@@ -657,11 +682,13 @@ namespace
         return true;
     }
 
-    bool IsOutriderOf(ObjectGuid source, ObjectGuid outrider)
+    bool IsOutriderOf(Creature const* outrider, ObjectGuid source)
     {
         std::lock_guard<std::mutex> guard(sPacksLock);
-        auto it = sOutriders.find(source);
-        return it != sOutriders.end() && std::find(it->second.begin(), it->second.end(), outrider) != it->second.end();
+        MapRecords& rec = RecordsOf(outrider);
+        auto it = rec.outriders.find(source);
+        return it != rec.outriders.end() &&
+               std::find(it->second.begin(), it->second.end(), outrider->GetObjectGuid()) != it->second.end();
     }
 
     // Every OUTRIDER_WATCH_MS: an outrider whose spawn has gone (its grid unloaded) or has placed
@@ -673,7 +700,7 @@ namespace
             Creature* self = static_cast<Creature*>(&unit);
             if (!self->IsInWorld() || !self->IsAlive())
                 return;
-            bool const kept = self->GetMap()->GetCreature(source) && IsOutriderOf(source, self->GetObjectGuid());
+            bool const kept = self->GetMap()->GetCreature(source) && IsOutriderOf(self, source);
             if (!kept && !self->IsInCombat())
             {
                 Disband(self);
@@ -691,11 +718,12 @@ namespace
         std::vector<ObjectGuid> outriders;
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            auto it = sOutriders.find(source->GetObjectGuid());
-            if (it == sOutriders.end())
+            MapRecords& rec = RecordsOf(source);
+            auto it = rec.outriders.find(source->GetObjectGuid());
+            if (it == rec.outriders.end())
                 return;
             outriders = std::move(it->second);
-            sOutriders.erase(it);
+            rec.outriders.erase(it);
         }
         for (ObjectGuid const& guid : outriders)
             if (Creature* outrider = source->GetMap()->GetCreature(guid))
@@ -739,7 +767,7 @@ namespace
         if (placed.empty())
             return;
         std::lock_guard<std::mutex> guard(sPacksLock);
-        sOutriders[source->GetObjectGuid()] = std::move(placed);
+        RecordsOf(source).outriders[source->GetObjectGuid()] = std::move(placed);
     }
 
     // `leader`'s pack, if it may lead one, and, for a pack the world forms (not the dev tools'),
@@ -748,7 +776,7 @@ namespace
     {
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            sForming.erase(leader->GetObjectGuid());
+            RecordsOf(leader).forming.erase(leader->GetObjectGuid());
         }
         if (!PacksOn() || !Eligible(leader))
             return;
@@ -762,12 +790,13 @@ namespace
     bool PackOf(Unit const* unit, ObjectGuid& leader, std::vector<ObjectGuid>& members)
     {
         std::lock_guard<std::mutex> guard(sPacksLock);
-        auto it = sLeaderOf.find(unit->GetObjectGuid());
-        if (it == sLeaderOf.end())
+        MapRecords& rec = RecordsOf(unit);
+        auto it = rec.leaderOf.find(unit->GetObjectGuid());
+        if (it == rec.leaderOf.end())
             return false;
         leader = it->second;
-        auto pack = sPacks.find(leader);
-        if (pack == sPacks.end())
+        auto pack = rec.packs.find(leader);
+        if (pack == rec.packs.end())
             return false;
         members.push_back(leader);
         members.insert(members.end(), pack->second.followers.begin(), pack->second.followers.end());
@@ -783,6 +812,34 @@ namespace
 
 namespace Arpg
 {
+    // A dungeon's trash may lead a small escort of lesser copies (vanilla's dungeons are spaced
+    // for five slow players): never a boss, a scripted creature or a formation's member.
+    bool DungeonEscortable(Creature* creature)
+    {
+        if (!creature || !creature->IsInWorld() || !creature->IsAlive() || creature->IsInCombat() ||
+                creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData())
+            return false;
+        Map* map = creature->GetMap();
+        // Dungeons whose scripts count their trash's deaths to open the way (Stratholme's
+        // ziggurats, Scholomance, Blackrock Depths): an escort would count too.
+        uint32 const mapId = map->GetId();
+        if (mapId == 329 || mapId == 289 || mapId == 230)
+            return false;
+        if (!map->IsDungeon() || map->IsRaid() || IsDungeonBoss(creature) || creature->IsWorldBoss() ||
+                creature->IsPet() || creature->IsTotem() || creature->GetScriptId() || ChampionTier(creature))
+            return false;
+        if (CreatureGroup* group = creature->GetCreatureGroup())
+            if (group->GetGroupEntry().formationEntry)
+                return false;
+        CreatureInfo const* info = creature->GetCreatureInfo();
+        if (!info || info->Rank > CREATURE_ELITE_ELITE || info->NpcFlags || creature->IsCivilian() ||
+                info->CreatureType == CREATURE_TYPE_CRITTER || creature->IsNoXp())
+            return false;
+        FactionTemplateEntry const* faction = creature->GetFactionTemplateEntry();
+        return faction && !(faction->friendGroupMask & FACTION_GROUP_MASK_PLAYER) &&
+               !(faction->factionGroupMask & FACTION_GROUP_MASK_PLAYER);
+    }
+
     void OnCreatureAdded(Creature* creature)
     {
         // An act's named leaders are crowned (Arpg/ArpgActs.h).
@@ -790,11 +847,36 @@ namespace Arpg
         // Instances and open-world elites: group scaling and dungeon champions (Arpg/ArpgDungeons.h).
         OnScalableCreatureAdded(creature);
         if (!PacksOn() || !creature || creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC ||
-                !creature->HasStaticDBSpawnData() || creature->GetMap()->Instanceable())
+                !creature->HasStaticDBSpawnData())
+            return;
+        // A dungeon's trash: an escort of one or two lesser copies, by Arpg.Packs.Dungeon's chance.
+        if (creature->GetMap()->IsDungeon() && !creature->GetMap()->IsRaid())
+        {
+            float const chance = sWorld.getConfig(CONFIG_FLOAT_ARPG_PACK_DUNGEON);
+            if (chance <= 0.0f || rand_norm() >= chance)
+                return;
+            {
+                std::lock_guard<std::mutex> guard(sPacksLock);
+                if (!RecordsOf(creature).forming.insert(creature->GetObjectGuid()).second)
+                    return;
+            }
+            creature->m_events.AddEvent(new UnitLambdaEvent(*creature, [](Unit& unit)
+            {
+                Creature* leader = static_cast<Creature*>(&unit);
+                {
+                    std::lock_guard<std::mutex> guard(sPacksLock);
+                    RecordsOf(leader).forming.erase(leader->GetObjectGuid());
+                }
+                if (DungeonEscortable(leader))
+                    FormPackAround(leader, roll_chance_i(35) ? 3 : 2, 1);   // tier 1: followers only
+            }), creature->m_events.CalculateTime(urand(FORM_DELAY_MIN, FORM_DELAY_MAX)));
+            return;
+        }
+        if (creature->GetMap()->Instanceable())
             return;
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            if (!sForming.insert(creature->GetObjectGuid()).second)
+            if (!RecordsOf(creature).forming.insert(creature->GetObjectGuid()).second)
                 return;
         }
         creature->m_events.AddEvent(new UnitLambdaEvent(*creature, [](Unit& unit)
@@ -818,7 +900,7 @@ namespace Arpg
         if (!MaybeFollower(unit))
             return false;
         std::lock_guard<std::mutex> guard(sPacksLock);
-        return sFollowers.count(unit->GetObjectGuid()) != 0;
+        return RecordsOf(unit).followers.count(unit->GetObjectGuid()) != 0;
     }
 
     // Champions are pack summons and dungeon spawns alike, so these ask any creature.
@@ -875,19 +957,23 @@ namespace Arpg
         Tier const tier = ChampionOf(victim).tier;
         if (tier == TIER_NONE)
             return;
-        // A champion: more gold and a rolled green or blue; a rare: a rolled blue, a chance at a
-        // purple. Rolled bases, never uniques (vanilla's named items drop from their own tables),
+        // A champion: more gold and sometimes a rolled green or blue; a rare: a rolled green or
+        // blue, a small chance at a purple. Rolled bases, never uniques (vanilla's named items drop from their own tables),
         // at the foe's level and three over: past vanilla's, the raid bank's (Arpg/ArpgBases.h).
         Loot* loot = victim->m_loot;
         uint32 const level = victim->GetLevel();
         loot->AddArpgDevGold(loot->GetGoldAmount() * (tier == TIER_RARE ? 2 : 1) + level * 5);
         uint32 const itemLevel = level + 3 + uint32(LootTier(victim->GetMap())) * 2;
+        // Champions are common, so their extra is a chance, not a promise (Jeff: too much loot).
         if (tier == TIER_CHAMPION)
-            AddRolledItem(loot, roll_chance_i(30) ? RARITY_BLUE : RARITY_GREEN, itemLevel);
+        {
+            if (roll_chance_i(40))
+                AddRolledItem(loot, roll_chance_i(20) ? RARITY_BLUE : RARITY_GREEN, itemLevel);
+        }
         else
         {
-            AddRolledItem(loot, RARITY_BLUE, itemLevel);
-            if (roll_chance_i(15))
+            AddRolledItem(loot, roll_chance_i(60) ? RARITY_BLUE : RARITY_GREEN, itemLevel);
+            if (roll_chance_i(3))
                 AddRolledItem(loot, RARITY_PURPLE, itemLevel);
         }
     }
@@ -922,10 +1008,11 @@ namespace Arpg
         std::vector<std::pair<ObjectGuid, Champion>> fresh;
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            if (sChampions.empty())
+            MapRecords& rec = RecordsOf(player);
+            if (rec.champions.empty())
                 return;
             std::unordered_set<ObjectGuid>& sent = sChampionsSent[player->GetObjectGuid()];
-            for (auto const& [guid, c] : sChampions)
+            for (auto const& [guid, c] : rec.champions)
                 if (!sent.count(guid))
                     fresh.emplace_back(guid, c);
         }
@@ -974,8 +1061,9 @@ namespace Arpg
             return;
         {
             std::lock_guard<std::mutex> guard(sPacksLock);
-            auto it = sPacks.find(leader);
-            if (it != sPacks.end() && !it->second.aggroAt)
+            MapRecords& rec = RecordsOf(member);
+            auto it = rec.packs.find(leader);
+            if (it != rec.packs.end() && !it->second.aggroAt)
             {
                 it->second.aggroAt = WorldTimer::getMSTime();
                 it->second.damage = 0;
@@ -998,11 +1086,12 @@ namespace Arpg
         if (!attacker || !damage || attacker->GetTypeId() != TYPEID_UNIT || !victim || !victim->IsPlayer())
             return;
         std::lock_guard<std::mutex> guard(sPacksLock);
-        auto it = sLeaderOf.find(attacker->GetObjectGuid());
-        if (it == sLeaderOf.end())
+        MapRecords& rec = RecordsOf(attacker);
+        auto it = rec.leaderOf.find(attacker->GetObjectGuid());
+        if (it == rec.leaderOf.end())
             return;
-        auto pack = sPacks.find(it->second);
-        if (pack != sPacks.end())
+        auto pack = rec.packs.find(it->second);
+        if (pack != rec.packs.end())
             pack->second.damage += damage;
     }
 
@@ -1038,8 +1127,9 @@ namespace Arpg
                 if (other != victim && other->IsAlive())
                     return;
         std::lock_guard<std::mutex> guard(sPacksLock);
-        auto it = sPacks.find(leader);
-        if (it == sPacks.end() || !it->second.aggroAt)
+        MapRecords& rec = RecordsOf(victim);
+        auto it = rec.packs.find(leader);
+        if (it == rec.packs.end() || !it->second.aggroAt)
             return;
         float const seconds = WorldTimer::getMSTimeDiff(it->second.aggroAt, WorldTimer::getMSTime()) / 1000.0f;
         sLog.outString("ARPG packs: a pack of %u %s (level %u) fell in %.1f s; it dealt %u damage",
@@ -1108,7 +1198,7 @@ namespace Arpg
         creature->SetHealth(creature->GetMaxHealth());
         creature->SetObjectScale(creature->GetObjectScale() * FOLLOWER_SCALE);
         std::lock_guard<std::mutex> guard(sPacksLock);
-        sFollowers.insert(creature->GetObjectGuid());
+        RecordsOf(creature).followers.insert(creature->GetObjectGuid());
     }
 
     uint8 ChampionAffixCount(uint32 level, bool rare)
@@ -1126,22 +1216,31 @@ namespace Arpg
         ForgetScaled(creature);
         ForgetTelegraph(creature);
         std::lock_guard<std::mutex> guard(sPacksLock);
-        // Guids are per map, so a stale record could crown another map's creature.
-        sChampions.erase(guid);
+        // Guids repeat between map copies, so a stale record could crown another creature.
+        uint64 const where = (uint64(creature->GetMapId()) << 32) | creature->GetInstanceId();
+        auto records = sRecords.find(where);
+        if (records == sRecords.end())
+            return;
+        MapRecords& rec = records->second;
+        rec.champions.erase(guid);
         for (auto& [player, sent] : sChampionsSent)
             sent.erase(guid);
-        sFollowers.erase(guid);
-        sForming.erase(guid);
+        rec.followers.erase(guid);
+        rec.forming.erase(guid);
         // Its outriders leave once out of combat (WatchOutrider).
-        sOutriders.erase(guid);
-        auto pack = sPacks.find(guid);
-        if (pack != sPacks.end())
+        rec.outriders.erase(guid);
+        auto pack = rec.packs.find(guid);
+        if (pack != rec.packs.end())
         {
             for (ObjectGuid const& follower : pack->second.followers)
-                sLeaderOf.erase(follower);
-            sPacks.erase(pack);
+                rec.leaderOf.erase(follower);
+            rec.packs.erase(pack);
         }
-        sLeaderOf.erase(guid);
+        rec.leaderOf.erase(guid);
+        // A copy whose creatures are all gone (an instance unloaded) leaves no record behind.
+        if (rec.packs.empty() && rec.leaderOf.empty() && rec.followers.empty() && rec.forming.empty() &&
+                rec.outriders.empty() && rec.champions.empty())
+            sRecords.erase(records);
     }
 
     void DevFormPack(Player* player, uint8 size, uint8 tier)

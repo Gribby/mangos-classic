@@ -1207,6 +1207,11 @@ void Unit::Kill(Unit* killer, Unit* victim, DamageEffectType damagetype, SpellEn
             playerVictim->DuelComplete(DUEL_INTERRUPTED);
         }
 
+        // ARPG: play statistics, the death (Arpg/ArpgStats.h); creatures' deaths are counted in
+        // JustKilledCreature. Spirit of Redemption's end (its Suicide) is the same death again.
+        if (!(killer == victim && spellInfo && spellInfo->Id == 27965))
+            Arpg::OnStatsKill(killer, victim);
+
         if (responsiblePlayer)                         // PvP kill
         {
             if (BattleGround* bg = playerVictim->GetBattleGround())

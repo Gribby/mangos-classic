@@ -189,9 +189,15 @@ namespace
 
     // The rarity odds of a dropped base item (white, green, blue, purple), by who dropped it.
     struct Odds { float white, green, blue, purple; };
-    Odds const ODDS_TRASH = { 50.0f, 33.0f, 13.0f, 4.0f };
-    Odds const ODDS_CHAMPION = { 15.0f, 40.0f, 33.0f, 12.0f };
-    Odds const ODDS_RARE = { 0.0f, 25.0f, 45.0f, 30.0f };     // rares, Wardens and bosses
+    // Purples are rare by design (Jeff: about one every other dungeon run, all sources together):
+    // a run's dozen or so rolled drops add about a fifth of one, the Warden and the Cache the rest.
+    Odds const ODDS_TRASH = { 55.0f, 35.0f, 9.7f, 0.3f };
+    Odds const ODDS_CHAMPION = { 20.0f, 52.0f, 27.0f, 1.0f };
+    Odds const ODDS_RARE = { 0.0f, 45.0f, 52.0f, 3.0f };      // rares, Wardens and bosses
+
+    // A vanilla blue (a named dungeon drop) stays a unique this often; otherwise it drops as a
+    // rolled blue of its level. Uniques are as rare as purples (about one every other run).
+    constexpr uint32 UNIQUE_KEEP_PCT = 12;
 
     float LevelScale(uint32 itemLevel)
     {
@@ -266,6 +272,15 @@ namespace
     }
 
     // A named blue or purple, or a mechanic's item: a unique, its own stats its implicits.
+    // A unique with an authored mechanic (Arpg/ArpgUniques.h): always dropped as itself.
+    bool AuthoredUnique(ItemPrototype const* proto)
+    {
+        for (UniqueMechanic const& unique : Uniques())
+            if (unique.item == proto->ItemId)
+                return true;
+        return false;
+    }
+
     bool UniqueBase(ItemPrototype const* proto)
     {
         if (proto->Quality >= ITEM_QUALITY_RARE)
@@ -689,6 +704,30 @@ namespace Arpg
                 return;
             item->arpgSeed = urand(1, 0x7FFFFFFF);
             item->arpgTier = tier;
+            // A vanilla blue mostly becomes a rolled blue: the same level, another base. A unique
+            // asked for (a Warden's, a Cache's) is already marked, and epics (raids) stay.
+            if (item->arpgRarity != RARITY_UNIQUE && UniqueBase(item->itemProto) && !AuthoredUnique(item->itemProto) &&
+                    item->itemProto->Quality == ITEM_QUALITY_RARE && !roll_chance_i(int32(UNIQUE_KEEP_PCT)))
+            {
+                uint32 base = 0;
+                for (int tries = 0; tries < 8 && !base; ++tries)
+                {
+                    uint32 const pick = PickRandomItem(roll_chance_i(50) ? ITEM_QUALITY_NORMAL : ITEM_QUALITY_UNCOMMON,
+                                                       item->itemProto->ItemLevel);
+                    if (pick && Takes(sObjectMgr.GetItemPrototype(pick)) && !UniqueBase(sObjectMgr.GetItemPrototype(pick)))
+                        base = pick;
+                }
+                if (ItemPrototype const* proto = base ? sObjectMgr.GetItemPrototype(base) : nullptr)
+                {
+                    item->itemId = base;
+                    item->itemProto = proto;
+                    item->displayID = proto->DisplayInfoID;
+                    item->randomPropertyId = Item::GenerateItemRandomPropertyId(base);
+                    item->randomSuffix = 0;
+                    item->arpgRarity = RARITY_BLUE;
+                    return;
+                }
+            }
             if (UniqueBase(item->itemProto))
                 item->arpgRarity = RARITY_UNIQUE;
             else if (!item->arpgRarity)
@@ -724,8 +763,9 @@ namespace Arpg
         loot->ForEachArpgItem([&](LootItem* item) { added = item; });
         if (!added || added == before || added->itemId != id)
             return false;
-        if (rarity != RARITY_UNIQUE)
-            added->arpgRarity = std::max<uint8>(RARITY_WHITE, std::min<uint8>(rarity, RARITY_PURPLE));
+        // A unique asked for is marked as one, so the drop's vanilla-blue thinning leaves it be.
+        added->arpgRarity = rarity == RARITY_UNIQUE ? uint8(RARITY_UNIQUE)
+                            : std::max<uint8>(RARITY_WHITE, std::min<uint8>(rarity, RARITY_PURPLE));
         return true;
     }
 

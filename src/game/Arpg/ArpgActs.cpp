@@ -317,91 +317,38 @@ namespace
         return std::hypot(a.x - b.x, a.y - b.y);
     }
 
-    // The resolved act: each quest's entries and its road's ends.
+    // The resolved act: each quest's entries, and whether it was written.
     struct Resolved
     {
         uint32 giver = 0, taker = 0, leader = 0;
         std::array<uint32, 3> kills{};
-        Spot from{}, to{};
-        bool hasRoad = false;
+        bool written = false;
     };
     std::vector<Resolved> sResolved;
     std::set<uint32> sLeaders, sFinales;
     std::map<uint32, std::string> sLeaderAffix;
 
-    // Where a quest sends its character: its leader's spawn, or the middle of its first creature's
-    // spawns nearest the giver, or (a report) the taker.
-    bool TargetOf(ActQuest const& q, Resolved const& r, Spot& out)
-    {
-        uint32 const map = MapOf(q);
-        auto first = [map](uint32 entry, Spot& at)
-        {
-            std::vector<Spot> const* spawns = SpawnsOf(map, entry);
-            if (!spawns || spawns->empty())
-                return false;
-            at = spawns->front();
-            return true;
-        };
-        if (r.leader && first(r.leader, out))
-            return true;
-        if (r.kills[0])
-            if (std::vector<Spot> const* spawns = SpawnsOf(map, r.kills[0]))
-            {
-                std::vector<Spot> closest(*spawns);
-                std::sort(closest.begin(), closest.end(), [&r](Spot const& a, Spot const& b) { return Dist2d(a, r.from) < Dist2d(b, r.from); });
-                size_t const n = std::min<size_t>(closest.size(), 8);
-                if (n)
-                {
-                    Spot sum{ 0, 0, 0 };
-                    for (size_t i = 0; i < n; ++i)
-                    {
-                        sum.x += closest[i].x;
-                        sum.y += closest[i].y;
-                        sum.z += closest[i].z;
-                    }
-                    out = { sum.x / n, sum.y / n, sum.z / n };
-                    return true;
-                }
-            }
-        return r.taker && r.taker != r.giver && first(r.taker, out);
-    }
+    // --- Packs ahead ---
+    //
+    // Out in the open world, as the character travels, packs of the creatures that live where it
+    // is heading appear ahead of it, just out of sight: the way forward is always a fight. Never in
+    // or near a town (no NPC, guard or friendly creature close), never while it rests. They leave
+    // when it is far past them.
 
-    // --- The road ---
-
-    constexpr float ROAD_STEP = 45.0f;          // a corridor point every this far along the road
-    constexpr float ROAD_SKIP = 35.0f;          // none this close to its ends (a town, the target itself)
-    constexpr float ROAD_POOL = 60.0f;          // a point's packs: creatures that live this close to it
-    constexpr float FILL_NEAR = 110.0f, FILL_FAR = 170.0f; // filled ahead, just out of sight
-    constexpr float FILL_CLEAR = 15.0f;         // no creature this close to a point filled
-    constexpr float LEAVE_FAR = 260.0f;         // a corridor pack this far behind leaves
-    constexpr uint32 UPDATE_MS = 2000;
-    // A road pack left alone (its character gone, or past it) goes after this long out of combat;
-    // its corpse lies as long.
+    constexpr float AHEAD_EVERY = 50.0f;        // a pack each time the character travels this far
+    constexpr float AHEAD_NEAR = 110.0f, AHEAD_FAR = 160.0f; // placed this far ahead, out of sight
+    constexpr float AHEAD_SPREAD = 0.7f;        // radians either side of the way it is heading
+    constexpr float AHEAD_POOL = 90.0f;         // a pack's creature: one that lives this close to it
+    constexpr uint32 AHEAD_LEVELS = 3;          // and within this many levels of the character
+    constexpr uint32 AHEAD_MAX = 4;             // packs out at once
+    constexpr uint32 AHEAD_TRIES = 4;
+    constexpr float FILL_CLEAR = 15.0f;         // no creature this close to a pack placed
+    constexpr float TOWN_CLEAR = 60.0f;         // no NPC, guard or friendly creature this close
+    constexpr float LEAVE_FAR = 260.0f;         // a pack this far behind leaves
+    constexpr uint32 UPDATE_MS = 1000;
+    // A pack left alone (its character gone, or past it) goes after this long out of combat; its
+    // corpse lies as long.
     constexpr uint32 PACK_IDLE_MS = 10 * MINUTE * IN_MILLISECONDS;
-
-    constexpr float LEG = 150.0f;               // the road is drawn a leg this long at a time
-    constexpr float LEG_REACH = FILL_FAR + LEG; // a leg is drawn when the character comes this close
-    constexpr uint32 LEG_RETRY_MS = 20000;      // a leg the map can't path yet is tried again after this
-    constexpr uint32 LEG_TRIES = 6;             // then it is a straight line
-
-    // A stretch of road: drawn when the character nears it, on its map's thread, once the map's
-    // navigation tiles there are loaded.
-    struct Leg
-    {
-        Spot a, b;
-        bool built = false;
-        uint32 tries = 0;
-        uint32 triedAt = 0;
-        std::vector<Spot> points;
-        std::vector<uint32> entries;            // the creature each point fills with (0: none)
-    };
-    struct Road
-    {
-        bool laid = false;
-        std::vector<Leg> legs;
-    };
-    std::mutex sRoadsLock;
-    std::map<uint32, Road> sRoads;              // by quest
 
     bool Hostile(CreatureInfo const* info)
     {
@@ -412,143 +359,45 @@ namespace
         return faction && faction->IsHostileToPlayers();
     }
 
-    // `leg`'s way and points, if the map can path it now (true when the leg is done).
-    bool BuildLeg(ActQuest const& q, Leg& leg, bool first, bool last, Player* player)
+    // The creature that lives nearest `at` on `map`, hostile and near `level`; 0 if none does.
+    uint32 NativeOf(uint32 map, Spot const& at, uint32 level)
     {
-        uint32 const now = WorldTimer::getMSTime();
-        if (leg.tries && WorldTimer::getMSTimeDiff(leg.triedAt, now) < LEG_RETRY_MS)
-            return false;
-        if (player->GetTransport())
-            return false;                       // a transport's own navigation mesh would be read
-        leg.triedAt = now;
-        ++leg.tries;
-        std::vector<Spot> way;
-        PathFinder path(player);
-        path.calculate(Vector3(leg.a.x, leg.a.y, leg.a.z), Vector3(leg.b.x, leg.b.y, leg.b.z), false);
-        uint32 const bad = PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH | PATHFIND_SHORTCUT;
-        if (!(path.getPathType() & bad) && path.getPath().size() >= 2)
+        if (map > 1)
+            return 0;
+        uint32 best = 0;
+        float bestDist = AHEAD_POOL;
+        for (auto const& [entry, spawns] : sSpawns[map])
         {
-            for (auto const& p : path.getPath())
-                way.push_back({ p.x, p.y, p.z });
-            // Too winding for the path's length limit (retrying can't help): its walkable start,
-            // then straight on to the leg's end.
-            if (path.getPathType() & PATHFIND_SHORT)
-                way.push_back(leg.b);
-        }
-        else if (leg.tries < LEG_TRIES)
-            return false;                       // the tiles may not be loaded yet: try again later
-        else
-            way = { leg.a, leg.b };
-        float total = 0.0f;
-        for (size_t i = 1; i < way.size(); ++i)
-            total += Dist2d(way[i - 1], way[i]);
-        // A point every ROAD_STEP along it, none within ROAD_SKIP of the road's own ends.
-        float const from = first ? ROAD_SKIP : ROAD_STEP * 0.5f;
-        float const to = last ? total - ROAD_SKIP : total;
-        float walked = 0.0f, next = from;
-        for (size_t i = 1; i < way.size() && next < to; ++i)
-        {
-            float const span = Dist2d(way[i - 1], way[i]);
-            while (span > 0.0f && next <= walked + span && next < to)
-            {
-                float const t = (next - walked) / span;
-                leg.points.push_back({ way[i - 1].x + (way[i].x - way[i - 1].x) * t, way[i - 1].y + (way[i].y - way[i - 1].y) * t,
-                                       way[i - 1].z + (way[i].z - way[i - 1].z) * t });
-                next += ROAD_STEP;
-            }
-            walked += span;
-        }
-        // Each point fills with the nearest hostile creature that lives along the road, near the
-        // quest's level (never an act's leader).
-        uint32 const map = MapOf(q);
-        for (Spot const& point : leg.points)
-        {
-            uint32 best = 0;
-            float bestDist = ROAD_POOL;
-            for (auto const& [entry, spawns] : sSpawns[map])
-            {
-                CreatureInfo const* info = sCreatureStorage.LookupEntry<CreatureInfo>(entry);
-                if (!Hostile(info) || info->MaxLevel + 3 < q.level || info->MinLevel > q.level + 3u)
-                    continue;
-                for (Spot const& s : spawns)
-                {
-                    float const d = Dist2d(point, s);
-                    if (d < bestDist)
-                    {
-                        bestDist = d;
-                        best = entry;
-                    }
-                }
-            }
-            leg.entries.push_back(best);
-        }
-        leg.built = true;
-        return true;
-    }
-
-    // `quest`'s road: its legs laid the first time it is asked for, each drawn as the character
-    // nears it (called on `player`'s map thread).
-    Road& RoadOf(size_t index, Player* player)
-    {
-        ActQuest const& q = Quests()[index];
-        Road& road = sRoads[q.id];
-        Resolved const& r = sResolved[index];
-        if (!road.laid)
-        {
-            road.laid = true;
-            if (r.hasRoad)
-            {
-                // Leg ends on the straight line, set on the ground; the pathfinding finds the way
-                // between them.
-                Map* map = player->GetMap();
-                uint32 const n = std::max(1u, uint32(std::ceil(Dist2d(r.from, r.to) / LEG)));
-                Spot prev = r.from;
-                for (uint32 i = 1; i <= n; ++i)
-                {
-                    float const t = float(i) / n;
-                    Spot at = r.to;
-                    if (i < n)
-                    {
-                        at = { r.from.x + (r.to.x - r.from.x) * t, r.from.y + (r.to.y - r.from.y) * t,
-                               r.from.z + (r.to.z - r.from.z) * t };
-                        float const ground = map->GetHeight(at.x, at.y, at.z + 40.0f);
-                        if (ground > INVALID_HEIGHT)
-                            at.z = ground;
-                    }
-                    Leg leg;
-                    leg.a = prev;
-                    leg.b = at;
-                    road.legs.push_back(leg);
-                    prev = at;
-                }
-            }
-        }
-        for (size_t l = 0; l < road.legs.size(); ++l)
-        {
-            Leg& leg = road.legs[l];
-            if (leg.built || std::min(player->GetDistance2d(leg.a.x, leg.a.y), player->GetDistance2d(leg.b.x, leg.b.y)) > LEG_REACH)
+            CreatureInfo const* info = sCreatureStorage.LookupEntry<CreatureInfo>(entry);
+            if (!Hostile(info) || info->MaxLevel + AHEAD_LEVELS < level || info->MinLevel > level + AHEAD_LEVELS)
                 continue;
-            if (BuildLeg(q, leg, l == 0, l + 1 == road.legs.size(), player))
-                sLog.outDetail("ARPG acts: \"%s\" leg %u of %u drawn: %u points, %u with packs", q.title, uint32(l + 1),
-                               uint32(road.legs.size()), uint32(leg.points.size()),
-                               uint32(std::count_if(leg.entries.begin(), leg.entries.end(), [](uint32 e) { return e != 0; })));
+            for (Spot const& s : spawns)
+            {
+                float const d = Dist2d(at, s);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = entry;
+                }
+            }
         }
-        return road;
+        return best;
     }
 
-    // A character's road under way: the quest, the points filled, the packs placed.
+    // A character's packs ahead: where it was when the last was placed, and the packs out.
     struct Run
     {
-        uint32 quest = 0;
-        std::set<uint32> filled;           // leg << 16 | point
+        bool placedOnce = false;
+        Spot lastAt{};                          // where it stood at the last pack (or its first update)
+        Spot lastSeen{};                        // where it stood at its last update: its heading
         std::vector<ObjectGuid> packs;
         uint32 lastUpdate = 0;
     };
     std::mutex sRunsLock;
     std::unordered_map<ObjectGuid, Run> sRuns;
 
-    // Whether a pack may stand at `at`: loaded ground, no creature close, out of the character's
-    // sight.
+    // Whether a pack may stand at `at`: loaded ground the character can walk to, no creature close,
+    // no NPC, guard or friendly creature near (a town, a camp of its own side).
     bool SpotClear(Player* player, Spot& at)
     {
         Map* map = player->GetMap();
@@ -558,12 +407,33 @@ namespace
         player->UpdateAllowedPositionZ(at.x, at.y, z);
         at.z = z;
         UnitList around;
-        MaNGOS::AnyUnitInObjectRangeCheck check(player, FILL_FAR + FILL_CLEAR);
+        float const reach = AHEAD_FAR + TOWN_CLEAR;
+        MaNGOS::AnyUnitInObjectRangeCheck check(player, reach);
         MaNGOS::UnitListSearcher<MaNGOS::AnyUnitInObjectRangeCheck> searcher(around, check);
-        Cell::VisitAllObjects(player, searcher, FILL_FAR + FILL_CLEAR);
+        Cell::VisitAllObjects(player, searcher, reach);
         for (Unit* unit : around)
-            if (unit->IsAlive() && unit->GetDistance(at.x, at.y, at.z) < FILL_CLEAR)
+        {
+            if (!unit->IsAlive())
+                continue;
+            float const d = unit->GetDistance(at.x, at.y, at.z);
+            if (d < FILL_CLEAR)
                 return false;
+            if (d < TOWN_CLEAR && unit != player)
+            {
+                if (unit->GetTypeId() == TYPEID_PLAYER)
+                    return false;
+                Creature const* c = static_cast<Creature const*>(unit);
+                CreatureInfo const* info = c->GetCreatureInfo();
+                if ((info && info->NpcFlags) || c->IsCivilian() || c->IsFriend(player))
+                    if (!(info && info->CreatureType == CREATURE_TYPE_CRITTER))
+                        return false;
+            }
+        }
+        // Walkable from the character, not across water or up a cliff.
+        PathFinder path(player);
+        path.calculate(at.x, at.y, at.z, false);
+        if (path.getPathType() & (PATHFIND_NOPATH | PATHFIND_NOT_USING_PATH | PATHFIND_SHORTCUT | PATHFIND_INCOMPLETE | PATHFIND_SHORT))
+            return false;
         return true;
     }
 
@@ -710,13 +580,7 @@ namespace Arpg
             WorldDatabase.DirectPExecute("INSERT INTO creature_questrelation (id, quest) VALUES (%u, %u)", r.giver, q.id);
             WorldDatabase.DirectPExecute("INSERT INTO creature_involvedrelation (id, quest) VALUES (%u, %u)", r.taker, q.id);
             ++written;
-
-            // The road's ends: from the giver to where the quest sends the character.
-            if (std::vector<Spot> const* at = SpawnsOf(map, r.giver))
-            {
-                r.from = at->front();
-                r.hasRoad = TargetOf(q, r, r.to) && Dist2d(r.from, r.to) > ROAD_SKIP * 2;
-            }
+            r.written = true;
         }
         sLog.outString(">> ARPG acts: %u act quests written", written);
     }
@@ -758,7 +622,71 @@ namespace Arpg
                 }
             }
         }
+        // The act's givers give only the act: their vanilla quests would crowd its first lines
+        // (vanilla quests they take in are still handed in to them). A vanilla chain that starts
+        // with a giver outside the act and comes on to an act giver keeps its quests there, or it
+        // would end in a quest no one offers; one wholly at act givers goes, the act retelling it.
+        std::set<uint32> actGivers;
+        for (Resolved const& r : sResolved)
+            if (r.written && r.giver)
+                actGivers.insert(r.giver);
         QuestRelationsMap& givers = sObjectMgr.GetCreatureQuestRelationsMap();
+        QuestRelationsMap& boardsOf = sObjectMgr.GetGOQuestRelationsMap();
+        std::set<uint32> offeredOutside;        // quests some creature or object outside the act offers
+        for (auto const& [giver, quest] : givers)
+            if (!actGivers.count(giver))
+                offeredOutside.insert(quest);
+        for (auto const& [board, quest] : boardsOf)
+            offeredOutside.insert(quest);
+        // Each quest's predecessors: what it needs done first, and what leads on to it.
+        std::map<uint32, std::set<uint32>> before;
+        for (auto const& [id, quest] : sObjectMgr.GetQuestTemplates())
+        {
+            if (!quest)
+                continue;
+            if (quest->GetPrevQuestId())
+                before[id].insert(uint32(std::abs(quest->GetPrevQuestId())));
+            if (quest->GetNextQuestInChain())
+                before[quest->GetNextQuestInChain()].insert(id);
+            if (quest->GetNextQuestId() > 0)
+                before[uint32(quest->GetNextQuestId())].insert(id);
+        }
+        auto arrivesFromOutside = [&](uint32 quest)
+        {
+            // Back along the chain (bounded), looking for a step someone outside the act offers.
+            std::set<uint32> seen;
+            std::vector<uint32> stack = { quest };
+            while (!stack.empty() && seen.size() < 64)
+            {
+                uint32 const at = stack.back();
+                stack.pop_back();
+                auto it = before.find(at);
+                if (it == before.end())
+                    continue;
+                for (uint32 prev : it->second)
+                {
+                    if (!seen.insert(prev).second)
+                        continue;
+                    if (offeredOutside.count(prev))
+                        return true;
+                    stack.push_back(prev);
+                }
+            }
+            return false;
+        };
+        size_t stripped = 0;
+        for (auto it = givers.begin(); it != givers.end();)
+        {
+            if (actGivers.count(it->first) && !IsActQuest(it->second) && !retold.count(it->second) &&
+                    !arrivesFromOutside(it->second))
+            {
+                it = givers.erase(it);
+                ++stripped;
+            }
+            else
+                ++it;
+        }
+        sLog.outString(">> ARPG acts: %u vanilla quests taken off the act's givers", uint32(stripped));
         size_t taken = 0;
         for (auto it = givers.begin(); it != givers.end();)
         {
@@ -821,59 +749,72 @@ namespace Arpg
         if (!player || !ActsOn() || !Active(player) || !player->IsInWorld() || !player->IsAlive())
             return;
         uint32 const now = WorldTimer::getMSTime();
-        // The act quest under way, if any.
-        std::vector<ActQuest> const& quests = Quests();
-        size_t index = quests.size();
-        for (size_t i = 0; i < quests.size(); ++i)
-            // Under way: taken and not yet handed in (a report quest is complete as soon as it is taken).
-            if (i < sResolved.size() && sResolved[i].hasRoad && MapOf(quests[i]) == player->GetMapId() &&
-                    (player->GetQuestStatus(quests[i].id) == QUEST_STATUS_INCOMPLETE ||
-                     (player->GetQuestStatus(quests[i].id) == QUEST_STATUS_COMPLETE && !player->GetQuestRewardStatus(quests[i].id))))
-            {
-                index = i;
-                break;
-            }
         std::lock_guard<std::mutex> guard(sRunsLock);
         Run& run = sRuns[player->GetObjectGuid()];
         if (run.lastUpdate && WorldTimer::getMSTimeDiff(run.lastUpdate, now) < UPDATE_MS)
             return;
         run.lastUpdate = now ? now : 1;
-        uint32 const quest = index < quests.size() ? quests[index].id : 0;
-        if (quest != run.quest)
-        {
-            run.quest = quest;
-            run.filled.clear();
-        }
         LeaveAll(player, run, true);
-        if (!quest)
+
+        Spot const here = { player->GetPositionX(), player->GetPositionY(), player->GetPositionZ() };
+        Spot const before = run.lastSeen;
+        run.lastSeen = here;
+        if (!run.placedOnce)
+        {
+            run.placedOnce = true;
+            run.lastAt = here;
             return;
-        std::lock_guard<std::mutex> roadGuard(sRoadsLock);
-        Road& road = RoadOf(index, player);
-        for (size_t l = 0; l < road.legs.size(); ++l)
-            for (size_t p = 0; p < road.legs[l].points.size(); ++p)
-            {
-                uint32 const key = uint32(l << 16 | p);
-                if (!road.legs[l].entries[p] || run.filled.count(key))
-                    continue;
-                Spot at = road.legs[l].points[p];
-                float const d = player->GetDistance2d(at.x, at.y);
-                if (d < FILL_NEAR || d > FILL_FAR || !SpotClear(player, at))
-                    continue;
-                TempSpawnSettings settings;
-                settings.entry = road.legs[l].entries[p];
-                settings.x = at.x;
-                settings.y = at.y;
-                settings.z = at.z;
-                settings.ori = frand(0.0f, 2.0f * float(M_PI));
-                settings.spawnType = TEMPSPAWN_TIMED_OOC_DESPAWN;
-                settings.despawnTime = PACK_IDLE_MS;
-                Creature* leader = WorldObject::SummonCreature(settings, player->GetMap());
-                run.filled.insert(key);
-                if (!leader)
-                    continue;
-                run.packs.push_back(leader->GetObjectGuid());
-                FormRoadPack(leader);
-            }
+        }
+        // Out in the open world, travelling on foot or mounted, not resting in a town or an inn.
+        Map* map = player->GetMap();
+        if (map->Instanceable() || player->GetMapId() > 1 || player->IsTaxiFlying() || player->GetTransport() ||
+                player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING) || player->IsInWater())
+        {
+            run.lastAt = here;
+            return;
+        }
+        // A teleport (a hearth, a portal, a summon) is no travel: start afresh where it landed.
+        if (Dist2d(here, before) > AHEAD_FAR)
+        {
+            run.lastAt = here;
+            return;
+        }
+        if (Dist2d(here, run.lastAt) < AHEAD_EVERY || run.packs.size() >= AHEAD_MAX)
+            return;
+        // The way it is heading: where it went since its last update, else where it faces.
+        float heading = player->GetOrientation();
+        if (Dist2d(here, before) > 1.0f)
+            heading = std::atan2(here.y - before.y, here.x - before.x);
+        for (uint32 attempt = 0; attempt < AHEAD_TRIES; ++attempt)
+        {
+            float const angle = heading + frand(-AHEAD_SPREAD, AHEAD_SPREAD);
+            float const dist = frand(AHEAD_NEAR, AHEAD_FAR);
+            Spot at = { here.x + std::cos(angle) * dist, here.y + std::sin(angle) * dist, here.z };
+            float const ground = map->GetHeight(at.x, at.y, here.z + 40.0f);
+            if (ground <= INVALID_HEIGHT)
+                continue;
+            at.z = ground;
+            uint32 const entry = NativeOf(player->GetMapId(), at, player->GetLevel());
+            if (!entry || !SpotClear(player, at))
+                continue;
+            TempSpawnSettings settings;
+            settings.entry = entry;
+            settings.x = at.x;
+            settings.y = at.y;
+            settings.z = at.z;
+            settings.ori = frand(0.0f, 2.0f * float(M_PI));
+            settings.spawnType = TEMPSPAWN_TIMED_OOC_DESPAWN;
+            settings.despawnTime = PACK_IDLE_MS;
+            Creature* leader = WorldObject::SummonCreature(settings, map);
+            if (!leader)
+                continue;
+            run.packs.push_back(leader->GetObjectGuid());
+            FormRoadPack(leader);
+            break;
+        }
+        // Placed or not, the next try is another stretch on: a spot that would not take a pack now
+        // (a town ahead, water) is not asked for again every second.
+        run.lastAt = here;
     }
 
     void ForgetActs(Player* player)
