@@ -166,5 +166,6 @@ void WorldSession::HandleArpgShowcaseQueryOpcode(WorldPacket& recvPacket)
         for (ShowcaseSlot const& slot : gear[i])
             data << uint32(slot.display) << uint8(slot.inventoryType);
     }
-    SendPacket(data);
+    // Forced: at character select the session is not READY, and an unforced send is dropped.
+    SendPacket(data, true);
 }
