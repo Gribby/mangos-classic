@@ -1017,8 +1017,22 @@ namespace Arpg
             if (!row)
                 continue;
             std::vector<Unit*> const more = NearestTo(caster, victim, row->value, BURST_MAX);
+            // Cast on the caster's next update, not inside this kill: a copy that kills spreads
+            // again, and inline that nests one kill in another as deep as the pack is big.
+            GuidVector targets;
             for (Unit* unit : more)
-                CastCopyAt(caster, spellInfo, unit);
+                targets.push_back(unit->GetObjectGuid());
+            if (!targets.empty())
+                caster->m_events.AddEvent(new UnitLambdaEvent(*caster, [spellInfo, targets](Unit& owner)
+                {
+                    Player* player = static_cast<Player*>(&owner);
+                    if (!player->IsInWorld())
+                        return;
+                    for (ObjectGuid const& guid : targets)
+                        if (Unit* unit = player->GetMap()->GetUnit(guid))
+                            if (unit->IsAlive())
+                                CastCopyAt(player, spellInfo, unit);
+                }), caster->m_events.CalculateTime(1));
             if (!more.empty())
                 ReportProc(caster, PROC_EFFECT, 0, MechanicName(row), "spreads %s from the corpse to %u %s.",
                            spellInfo->SpellName[0], uint32(more.size()), Plural(more.size(), "enemy", "enemies"));
