@@ -60,7 +60,7 @@ namespace
         uint32 quest;               // the act quest it belongs to
         Trigger trigger;
         char const* anchor;         // the NPC or creature it is shot around, by name
-        float near;                 // ON_NEAR: how close the character comes to its anchor
+        float reach;                // ON_NEAR: how close the character comes to its anchor
         uint32 duration;
         std::vector<Key> keys;
         std::vector<Line> lines;
@@ -391,7 +391,7 @@ namespace Arpg
         {
             if (scene.trigger != ON_NEAR || st.seen.count(scene.id) || !UnderWay(player, scene.quest))
                 continue;
-            Creature* anchor = Nearest(player, scene.anchor, scene.near);
+            Creature* anchor = Nearest(player, scene.anchor, scene.reach);
             if (!anchor || anchor->IsInCombat())
                 continue;
             Start(player, st, scene, anchor);

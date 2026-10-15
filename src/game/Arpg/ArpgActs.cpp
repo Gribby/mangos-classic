@@ -347,17 +347,17 @@ namespace
         if (r.kills[0])
             if (std::vector<Spot> const* spawns = SpawnsOf(map, r.kills[0]))
             {
-                std::vector<Spot> near(*spawns);
-                std::sort(near.begin(), near.end(), [&r](Spot const& a, Spot const& b) { return Dist2d(a, r.from) < Dist2d(b, r.from); });
-                size_t const n = std::min<size_t>(near.size(), 8);
+                std::vector<Spot> closest(*spawns);
+                std::sort(closest.begin(), closest.end(), [&r](Spot const& a, Spot const& b) { return Dist2d(a, r.from) < Dist2d(b, r.from); });
+                size_t const n = std::min<size_t>(closest.size(), 8);
                 if (n)
                 {
                     Spot sum{ 0, 0, 0 };
                     for (size_t i = 0; i < n; ++i)
                     {
-                        sum.x += near[i].x;
-                        sum.y += near[i].y;
-                        sum.z += near[i].z;
+                        sum.x += closest[i].x;
+                        sum.y += closest[i].y;
+                        sum.z += closest[i].z;
                     }
                     out = { sum.x / n, sum.y / n, sum.z / n };
                     return true;
