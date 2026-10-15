@@ -882,6 +882,27 @@ bool Player::Create(uint32 guidlow, const std::string& name, uint8 race, uint8 c
         }
     }
 
+    // ARPG: a race and class pairing the outfits lack (a human druid) wears the class's outfit from
+    // another race of the same sex, one of its own side first.
+    if (!oEntry && sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+    {
+        uint32 const classGender = raceClassGender & 0x00FFFF00;
+        uint32 const myTeam = Player::TeamForRace(getRace());
+        for (uint32 i = 1; i < sCharStartOutfitStore.GetNumRows(); ++i)
+        {
+            CharStartOutfitEntry const* entry = sCharStartOutfitStore.LookupEntry(i);
+            if (!entry || (entry->RaceClassGender & 0x00FFFF00) != classGender)
+                continue;
+            if (!oEntry)
+                oEntry = entry;
+            if (Player::TeamForRace(uint8(entry->RaceClassGender & 0xFF)) == myTeam)
+            {
+                oEntry = entry;
+                break;
+            }
+        }
+    }
+
     if (oEntry)
     {
         for (int j : oEntry->ItemId)
