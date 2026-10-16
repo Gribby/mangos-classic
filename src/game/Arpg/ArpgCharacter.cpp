@@ -1860,6 +1860,8 @@ namespace Arpg
         if (SkillOfSpell(player->getClass(), spellInfo) != SKILL_HAMMER || !spellInfo->SpellName[0] ||
                 std::strncmp(spellInfo->SpellName[0], "Hammer of Justice", 17) != 0)
             return;
+        // Its synergy triggers: a stun deals no damage, so no hit hook sees it (Arpg/ArpgSynergy.h).
+        OnSynergyHit(player, target, spellInfo, TagsOf(spellInfo), 0, false);
         float const ap = player->GetTotalAttackPowerValue(BASE_ATTACK);
         if (t.Has(KEY_HOLY_HAMMER) && target->IsAlive())
         {

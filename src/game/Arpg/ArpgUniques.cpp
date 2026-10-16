@@ -5,6 +5,7 @@
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgTree.h"
@@ -612,7 +613,10 @@ namespace Arpg
     {
         std::vector<UniqueMechanic> const& table = Uniques();
         // And the worn uniques' cross-skill procs (Arpg/ArpgProcs.h).
-        std::vector<std::pair<uint32, std::string>> const procs = ProcItemLines();
+        std::vector<std::pair<uint32, std::string>> procs = ProcItemLines();
+        // And their synergy triggers (Arpg/ArpgSynergy.h).
+        for (auto& line : SynergyItemLines())
+            procs.push_back(std::move(line));
         size_t const n = std::min<size_t>(table.size(), 255);
         size_t const m = std::min<size_t>(procs.size(), 255 - n);
         WorldPacket data(SMSG_ARPG_ITEM_MECHANICS, 1 + (n + m) * 64);

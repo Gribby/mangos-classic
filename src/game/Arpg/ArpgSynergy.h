@@ -2,7 +2,8 @@
  * ARPG synergy triggers: "when X happens, do Y" over the enemy states (Arpg/ArpgStates.h; the
  * client's docs/ARPG-SYNERGY.md).
  *
- * Events: a hit, a critical hit, a kill, a state applied, a state consumed. A trigger row names an
+ * Events: a hit, a critical hit, a kill, a state applied, a state consumed, a block, a dodge (the
+ * enemy is the one whose blow it was). A trigger row names an
  * event and its conditions (a spell by name, a skill, the hit's tags, a state the enemy must be in
  * or the state the event is about) and an effect:
  *
@@ -26,6 +27,7 @@
 #include "Common.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 class Player;
@@ -38,9 +40,14 @@ namespace Arpg
     void OnSynergyHit(Player* player, Unit* victim, SpellEntry const* spellInfo, uint32 tags, uint32 dealt, bool crit);
     // `player` killed `victim`.
     void OnSynergyKill(Player* player, Unit* victim);
+    // `defender` blocked (or dodged) a blow from `attacker`.
+    void OnSynergyDefend(Unit* defender, Unit* attacker, bool block);
     // A state was put on, or consumed from, `victim` by `player`.
     void OnStateApplied(Player* player, Unit* victim, State state);
     void OnStateConsumed(Player* player, Unit* victim, State state, uint32 worth);
+
+    // The worn uniques' synergy lines, by item entry, for their tooltips.
+    std::vector<std::pair<uint32, std::string>> SynergyItemLines();
 
     // A logged-out character's cooldowns go.
     void ForgetSynergy(Player* player);

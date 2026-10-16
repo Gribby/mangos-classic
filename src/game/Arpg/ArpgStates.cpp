@@ -32,13 +32,13 @@ namespace
 
     char const* const STATE_NAMES[MAX_STATE] = {
         "Chilled", "Frozen", "Ignited", "Bleeding", "Poisoned", "Withered", "Overloaded", "Judged",
-        "Dazed", "Stunned", "Consecrated",
+        "Dazed", "Stunned", "Consecrated", "Scorched Ground", "Frozen Ground",
     };
 
     // The ailment (a damage tag) behind each state, or 0xFF.
     uint8 const STATE_TAG[MAX_STATE] = {
         TAG_FROST, TAG_FROST, TAG_FIRE, TAG_PHYSICAL, TAG_NATURE, TAG_SHADOW, TAG_ARCANE, TAG_HOLY,
-        0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     };
 
     constexpr uint32 SPELL_CHILLED = 12484, SPELL_FROSTBITE = 12494, SPELL_DAZED = 1604;
@@ -121,15 +121,23 @@ namespace
         return resist;
     }
 
-    bool InConsecration(Unit const* unit)
+    // The ground states `unit` stands in: the areas' auras on it, by name.
+    uint32 GroundMask(Unit const* unit)
     {
+        uint32 mask = 0;
         for (auto const& [id, holder] : unit->GetSpellAuraHolderMap())
         {
             char const* name = holder->GetSpellProto()->SpellName[0];
-            if (name && std::strncmp(name, "Consecration", 12) == 0)
-                return true;
+            if (!name)
+                continue;
+            if (std::strncmp(name, "Consecration", 12) == 0)
+                mask |= StateBit(STATE_CONSECRATED);
+            else if (std::strncmp(name, "Flamestrike", 11) == 0 || std::strncmp(name, "Rain of Fire", 12) == 0)
+                mask |= StateBit(STATE_SCORCHED_GROUND);
+            else if (std::strncmp(name, "Blizzard", 8) == 0)
+                mask |= StateBit(STATE_FROZEN_GROUND);
         }
-        return false;
+        return mask;
     }
 
     // Dazed: slowed, its cast broken (not a boss's or a champion's: their casts are their fight);
@@ -166,8 +174,7 @@ namespace Arpg
             mask |= StateBit(STATE_FROZEN);
         if (victim->IsStunned())
             mask |= StateBit(STATE_STUNNED);
-        if (InConsecration(victim))
-            mask |= StateBit(STATE_CONSECRATED);
+        mask |= GroundMask(victim);
         uint32 const now = WorldTimer::getMSTime();
         std::lock_guard<std::mutex> guard(sLock);
         auto it = sRecords.find(KeyOf(victim));
@@ -195,7 +202,8 @@ namespace Arpg
 
     void AddDaze(Player* by, Unit* victim, float pct)
     {
-        if (!by || !victim || pct <= 0.0f || !victim->IsAlive() || victim->GetTypeId() != TYPEID_UNIT || !by->CanAttack(victim))
+        if (!by || !victim || pct <= 0.0f || !victim->IsAlive() || victim->GetTypeId() != TYPEID_UNIT ||
+                victim->IsPlayerControlled() || !by->CanAttack(victim))
             return;
         uint32 const now = WorldTimer::getMSTime();
         bool dazed = false;
@@ -228,11 +236,11 @@ namespace Arpg
         AddDaze(by, victim, pct);
     }
 
-    void ApplyState(Player* by, Unit* victim, State state)
+    bool ApplyState(Player* by, Unit* victim, State state)
     {
         if (!by || !victim || !victim->IsAlive() || !by->CanAttack(victim) || victim->GetTypeId() != TYPEID_UNIT ||
                 victim->IsPlayerControlled())
-            return;
+            return false;
         switch (state)
         {
             case STATE_DAZED:
@@ -242,31 +250,31 @@ namespace Arpg
                 if (DazeResist(victim) < 1.0f)
                 {
                     AddDaze(by, victim, 100.0f);
-                    return;
+                    return true;
                 }
                 uint32 const now = WorldTimer::getMSTime();
                 {
                     std::lock_guard<std::mutex> guard(sLock);
                     Record& r = sRecords[KeyOf(victim)];
                     if (int32(r.dazedUntil - now) > 0)
-                        return;
+                        return false;
                     r.daze = 0.0f;
                     r.lastBuild = now ? now : 1;
                     r.dazedUntil = now + DAZED_MS;
                 }
                 Daze(by, victim);
-                return;
+                return true;
             }
             case STATE_CHILLED:
                 Chill(by, victim, false);
                 OnStateApplied(by, victim, state);
-                return;
+                return true;
             case STATE_FROZEN:
                 Chill(by, victim, true);
                 OnStateApplied(by, victim, state);
-                return;
+                return true;
             default:
-                return;                         // ailments: InflictAilment; stuns and ground: their spells
+                return false;                   // ailments: InflictAilment; stuns and ground: their spells
         }
     }
 
@@ -296,6 +304,8 @@ namespace Arpg
             }
             case STATE_STUNNED:
             case STATE_CONSECRATED:
+            case STATE_SCORCHED_GROUND:
+            case STATE_FROZEN_GROUND:
                 return false;                   // a stun or a ground is read, never consumed
             default:
                 worth = TakeAffliction(victim, STATE_TAG[state]);

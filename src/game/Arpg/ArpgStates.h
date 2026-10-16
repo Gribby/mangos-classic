@@ -11,6 +11,7 @@
  *                Dazed for a few seconds: slowed, its cast broken, and taking more damage.
  *   Stunned      any stun.
  *   Consecrated  standing in a Consecration.
+ *   Scorched Ground, Frozen Ground  standing in a Flamestrike or Rain of Fire, in a Blizzard.
  *
  * States are kept per enemy, whoever put them there. Consuming a state ends it and gives back what
  * it held (a damage over time's damage left, Judged's stored damage), for the consumer to pay out.
@@ -42,6 +43,8 @@ namespace Arpg
         STATE_DAZED,
         STATE_STUNNED,
         STATE_CONSECRATED,
+        STATE_SCORCHED_GROUND,
+        STATE_FROZEN_GROUND,
         MAX_STATE
     };
 
@@ -61,7 +64,8 @@ namespace Arpg
     uint8 DazeOf(Unit const* victim);
 
     // Put `victim` in `state` (Dazed, Chilled, Frozen; an ailment takes InflictAilment).
-    void ApplyState(Player* by, Unit* victim, State state);
+    // True if it took (not already in it, a fair target).
+    bool ApplyState(Player* by, Unit* victim, State state);
 
     // End `state` on `victim` for `by`'s payoff: true if it was in it; `worth` is what the state
     // held (damage left, stored damage), 0 for those that hold none.

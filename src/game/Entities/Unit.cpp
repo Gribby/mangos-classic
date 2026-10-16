@@ -68,6 +68,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgStats.h"
+#include "Arpg/ArpgSynergy.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -2095,6 +2096,8 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
         {
             calcDamageInfo->TargetState = VICTIMSTATE_DODGE;
             calcDamageInfo->procEx |= PROC_EX_DODGE;
+            // ARPG: a dodge sets off the dodger's synergy triggers (Arpg/ArpgSynergy.h).
+            Arpg::OnSynergyDefend(calcDamageInfo->target, this, false);
             calcDamageInfo->cleanDamage += calcDamageInfo->totalDamage;
             calcDamageInfo->totalDamage = 0;
 
@@ -2111,6 +2114,8 @@ void Unit::CalculateMeleeDamage(Unit* pVictim, CalcDamageInfo* calcDamageInfo, W
             calcDamageInfo->blocked_amount = calcDamageInfo->target->GetShieldBlockValue();
             // ARPG: the Shield Wall notable heals on a block (Arpg/ArpgCharacter.h).
             Arpg::OnBlocked(calcDamageInfo->target);
+            // ARPG: and the blocker's synergy triggers (Arpg/ArpgSynergy.h).
+            Arpg::OnSynergyDefend(calcDamageInfo->target, this, true);
 
             if (calcDamageInfo->blocked_amount >= calcDamageInfo->totalDamage)
             {
