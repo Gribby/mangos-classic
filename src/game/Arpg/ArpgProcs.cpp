@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgProcs.h"
+#include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
@@ -529,6 +530,23 @@ namespace
     }
 
     // The power's line, as its tooltip shows it.
+    // The state a power's element feeds on (Arpg/ArpgStates.h): its own ailment's, so every damaging
+    // power pairs with whatever sets that ailment up.
+    State FedState(uint8 element)
+    {
+        switch (element)
+        {
+            case TAG_PHYSICAL: return STATE_BLEEDING;
+            case TAG_HOLY:     return STATE_JUDGED;
+            case TAG_FIRE:     return STATE_IGNITED;
+            case TAG_FROST:    return STATE_CHILLED;
+            case TAG_ARCANE:   return STATE_OVERLOADED;
+            case TAG_NATURE:   return STATE_POISONED;
+            default:           return STATE_WITHERED;
+        }
+    }
+    constexpr uint32 FED_PCT = 50;
+
     std::string PowerText(UniquePower const& p)
     {
         char const* when = "";
@@ -698,6 +716,10 @@ namespace
                     p.icd = PowerIcd(c.trigger, c.effect);
                     p.name = PowerName(p);
                     p.text = PowerText(p);
+                    // Not a frost ailment power: a Chill has no size to grow.
+                    if (Damaging(p.effect) && !(p.effect == PE_AILMENTS && p.element == TAG_FROST))
+                        p.text += std::string(" It deals ") + std::to_string(FED_PCT) + "% more to " + StateName(FedState(p.element)) +
+                                  " enemies.";
                     out.emplace(entry, std::move(p));
                 }
                 sLog.outString("ARPG uniques: %u %s uniques dealt their own powers from %u combinations", uint32(uniques[k].size()),
@@ -1015,12 +1037,17 @@ namespace
                     foes = foesNear(victim, POWER_RANGE * area, victim);
                 else if (p.effect == PE_AILMENTS)
                     foes = foesNear(victim ? static_cast<WorldObject*>(victim) : player, POWER_RANGE * area, nullptr);
+                State const fed = FedState(p.element);
                 for (Unit* unit : foes)
                 {
+                    // More on an enemy its element's state is already on (Arpg/ArpgStates.h).
+                    uint32 dealt = sized(unit, basis);
+                    if (StateMask(unit) & StateBit(fed))
+                        dealt = dealt * (100 + FED_PCT) / 100;
                     if (p.effect == PE_AILMENTS)
-                        InflictAilment(player, unit, p.element, sized(unit, basis), false);
+                        InflictAilment(player, unit, p.element, dealt, false);
                     else
-                        StrikeFoe(player, unit, look, school, std::max<uint32>(1, sized(unit, basis)));
+                        StrikeFoe(player, unit, look, school, std::max<uint32>(1, dealt));
                 }
                 if (!foes.empty())
                     ReportProc(player, PROC_DAMAGE, 0, p.name.c_str(), "strikes %u %s.", uint32(foes.size()),

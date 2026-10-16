@@ -68,6 +68,10 @@ namespace
               FX_DAZE, STATE_DAZED, 25, 1000, 0, nullptr,
               "Blocking a blow takes its attacker a quarter of the way to a Daze (once a second)." },
 
+            { "Contagious Verdict", EV_KILL, CLASS_PALADIN, nullptr, Arpg::SKILL_NONE, 0, STATE_JUDGED, ANY,
+              FX_SPREAD, STATE_JUDGED, 2, 0, 0, nullptr,
+              "A Judged enemy's death Judges the 2 nearest enemies within 10 yards." },
+
             // --- The mage's own: its elements set each other up. ---
             { "Shatter Point", EV_HIT, CLASS_MAGE, "Fire Blast", Arpg::SKILL_NONE, 0, STATE_FROZEN, ANY,
               FX_STRIKE, STATE_FROZEN, 120, 0, 0, nullptr,
@@ -79,6 +83,10 @@ namespace
               FX_APPLY, STATE_CHILLED, 0, 2000, 0, nullptr,
               "Dodging a blow Chills its attacker (once every 2 sec)." },
 
+            { "Pyre", EV_KILL, CLASS_MAGE, nullptr, Arpg::SKILL_NONE, 0, STATE_IGNITED, ANY,
+              FX_SPREAD, STATE_IGNITED, 2, 0, 0, nullptr,
+              "An Ignited enemy's death Ignites the 2 nearest enemies within 10 yards." },
+
             // --- The druid's own: claws open wounds, the moon and the swarm feed on them. ---
             { "Feeding Bite", EV_HIT, CLASS_DRUID, "Ferocious Bite", Arpg::SKILL_NONE, 0, STATE_BLEEDING, ANY,
               FX_STRIKE, STATE_BLEEDING, 100, 0, 0, nullptr,
@@ -86,6 +94,10 @@ namespace
             { "Blooming Star", EV_HIT, CLASS_DRUID, "Starfire", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
               FX_BURST, STATE_POISONED, 60, 0, 0, nullptr,
               "Starfire consumes Poison to burst onto every enemy within 8 yards for 60% of the hit and the poison left." },
+
+            { "Plague Bearer", EV_KILL, CLASS_DRUID, nullptr, Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
+              FX_SPREAD, STATE_POISONED, 2, 0, 0, nullptr,
+              "A Poisoned enemy's death Poisons the 2 nearest enemies within 10 yards." },
 
             // --- Paladin tree nodes (Arpg/ArpgSkills.cpp). ---
             { "Concussive Blows", EV_CRIT, CLASS_PALADIN, nullptr, SKILL_STRIKE, TagBit(TAG_PHYSICAL) | TagBit(TAG_HOLY), ANY, ANY,
@@ -139,6 +151,28 @@ namespace
             { "Staff of Dominance", EV_HIT, CLASS_MAGE, "Fireball", Arpg::SKILL_NONE, 0, STATE_CHILLED, ANY,
               FX_STRIKE, STATE_CHILLED, 80, 0, 0, "Staff of Dominance",
               "Fireball consumes Chill for an extra hit of 80% of the hit." },
+            // Dungeon blues of the first act's levels.
+            { "Smite's Mighty Hammer", EV_HIT, CLASS_PALADIN, "Seal of Righteousness", Arpg::SKILL_NONE, 0, STATE_DAZED, ANY,
+              FX_APPLY, STATE_JUDGED, 0, 1000, 0, "Smite's Mighty Hammer",
+              "Seal of Righteousness Judges a Dazed enemy (once a second)." },
+            { "Taskmaster Axe", EV_HIT, CLASS_PALADIN, "Judgement", Arpg::SKILL_NONE, 0, STATE_BLEEDING, ANY,
+              FX_STRIKE, STATE_BLEEDING, 100, 0, 0, "Taskmaster Axe",
+              "Judgement consumes Bleeding for an extra hit of 100% of the hit and the bleed left." },
+            { "Mograine's Might", EV_HIT, CLASS_PALADIN, "Judgement", Arpg::SKILL_NONE, 0, STATE_STUNNED, ANY,
+              FX_DAZE, STATE_DAZED, 100, 0, 0, "Mograine's Might",
+              "Judgement on a stunned enemy Dazes it." },
+            { "Hand of Righteousness", EV_CRIT, CLASS_PALADIN, "Seal of Righteousness", Arpg::SKILL_NONE, 0, STATE_JUDGED, ANY,
+              FX_SPREAD, STATE_JUDGED, 2, 2000, 0, "Hand of Righteousness",
+              "A critical Seal of Righteousness on a Judged enemy Judges the 2 nearest (once every 2 sec)." },
+            { "Emberstone Staff", EV_CRIT, CLASS_MAGE, "Fireball", Arpg::SKILL_NONE, 0, STATE_IGNITED, ANY,
+              FX_SPREAD, STATE_IGNITED, 2, 0, 0, "Emberstone Staff",
+              "A critical Fireball on an Ignited enemy Ignites the 2 nearest enemies within 10 yards." },
+            { "Illusionary Rod", EV_HIT, CLASS_MAGE, "Arcane Missile", Arpg::SKILL_NONE, 0, STATE_CHILLED, ANY,
+              FX_APPLY, STATE_OVERLOADED, 0, 0, 0, "Illusionary Rod",
+              "Arcane Missiles Overload a Chilled enemy." },
+            { "Rod of the Sleepwalker", EV_HIT, CLASS_DRUID, "Wrath", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
+              FX_STRIKE, STATE_POISONED, 80, 0, 0, "Rod of the Sleepwalker",
+              "Wrath consumes Poison for an extra hit of 80% of the hit and the poison left." },
             { "Wolfshead Helm", EV_HIT, CLASS_DRUID, "Shred", Arpg::SKILL_NONE, 0, STATE_BLEEDING, ANY,
               FX_DAZE, STATE_DAZED, 20, 0, 0, "Wolfshead Helm",
               "Shred on a Bleeding enemy takes it 20% of the way to a Daze." },
@@ -309,7 +343,10 @@ namespace
                 {
                     if (foe == victim || !foe->IsAlive() || spread >= count)
                         continue;
-                    if (Put(player, foe, row.state, seed))
+                    // A kill's spread is held to a hit of a tenth of each catcher's own health: a
+                    // fallen boss's size never lands whole on its adds.
+                    uint32 const dealt = c.event == EV_KILL ? std::min<uint32>(seed, foe->GetMaxHealth() / 10) : seed;
+                    if (Put(player, foe, row.state, dealt))
                         ++spread;
                 }
                 if (spread)
@@ -347,7 +384,7 @@ namespace
             {
                 if (!maskRead)
                 {
-                    mask = StateMask(c.victim);
+                    mask = StateMask(c.victim, c.event == EV_KILL);
                     maskRead = true;
                 }
                 if (!(mask & StateBit(State(row.needState))))
@@ -394,7 +431,8 @@ namespace Arpg
 
     void OnSynergyKill(Player* player, Unit* victim)
     {
-        Trip(player, Context{ EV_KILL, victim, nullptr, 0, 0, ANY });
+        // A kill's spread seeds its ailments as a hit of a tenth of the fallen's health.
+        Trip(player, Context{ EV_KILL, victim, nullptr, 0, victim ? victim->GetMaxHealth() / 10 : 0, ANY });
     }
 
     void OnSynergyDefend(Unit* defender, Unit* attacker, bool block)

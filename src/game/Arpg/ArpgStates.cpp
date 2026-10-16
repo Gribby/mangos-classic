@@ -159,12 +159,12 @@ namespace Arpg
         return state < MAX_STATE ? STATE_NAMES[state] : "?";
     }
 
-    uint32 StateMask(Unit const* victim)
+    uint32 StateMask(Unit const* victim, bool evenDead)
     {
-        if (!victim || !victim->IsAlive())
+        if (!victim || (!evenDead && !victim->IsAlive()))
             return 0;
         uint32 mask = 0;
-        uint32 const ailments = AfflictionMask(victim);
+        uint32 const ailments = AfflictionMask(victim) | (evenDead ? EndedAfflictionMask(victim) : 0);
         for (uint8 s = 0; s < MAX_STATE; ++s)
             if (STATE_TAG[s] != 0xFF && STATE_TAG[s] != TAG_FROST && (ailments & (1u << STATE_TAG[s])))
                 mask |= StateBit(State(s));

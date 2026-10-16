@@ -127,6 +127,8 @@ namespace Arpg
 
     // The ailments any player has on `victim`, as a mask of damage tags (1 << tag) (Arpg/ArpgStates.h).
     uint32 AfflictionMask(Unit const* victim);
+    // Those whose last tick or burst struck it just now (what a dying enemy died of).
+    uint32 EndedAfflictionMask(Unit const* victim);
 
     // Consume every player's `tag` ailment on `victim` (a damage over time's ticks left, Judged's
     // or Overload's stored damage, Wither's stacks): what was left of it, 0 if it had none.

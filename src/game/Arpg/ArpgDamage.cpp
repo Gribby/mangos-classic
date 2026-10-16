@@ -93,6 +93,18 @@ namespace
     std::mutex sLock;
     std::unordered_map<ObjectGuid, PlayerAilments> sAilments;
 
+    // The ailments whose last tick or burst just struck, by victim: cleared from the store before
+    // the strike lands, they are still what the victim died of (a kill reads them,
+    // Arpg/ArpgStates.h). sLock held.
+    struct Ended
+    {
+        uint64 where = 0;
+        uint32 mask = 0;         // 1 << damage tag
+        uint32 at = 0;
+    };
+    constexpr uint32 ENDED_MS = 1500;
+    std::unordered_map<ObjectGuid, Ended> sEnded;
+
     uint64 WhereOf(Unit const* unit)
     {
         return (uint64(unit->GetMapId()) << 32) | unit->GetInstanceId();
@@ -561,6 +573,19 @@ namespace Arpg
             {
                 return !a.ticks && !a.stacks && !a.stored;
             }), list.end());
+            // What is about to strike, kept a moment for a kill to read.
+            for (Strike const& s : due)
+            {
+                Ended& e = sEnded[s.victim];
+                if (e.where != mine.where || WorldTimer::getMSTimeDiff(e.at, now) > ENDED_MS)
+                    e.mask = 0;
+                e.where = mine.where;
+                e.mask |= 1u << s.tag;
+                e.at = now;
+            }
+            if (sEnded.size() > 256)
+                for (auto e = sEnded.begin(); e != sEnded.end();)
+                    e = WorldTimer::getMSTimeDiff(e->second.at, now) > ENDED_MS ? sEnded.erase(e) : std::next(e);
         }
         // Poison ticks on one target land as one hit.
         std::vector<Strike> merged;
@@ -674,6 +699,18 @@ namespace Arpg
                 if (pa.where == where && a.victim == guid && (a.ticks || ((a.stacks || a.stored) && int32(a.until - now) > 0)))
                     mask |= 1u << a.tag;
         return mask;
+    }
+
+    uint32 EndedAfflictionMask(Unit const* victim)
+    {
+        if (!victim)
+            return 0;
+        uint32 const now = WorldTimer::getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sEnded.find(victim->GetObjectGuid());
+        if (it == sEnded.end() || it->second.where != WhereOf(victim) || WorldTimer::getMSTimeDiff(it->second.at, now) > ENDED_MS)
+            return 0;
+        return it->second.mask;
     }
 
     uint32 TakeAffliction(Unit const* victim, uint8 tag)

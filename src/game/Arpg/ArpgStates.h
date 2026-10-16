@@ -53,7 +53,9 @@ namespace Arpg
     char const* StateName(uint8 state);
 
     // The states `victim` is in now, as StateBit()s.
-    uint32 StateMask(Unit const* victim);
+    // `evenDead`: a dying enemy's too, for a kill: its ailments, those whose last tick or burst
+    // just killed it included.
+    uint32 StateMask(Unit const* victim, bool evenDead = false);
     bool HasState(Unit const* victim, State state);
 
     // A hit's Daze: `dealt` of `tags` by `by` on `victim` (physical and holy hits build it).
