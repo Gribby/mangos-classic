@@ -134,7 +134,7 @@ namespace
             // --- Runes: socketed in the triggering skill ---
             { RUNE_GRACE, 0, "Rune of Grace", TRIG_SWING_CRIT, SKILL_STRIKE, {}, EFFECT_INSTANT,
               { "Holy Light", "Flash of Light" }, 0, 10000, 10000, "Holy Light or Flash of Light",
-              "A critical swing makes your next Holy Light or Flash of Light instant (once every 10 sec)." },
+              "A critical swing lets your next Holy Light or Flash of Light skip its recovery (once every 10 sec)." },
             { RUNE_VERDICT, 0, "Rune of Verdict", TRIG_SPELL_HIT, SKILL_JUDGEMENT, {}, EFFECT_DAMAGE,
               { "Exorcism", "Hammer of Wrath" }, 50, 8000, 8000, "Exorcism or Hammer of Wrath",
               "A Judgement that hits makes your next Exorcism or Hammer of Wrath deal 50% more (once every 8 sec)." },
@@ -151,7 +151,7 @@ namespace
             // --- Uniques: worn ---
             { 0, 2243, "Hand of Edward the Odd", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_INSTANT,
               { "*" }, 0, 20000, 10000, "spell",
-              "A critical swing makes your next spell instant (once every 20 sec)." },
+              "A critical swing lets your next spell skip its recovery (once every 20 sec)." },
             { 0, 11684, "Ironfoe", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_DAMAGE,
               { "Judgement", "Judgement of Righteousness", "Judgement of Command" }, 60, 6000, 8000, "Judgement",
               "A critical swing makes your next Judgement deal 60% more (once every 6 sec)." },
@@ -163,7 +163,7 @@ namespace
               "A critical heal makes your next Exorcism, Holy Wrath or Holy Shock deal 50% more (once every 8 sec)." },
             { 0, 873, "Staff of Jordan", TRIG_SPELL_CRIT, Arpg::SKILL_NONE, { "Frostbolt" }, EFFECT_INSTANT,
               { "Fireball", "Pyroblast" }, 0, 8000, 10000, "Fireball or Pyroblast",
-              "A critical Frostbolt makes your next Fireball or Pyroblast instant (once every 8 sec)." },
+              "A critical Frostbolt lets your next Fireball or Pyroblast skip its recovery (once every 8 sec)." },
             { 0, 6220, "Meteor Shard", TRIG_SWING_CRIT, Arpg::SKILL_NONE, {}, EFFECT_FREE,
               { "Sinister Strike", "Eviscerate", "Heroic Strike", "Mortal Strike" }, 0, 8000, 8000, "finishing strike",
               "A critical swing makes your next Sinister Strike, Eviscerate, Heroic Strike or Mortal Strike cost nothing (once every 8 sec)." },
@@ -174,9 +174,9 @@ namespace
                     "Fire Blast", "Within 4 sec of a critical Fireball, your Fire Blast deals 60% more and bursts onto every enemy within 6 yards for 50%.",
                     { 0, KIT_BURST, 2136, 0, 6.0f, 50, "", "Kindling Blast" }),
             Synergy(130, "Hot Streak", TRIG_SPELL_CRIT, { "Fire Blast", "Scorch" }, EFFECT_INSTANT, { "Pyroblast" }, 0, 8000, 8000,
-                    "Pyroblast", "A critical Fire Blast or Scorch makes your next Pyroblast instant (once every 8 sec)."),
+                    "Pyroblast", "A critical Fire Blast or Scorch lets your next Pyroblast skip its recovery (once every 8 sec)."),
             Synergy(226, "Winter's Grasp", TRIG_LANDED, { "Frost Nova" }, EFFECT_INSTANT, { "Frostbolt" }, 0, 6000, 6000,
-                    "Frostbolt", "Frost Nova makes your next Frostbolt instant, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.",
+                    "Frostbolt", "Frost Nova lets your next Frostbolt skip its recovery, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.",
                     { 0, KIT_FRAGMENTS, 116, 3, 10.0f, 50, "", "Winter's Grasp" }),
             Synergy(327, "Arcane Echoes", TRIG_SPELL_CRIT, { "Arcane Explosion" }, EFFECT_FREE, { "Arcane Missiles" }, 0, 6000, 6000,
                     "Arcane Missiles", "A critical Arcane Explosion makes your next Arcane Missiles cost no mana, and each missile jumps to 1 more enemy within 8 yards for 50%.",
@@ -184,7 +184,7 @@ namespace
             Synergy(429, "Resonance", TRIG_SPELL_CRIT, { "Arcane Missiles", "Arcane Missile" }, EFFECT_WIDE, { "Arcane Explosion" }, 50, 4000, 5000,
                     "Arcane Explosion", "A critical Arcane Missile makes your next Arcane Explosion 50% wider (once every 4 sec)."),
             Synergy(525, "Firestorm", TRIG_SPELL_CRIT, { "Fire Blast", "Scorch" }, EFFECT_INSTANT, { "Flamestrike" }, 0, 6000, 6000,
-                    "Flamestrike", "A critical Fire Blast or Scorch makes your next Flamestrike instant (once every 6 sec)."),
+                    "Flamestrike", "A critical Fire Blast or Scorch lets your next Flamestrike skip its recovery (once every 6 sec)."),
             // The paladin's.
             Synergy(311, "Crusader's Verdict", TRIG_SWING_CRIT, {}, EFFECT_DAMAGE, { "Judgement", "Judgement of Righteousness", "Judgement of Command" }, 50,
                     6000, 6000, "Judgement", "A critical swing makes your next Judgement deal 50% more (once every 6 sec)."),
@@ -197,10 +197,10 @@ namespace
                     "Holy Wrath", "Stunning an enemy with Hammer of Justice makes your next Holy Wrath instant (once every 10 sec)."),
             Synergy(204, "Crusader's Grace", TRIG_SPELL_CRIT, { "Judgement", "Judgement of Righteousness", "Judgement of Command", "Exorcism", "Hammer of Wrath" }, EFFECT_INSTANT,
                     { "Holy Light", "Flash of Light" }, 0, 8000, 8000, "Holy Light or Flash of Light",
-                    "A critical Judgement, Exorcism or Hammer of Wrath makes your next Holy Light or Flash of Light instant (once every 8 sec)."),
+                    "A critical Judgement, Exorcism or Hammer of Wrath lets your next Holy Light or Flash of Light skip its recovery (once every 8 sec)."),
             // The druid's.
             Synergy(151, "Lunar Eclipse", TRIG_SPELL_CRIT, { "Wrath" }, EFFECT_INSTANT, { "Starfire" }, 0, 8000, 6000,
-                    "Starfire", "A critical Wrath makes your next Starfire instant, and it bursts onto every enemy within 6 yards for 40% (once every 8 sec).",
+                    "Starfire", "A critical Wrath lets your next Starfire skip its recovery, and it bursts onto every enemy within 6 yards for 40% (once every 8 sec).",
                     { 0, KIT_BURST, 2912, 0, 6.0f, 40, "", "Lunar Eclipse" }),
             Synergy(243, "Moonkissed", TRIG_SPELL_CRIT, { "Wrath", "Starfire" }, EFFECT_KIT, { "Moonfire" }, 0, 6000, 6000,
                     "Moonfire", "A critical Wrath or Starfire makes your next Moonfire also land on the 3 nearest enemies within 8 yards (once every 6 sec).",
@@ -212,7 +212,7 @@ namespace
             Synergy(549, "Bloodied Bite", TRIG_SPELL_CRIT, { "Claw", "Shred" }, EFFECT_CRIT, { "Ferocious Bite" }, 0, 6000, 8000,
                     "Ferocious Bite", "A critical Claw or Shred makes your next Ferocious Bite a sure critical strike (once every 6 sec)."),
             Synergy(643, "Overgrowth's Gift", TRIG_LANDED, { "Entangling Roots" }, EFFECT_INSTANT, { "Regrowth", "Healing Touch" }, 0, 10000, 8000,
-                    "Regrowth or Healing Touch", "Entangling Roots makes your next Regrowth or Healing Touch instant (once every 10 sec)."),
+                    "Regrowth or Healing Touch", "Entangling Roots lets your next Regrowth or Healing Touch skip its recovery (once every 10 sec)."),
 
             // --- Synergy uniques, by name ---
             Worn("Mana Igniting Cord", TRIG_SPELL_CRIT, { "Fireball" }, EFFECT_RESET, { "Fire Blast" }, 0, 6000, 0,
@@ -903,7 +903,7 @@ namespace
         {
             case EFFECT_INSTANT:
                 mod = new SpellModifier(SPELLMOD_CASTING_TIME, SPELLMOD_PCT, -100, owner, mask);
-                words = "instant";
+                words = "swift";
                 break;
             case EFFECT_DAMAGE:
                 mod = new SpellModifier(SPELLMOD_DAMAGE, SPELLMOD_PCT, def.value, owner, mask);
@@ -1355,7 +1355,7 @@ namespace Arpg
             {
                 // Its mod's work is done at the go, as below, but its kit row waits for the hit:
                 // the mod goes now, the row when the spell is done.
-                if (r.mod->op == SPELLMOD_CASTING_TIME ? (!hasCastTime || spell->GetCastTime() > 0)
+                if (r.mod->op == SPELLMOD_CASTING_TIME ? (!hasCastTime || spell->GetArpgCastTime() > 0)
                                                        : (spell->GetPowerCost() > 0 || (!info->manaCost && !info->ManaCostPercentage)))
                     continue;
                 player->AddSpellMod(r.mod, false); // deletes it
@@ -1369,7 +1369,7 @@ namespace Arpg
                 // Spent only by a cast it made instant: not a spell instant anyway (a Seal after
                 // the swing), nor one whose cast began before the proc. Its work is done at the
                 // go, so it goes now, before a second cast in a missile's flight could use it.
-                if (!hasCastTime || spell->GetCastTime() > 0)
+                if (!hasCastTime || spell->GetArpgCastTime() > 0)
                     continue;
                 Drop(player, pp, i);
                 continue;

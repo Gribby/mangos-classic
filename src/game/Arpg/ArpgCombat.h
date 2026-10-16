@@ -80,6 +80,13 @@ namespace Arpg
     // mind-controlled ARPG player fights as its controller's AI makes it, the stock way.
     bool Active(WorldObject const* object);
 
+    // ARPG pacing: a spell `caster` casts at once, its cast time becoming its recovery (the
+    // global cooldown it starts, at least): an ARPG player's own class spell that is not a
+    // channel, starts a global cooldown and casts in at most INSTANT_CAST_MAX_MS (a resurrection, a
+    // teleport or a portal keeps its cast). The client's spell/cast_send.rs mirrors it.
+    constexpr int32 INSTANT_CAST_MAX_MS = 6000;
+    bool CastsAtOnce(WorldObject const* caster, SpellEntry const* spellInfo);
+
     // Whether `unit` never misses: an ARPG player, or a pet, totem or guardian of one. The ARPG
     // has no hit stat: swings, shots and spells always connect (dodge, parry, block and
     // resistances still apply).

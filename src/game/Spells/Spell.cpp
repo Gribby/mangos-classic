@@ -443,6 +443,7 @@ Spell::Spell(WorldObject* caster, SpellEntry const* info, uint32 triggeredFlags,
     m_arpgAimDist = 0.0f;
     m_arpgAimSet = false;
     m_arpgSecondaryPct = 0;
+    m_arpgRecovery = 0;
     m_arpgPierceBolt = false;
     m_arpgBoltFrom[0] = m_arpgBoltFrom[1] = m_arpgBoltFrom[2] = 0.0f;
     m_arpgBoltReach = 0.0f;
@@ -3126,6 +3127,16 @@ void Spell::Prepare()
     {
         SpellModRAII spellModController(this, m_trueCaster->GetSpellModOwner(), false, true);
         m_casttime = GetSpellCastTime(m_spellInfo, m_trueCaster, this, true);
+        // ARPG: a class spell casts at once, and its cast time is its recovery instead.
+        // The recovery leaves out the caster's cast speed (a slow such as Curse of Tongues), which
+        // the client's prediction of it cannot see.
+        if (m_casttime > 0 && !m_IsTriggeredSpell && Arpg::CastsAtOnce(m_trueCaster, m_spellInfo))
+        {
+            float const castSpeed = static_cast<Unit*>(m_trueCaster)->GetFloatValue(UNIT_MOD_CAST_SPEED);
+            m_arpgRecovery = castSpeed > 0.0f ? uint32(std::floor(float(m_casttime) / castSpeed)) : uint32(m_casttime);
+            m_arpgRecovery = std::max<uint32>(m_arpgRecovery, 1);
+            m_casttime = 0;
+        }
     }
 
     // set timer base at cast time
@@ -3184,7 +3195,8 @@ void Spell::Prepare()
                 m_caster->SetCurrentCastedSpell(this);
 
             // add gcd server side (client side is handled by client itself)
-            m_caster->AddGCD(*m_spellInfo);
+            // (ARPG: at least the recovery of a spell that cast at once.)
+            m_caster->AddGCD(*m_spellInfo, m_arpgRecovery);
         }
 
         // will show cast bar

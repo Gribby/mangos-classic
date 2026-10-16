@@ -598,7 +598,8 @@ Unit::SpellProcEventTriggerCheck Unit::IsTriggeredAtSpellProcEvent(ProcExecution
     // If PPM exist calculate chance from PPM
     if (!data.isVictim && spellProcEvent && spellProcEvent->ppmRate != 0)
     {
-        uint32 WeaponSpeed = GetAttackTime(data.attType);
+        // ARPG: the paced swing's speed (Arpg::PacedWeaponSpeed).
+        uint32 WeaponSpeed = Arpg::PacedWeaponSpeed(this, data.attType, GetAttackTime(data.attType));
         // ARPG: the Relentless node adds procs a minute (Arpg/ArpgCharacter.h).
         chance = GetPPMProcChance(WeaponSpeed, spellProcEvent->ppmRate + Arpg::ExtraPpm(this, spellProto));
     }

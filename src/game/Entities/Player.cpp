@@ -7464,7 +7464,8 @@ void Player::CastItemCombatSpell(Unit* Target, WeaponAttackType attType, bool sp
 
         if (spellData.SpellPPMRate)
         {
-            uint32 WeaponSpeed = proto->Delay;
+            // ARPG: the paced swing's speed (Arpg::PacedWeaponSpeed).
+            uint32 WeaponSpeed = Arpg::PacedWeaponSpeed(this, attType, proto->Delay);
             chance = GetPPMProcChance(WeaponSpeed, spellData.SpellPPMRate);
         }
         else if (chance > 100.0f)
@@ -7509,7 +7510,7 @@ void Player::CastItemCombatSpell(Unit* Target, WeaponAttackType attType, bool sp
             float ppmRate = sSpellMgr.GetItemEnchantProcChance(spellInfo->Id);
 
             float chance = ppmRate
-                           ? GetPPMProcChance(proto->Delay, ppmRate)
+                           ? GetPPMProcChance(Arpg::PacedWeaponSpeed(this, attType, proto->Delay), ppmRate)
                            : pEnchant->amount[s] != 0 ? float(pEnchant->amount[s]) : GetWeaponProcChance();
 
             ApplySpellMod(spellInfo->Id, SPELLMOD_CHANCE_OF_SUCCESS, chance);
@@ -20233,7 +20234,7 @@ void Player::ForceHealAndPowerUpdateInZone()
     }
 }
 
-void Player::AddGCD(SpellEntry const& spellEntry, uint32 /*forcedDuration = 0*/, bool updateClient /*= false*/)
+void Player::AddGCD(SpellEntry const& spellEntry, uint32 forcedDuration /*= 0*/, bool updateClient /*= false*/)
 {
     int32 gcdDuration = spellEntry.StartRecoveryTime;
     if (!spellEntry.StartRecoveryCategory && !gcdDuration)
@@ -20241,6 +20242,8 @@ void Player::AddGCD(SpellEntry const& spellEntry, uint32 /*forcedDuration = 0*/,
 
     // gcd modifier auras applied only to self spells and only player have mods for this
     ApplySpellMod(spellEntry.Id, SPELLMOD_GLOBAL_COOLDOWN, gcdDuration);
+    // ARPG: a spell that cast at once recovers for its cast time, at least (Arpg::CastsAtOnce).
+    gcdDuration = std::max(gcdDuration, int32(forcedDuration));
 
     // apply haste rating
     if (spellEntry.StartRecoveryCategory == 133 && gcdDuration == 1500 &&

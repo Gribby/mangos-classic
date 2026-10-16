@@ -173,6 +173,10 @@ namespace Arpg
     // worn uniques that change it, and the conditional bonuses.
     std::vector<std::pair<uint8, std::vector<std::string>>> SkillBonusLines(Player const* player);
 
+    // The slotted skills by name, each with its spent nodes ("Wide Swing 3"), for the play
+    // statistics (Arpg/ArpgStats.h).
+    std::vector<std::pair<std::string, std::vector<std::string>>> SkillBuild(Player const* player);
+
     // Add what the player's skill nodes give to `totals`.
     void AddSkillTotals(Player const* player, WebTotals& totals);
 

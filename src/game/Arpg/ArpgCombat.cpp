@@ -187,6 +187,18 @@ namespace Arpg
         return sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE) && player->IsArpgClient() && !player->HasCharmer();
     }
 
+    bool CastsAtOnce(WorldObject const* caster, SpellEntry const* spellInfo)
+    {
+        if (!Active(caster) || !spellInfo->SpellFamilyName || !spellInfo->StartRecoveryCategory)
+            return false;
+        Player const* player = static_cast<Player const*>(caster);
+        if (spellInfo->SpellFamilyName != uint32(player->GetSpellClass()) || IsChanneledSpell(spellInfo)
+                || spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
+            return false;
+        SpellCastTimesEntry const* row = sSpellCastTimesStore.LookupEntry(spellInfo->CastingTimeIndex);
+        return row && row->CastTime > 0 && row->CastTime <= INSTANT_CAST_MAX_MS;
+    }
+
     bool ItemsBind(Player const* player)
     {
         return !Active(player);

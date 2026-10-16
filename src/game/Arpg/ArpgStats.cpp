@@ -6,8 +6,10 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgSkills.h"
 
 #include "Entities/Creature.h"
+#include "Entities/Item.h"
 #include "Entities/Player.h"
 #include "Server/DBCStores.h"
 #include "Spells/Spell.h"
@@ -264,7 +266,23 @@ namespace
         o << "},\"takenTop\":{";
         for (size_t i = 0; i < taken.size(); ++i)
             o << (i ? "," : "") << Json(taken[i].first) << ":" << taken[i].second;
-        o << "}}";
+        // The build as it is at the end: the weapon, the defences and the skills' nodes.
+        Item const* weapon = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+        o << "},\"build\":{\"weapon\":" << Json(weapon ? weapon->GetProto()->Name1 : "none")
+          << ",\"weaponSpeed\":" << (weapon ? weapon->GetProto()->Delay : 0)
+          << ",\"swingMs\":" << uint32(player->GetFloatValue(UNIT_FIELD_BASEATTACKTIME))
+          << ",\"maxHealth\":" << player->GetMaxHealth() << ",\"armor\":" << player->GetArmor()
+          << ",\"blockPct\":" << int32(player->GetFloatValue(PLAYER_BLOCK_PERCENTAGE))
+          << ",\"dodgePct\":" << int32(player->GetFloatValue(PLAYER_DODGE_PERCENTAGE)) << ",\"skills\":{";
+        std::vector<std::pair<std::string, std::vector<std::string>>> const build = SkillBuild(player);
+        for (size_t i = 0; i < build.size(); ++i)
+        {
+            o << (i ? "," : "") << Json(build[i].first) << ":[";
+            for (size_t n = 0; n < build[i].second.size(); ++n)
+                o << (n ? "," : "") << Json(build[i].second[n]);
+            o << "]";
+        }
+        o << "}}}";
         return o.str();
     }
 }

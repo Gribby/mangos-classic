@@ -129,6 +129,10 @@ namespace Arpg
     // `caster` judged (Righteous Mind).
     void OnJudgement(Unit* caster);
 
+    // The weapon speed an ARPG player's procs a minute go by: its paced swing's (ARPG melee's
+    // pace, Arpg/ArpgCharacter.cpp), so the quicker swings proc no more often a minute.
+    uint32 PacedWeaponSpeed(Unit const* unit, WeaponAttackType attType, uint32 weaponSpeed);
+
     // Extra procs a minute for `caster`'s proc aura `spellInfo` (Relentless).
     float ExtraPpm(Unit const* caster, SpellEntry const* spellInfo);
 

@@ -166,7 +166,7 @@ namespace
             { SKILL_STRIKE, CLASS_PALADIN, "Crusader", "Your held swing and your Seals, as one: the Seal is the swing's damage.", 20154, { "Seal of" },
               { "Reach", "Righteous", "Zeal" },
               {
-                  Key(101, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Wide Swing", "Your swings also strike every other enemy in front of you, for 20/35/50% of the hit.", 845, KEY_WIDE_SWING),
+                  Key(101, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Wide Swing", "Your swings strike every other enemy in front of you for 55/70/85% of the hit, not 40%.", 845, KEY_WIDE_SWING),
                   Key(102, SKILL_NODE_MODIFIER, 0, 2, 101, 2, "Long Arm", "+1 yard melee reach per rank.", 12292, KEY_LONG_ARM),
                   Key(103, SKILL_NODE_MODIFIER, 0, 3, 102, 4, "Heavy Hand", "5% more Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
                   Ail(104, 0, 4, 103, 3, "Rending Strikes", "Your Crusader hits have an 8% chance per rank to cause Bleeding.", 772, TAG_PHYSICAL, 8),
@@ -191,8 +191,8 @@ namespace
               {
                   Mod(201, 0, 1, 0, 4, "Healing Light", "6% more healing per rank.", 20237, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
                   Mod(202, 0, 2, 201, 3, "Light's Grace", "+4% critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
-                  Mod(203, 0, 3, 202, 3, "Swift Light", "-0.2 sec cast time per rank.", 19750, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
-                  Key(204, SKILL_NODE_SYNERGY, 0, 4, 203, 1, "Crusader's Grace", "A critical Judgement, Exorcism or Hammer of Wrath makes your next Holy Light or Flash of Light instant (once every 8 sec).", 635, KEY_NONE),
+                  Mod(203, 0, 3, 202, 3, "Swift Light", "-0.2 sec recovery per rank.", 19750, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
+                  Key(204, SKILL_NODE_SYNERGY, 0, 4, 203, 1, "Crusader's Grace", "A critical Judgement, Exorcism or Hammer of Wrath lets your next Holy Light or Flash of Light skip its recovery (once every 8 sec).", 635, KEY_NONE),
                   Key(205, SKILL_NODE_CAPSTONE, 0, 5, 204, 1, "Dawnbringer", "Your heals on yourself also send half their amount at the nearest enemy as a Holy bolt.", 19977, KEY_DAWNBRINGER),
                   Key(206, SKILL_NODE_SYNERGY, 2, 1, 0, 3, "Searing Radiance", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Holy damage.", 879, KEY_LIGHT_STRIKE),
                   Key(207, SKILL_NODE_SYNERGY, 2, 2, 206, 2, "Judging Light", "Your heals Judge every enemy within 8 yards, as a hit of 25% of the heal per rank (once every 3 sec).", 20271, KEY_JUDGING_LIGHT),
@@ -284,7 +284,7 @@ namespace
               {
                   Kit(121, 0, 1, 0, 3, "Twin Fireball", "Fireball launches 1/1/2 extra fireballs, at 45/60/60%.", 133,
                       KIT_EXTRA_PROJECTILES, 133, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
-                  Mod(122, 0, 2, 121, 3, "Quick Fireball", "-0.15 sec Fireball cast time per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Fireball"),
+                  Mod(122, 0, 2, 121, 3, "Quick Fireball", "-0.15 sec Fireball recovery per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Fireball"),
                   Kit(123, 0, 3, 122, 3, "Piercing Flame", "Fireball flies through 1/2/4 enemies, at 60%.", 2136,
                       KIT_PIERCE, 133, { 1, 2, 4 }, { 0, 0, 0 }, { 60, 60, 60 }),
                   KitCap(124, 0, 4, 123, "Flame Echo", "Every 3rd Fireball is echoed for free, at 70%.", 11129, KIT_ECHO, 133, 3, 0.0f, 70),
@@ -292,8 +292,8 @@ namespace
                   Ail(126, 1, 2, 125, 3, "Kindle", "Your Fireball and Pyroblast hits have an 8% chance per rank to Ignite, beside their critical strikes.", 2120, TAG_FIRE, 8),
                   Mod(127, 1, 3, 126, 3, "Lingering Flame", "Fireball's and Pyroblast's burn deals 15% more per rank.", 2948, SPELLMOD_DOT, SPELLMOD_PCT, 15),
                   Key(128, SKILL_NODE_CAPSTONE, 1, 4, 127, 1, "Pyroclasm", "Critical Fireballs and Pyroblasts explode: every enemy within 8 yards of the target takes 60% of the hit.", 11113, KEY_PYROCLASM),
-                  Mod(129, 2, 1, 0, 3, "Quick Pyre", "-0.5 sec Pyroblast cast time per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -500, "Pyroblast"),
-                  Key(130, SKILL_NODE_SYNERGY, 2, 2, 129, 1, "Hot Streak", "A critical Fire Blast or Scorch makes your next Pyroblast instant (once every 8 sec).", 11366, KEY_NONE),
+                  Mod(129, 2, 1, 0, 3, "Quick Pyre", "-0.5 sec Pyroblast recovery per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -500, "Pyroblast"),
+                  Key(130, SKILL_NODE_SYNERGY, 2, 2, 129, 1, "Hot Streak", "A critical Fire Blast or Scorch lets your next Pyroblast skip its recovery (once every 8 sec).", 11366, KEY_NONE),
                   Mod(131, 2, 3, 130, 3, "Pyre", "Pyroblast's critical strikes deal 20% more of their bonus per rank.", 11129, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20, "Pyroblast"),
                   KitCap(132, 2, 4, 131, "Cataclysm", "Pyroblast bursts onto every enemy within 10 yards of its target, at 60%.", 11113, KIT_BURST, 11366, 0, 10.0f, 60),
                   Conv(133, 2, 5, 132, "Frostfire Bolt", "Fireball and Pyroblast count as Frost: a critical one Chills (Freezes the Chilled), and your Chill chances apply.", 116, TAG_FROST),
@@ -308,7 +308,7 @@ namespace
                       KIT_CHAIN, 116, { 1, 2 }, { 10, 10 }, { 50, 50 }),
                   KitCap(224, 0, 4, 223, "Echoing Frost", "Every 3rd Frostbolt is echoed for free, at 60%.", 12472, KIT_ECHO, 116, 3, 0.0f, 60),
                   Ail(225, 1, 1, 0, 3, "Deep Chill", "Your Frostbolt and Cone of Cold hits have a 10% chance per rank to chill; a critical hit on the chilled freezes.", 12484, TAG_FROST, 10),
-                  Key(226, SKILL_NODE_SYNERGY, 1, 2, 225, 1, "Winter's Grasp", "Frost Nova makes your next Frostbolt instant, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.", 122, KEY_NONE),
+                  Key(226, SKILL_NODE_SYNERGY, 1, 2, 225, 1, "Winter's Grasp", "Frost Nova lets your next Frostbolt skip its recovery, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.", 122, KEY_NONE),
                   Mod(227, 1, 3, 226, 3, "Razor Ice", "Critical strikes deal 20% more of their bonus per rank.", 11958, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
                   Key(228, SKILL_NODE_CAPSTONE, 1, 4, 227, 1, "Shatterstorm", "Frostbolt on a frozen enemy shatters: every enemy within 8 yards of it takes 80% of the hit.", 122, KEY_SHATTERSTORM),
                   Key(233, SKILL_NODE_SYNERGY, 1, 5, 228, 1, "Cold Snap", "When you consume a Freeze, the 2 nearest enemies within 10 yards are Chilled.", 12472, KEY_NONE),
@@ -358,14 +358,14 @@ namespace
                   Mod(523, 0, 3, 522, 3, "Thrifty Storm", "10% less Blizzard mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10, "Blizzard"),
                   Key(524, SKILL_NODE_CAPSTONE, 0, 4, 523, 1, "Glacial Storm", "Blizzard chills every enemy it strikes, and each strike has a 15% chance to freeze one chilled already.", 12484, KEY_GLACIAL_STORM),
                   Key(533, SKILL_NODE_SYNERGY, 0, 5, 524, 1, "Rime Field", "Your Frost hits Freeze an enemy standing in a Blizzard (once every 3 sec).", 10, KEY_NONE),
-                  Key(525, SKILL_NODE_SYNERGY, 1, 1, 0, 1, "Firestorm", "A critical Fire Blast or Scorch makes your next Flamestrike instant (once every 6 sec).", 2120, KEY_NONE),
+                  Key(525, SKILL_NODE_SYNERGY, 1, 1, 0, 1, "Firestorm", "A critical Fire Blast or Scorch lets your next Flamestrike skip its recovery (once every 6 sec).", 2120, KEY_NONE),
                   Mod(526, 1, 2, 525, 3, "Storm Surge", "+8% radius per rank.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 8),
                   Mod(527, 1, 3, 526, 3, "Raging Storm", "Blizzard's strikes and Flamestrike's burn deal 6% more per rank.", 2120, SPELLMOD_DOT, SPELLMOD_PCT, 6),
                   ModCap(528, 1, 4, 527, "Eye of the Storm", "Blizzard and Flamestrike are 30% wider.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 30),
-                  Mod(529, 2, 1, 0, 3, "Quick Flamestrike", "-0.3 sec Flamestrike cast time per rank.", 2120, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -300, "Flamestrike"),
+                  Mod(529, 2, 1, 0, 3, "Quick Flamestrike", "-0.3 sec Flamestrike recovery per rank.", 2120, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -300, "Flamestrike"),
                   Mod(530, 2, 2, 529, 3, "Searing Ground", "Flamestrike's burn deals 15% more per rank.", 2120, SPELLMOD_DOT, SPELLMOD_PCT, 15, "Flamestrike"),
                   Ail(531, 2, 3, 530, 3, "Kindling Strike", "Flamestrike's hits have a 10% chance per rank to Ignite.", 2120, TAG_FIRE, 10),
-                  ModCap(532, 2, 4, 531, "Meteor", "Flamestrike is instant.", 11113, SPELLMOD_CASTING_TIME, SPELLMOD_PCT, -100, "Flamestrike"),
+                  ModCap(532, 2, 4, 531, "Meteor", "Flamestrike skips its recovery.", 11113, SPELLMOD_CASTING_TIME, SPELLMOD_PCT, -100, "Flamestrike"),
               } },
             { SKILL_FIRE_BLAST, CLASS_MAGE, "Fire Blast", "Fire Blast and Scorch: quick fire, close in.", 2136, { "Fire Blast", "Scorch" },
               { "Blast", "Scorch", "Combust" },
@@ -375,7 +375,7 @@ namespace
                       KIT_BURST, 2136, { 0, 0, 0 }, { 4, 6, 8 }, { 40, 40, 40 }),
                   Mod(623, 0, 3, 622, 3, "Incineration", "+5% Fire Blast critical strike chance per rank.", 2136, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5, "Fire Blast"),
                   Key(624, SKILL_NODE_CAPSTONE, 0, 4, 623, 1, "Chain Blast", "A kill with Fire Blast readies Fire Blast at once.", 11129, KEY_CHAIN_BLAST),
-                  Mod(625, 1, 1, 0, 3, "Quick Scorch", "-0.2 sec Scorch cast time per rank.", 2948, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Scorch"),
+                  Mod(625, 1, 1, 0, 3, "Quick Scorch", "-0.2 sec Scorch recovery per rank.", 2948, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Scorch"),
                   Kit(626, 1, 2, 625, 2, "Arcing Scorch", "Scorch chains to 1/2 more enemies within 10 yards, at 60%.", 2948,
                       KIT_CHAIN, 2948, { 1, 2 }, { 10, 10 }, { 60, 60 }),
                   Ail(627, 1, 3, 626, 3, "Scorching", "Your Fire Blast and Scorch hits have a 10% chance per rank to Ignite.", 2120, TAG_FIRE, 10),
@@ -391,17 +391,17 @@ namespace
               {
                   Kit(141, 0, 1, 0, 3, "Splitting Wrath", "Wrath launches 1/1/2 extra bolts, at 45/60/60%.", 5176,
                       KIT_EXTRA_PROJECTILES, 5176, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
-                  Mod(142, 0, 2, 141, 3, "Quick Wrath", "-0.1 sec Wrath cast time per rank.", 16814, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -100, "Wrath"),
+                  Mod(142, 0, 2, 141, 3, "Quick Wrath", "-0.1 sec Wrath recovery per rank.", 16814, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -100, "Wrath"),
                   Ail(143, 0, 3, 142, 3, "Thorned Wrath", "Your Wrath and Starfire hits have an 8% chance per rank to Poison.", 467, TAG_NATURE, 8),
                   KitCap(144, 0, 4, 143, "Wrath of Cenarius", "Wrath chains to 3 more enemies within 10 yards, at 60%.", 5176, KIT_CHAIN, 5176, 3, 10.0f, 60),
                   Key(153, SKILL_NODE_SYNERGY, 0, 5, 144, 1, "Thorns of Cenarius", "A critical Wrath on a Poisoned enemy spreads Poison to the 2 nearest enemies within 10 yards.", 467, KEY_NONE),
                   Mod(145, 1, 1, 0, 4, "Lunar Fury", "6% more Starfire damage per rank.", 2912, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6, "Starfire"),
-                  Mod(146, 1, 2, 145, 3, "Quick Starfire", "-0.2 sec Starfire cast time per rank.", 16850, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Starfire"),
+                  Mod(146, 1, 2, 145, 3, "Quick Starfire", "-0.2 sec Starfire recovery per rank.", 16850, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Starfire"),
                   Ail(147, 1, 3, 146, 3, "Moonstruck", "Your Wrath and Starfire hits have a 10% chance per rank to Overload.", 8921, TAG_ARCANE, 10),
                   KitCap(148, 1, 4, 147, "Starfall", "Starfire bursts onto every enemy within 10 yards of its target, at 60%.", 20687, KIT_BURST, 2912, 0, 10.0f, 60),
                   Mod(149, 2, 1, 0, 3, "Nature's Grace", "+3% Wrath and Starfire critical strike chance per rank.", 16880, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 3),
                   Mod(150, 2, 2, 149, 3, "Moonfury", "Critical strikes deal 20% more of their bonus per rank.", 16896, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
-                  Key(151, SKILL_NODE_SYNERGY, 2, 3, 150, 1, "Lunar Eclipse", "A critical Wrath makes your next Starfire instant, and it bursts onto every enemy within 6 yards for 40% (once every 8 sec).", 2912, KEY_NONE),
+                  Key(151, SKILL_NODE_SYNERGY, 2, 3, 150, 1, "Lunar Eclipse", "A critical Wrath lets your next Starfire skip its recovery, and it bursts onto every enemy within 6 yards for 40% (once every 8 sec).", 2912, KEY_NONE),
                   Key(152, SKILL_NODE_CAPSTONE, 2, 4, 151, 1, "Eclipse", "Your critical Wraths and Starfires restore 2% of your maximum mana and make your next cast 0.5 sec quicker.", 16886, KEY_ECLIPSE),
               } },
             { SKILL_MOONFIRE, CLASS_DRUID, "Moonfire", "Moonfire and Insect Swarm: burns and swarms that spread.", 8921, { "Moonfire", "Insect Swarm" },
@@ -475,7 +475,7 @@ namespace
               {
                   Mod(641, 0, 1, 0, 4, "Lush Growth", "6% more Regrowth and Healing Touch healing per rank.", 5185, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
                   Mod(642, 0, 2, 641, 3, "Living Bloom", "Rejuvenation and Regrowth heal 10% more over time per rank.", 774, SPELLMOD_DOT, SPELLMOD_PCT, 10),
-                  Key(643, SKILL_NODE_SYNERGY, 0, 3, 642, 1, "Overgrowth's Gift", "Entangling Roots makes your next Regrowth or Healing Touch instant (once every 10 sec).", 339, KEY_NONE),
+                  Key(643, SKILL_NODE_SYNERGY, 0, 3, 642, 1, "Overgrowth's Gift", "Entangling Roots lets your next Regrowth or Healing Touch skip its recovery (once every 10 sec).", 339, KEY_NONE),
                   Key(644, SKILL_NODE_CAPSTONE, 0, 4, 643, 1, "Bloom", "Your heals burst outward: every enemy within 8 yards takes 50% of the heal as Nature damage.", 740, KEY_BLOOM),
                   Key(645, SKILL_NODE_SYNERGY, 1, 1, 0, 3, "Nature's Wrath", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Nature damage.", 5176, KEY_NATURES_WRATH),
                   Key(646, SKILL_NODE_MODIFIER, 1, 2, 645, 2, "Verdant Fury", "Healing yourself gives you 5% more damage per rank for 5 sec.", 17116, KEY_VERDANT_FURY),
@@ -664,7 +664,7 @@ namespace
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) },
               uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT) | FIT(SKILL_REJUVENATION)) },
-            { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 20% to every enemy in front).", 845,
+            { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 55% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
             // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
             { RUNE_GRACE, "Rune of Grace", ProcRuneText(RUNE_GRACE), 19750,
@@ -1853,6 +1853,29 @@ namespace Arpg
             return 0;
         auto rank = it->second.ranks.find(node);
         return rank == it->second.ranks.end() ? 0 : rank->second;
+    }
+
+    std::vector<std::pair<std::string, std::vector<std::string>>> SkillBuild(Player const* player)
+    {
+        std::vector<std::pair<std::string, std::vector<std::string>>> out;
+        std::lock_guard<std::mutex> guard(sSkillsLock);
+        auto it = sSkills.find(player->GetObjectGuid());
+        if (it == sSkills.end())
+            return out;
+        PlayerSkills const& ps = it->second;
+        for (uint8 slot = 0; slot < SKILL_SLOTS; ++slot)
+        {
+            SkillDef const* skill = ps.slots[slot] ? FindSkill(player->getClass(), ps.slots[slot]) : nullptr;
+            if (!skill)
+                continue;
+            std::vector<std::string> nodes;
+            for (auto const& [id, rank] : ps.ranks)
+                if (id / 100 == ps.slots[slot] && rank)
+                    if (SkillNode const* node = FindNode(player->getClass(), id))
+                        nodes.push_back(std::string(node->name) + " " + std::to_string(rank));
+            out.emplace_back(skill->name, std::move(nodes));
+        }
+        return out;
     }
 
     std::vector<std::pair<uint8, std::vector<std::string>>> SkillBonusLines(Player const* player)

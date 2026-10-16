@@ -73,9 +73,10 @@ namespace
     constexpr uint32 REST_DELAY_MS = 5000;
     constexpr float REST_HEALTH_PCT = 5.0f, REST_MANA_PCT = 2.0f;
     constexpr int32 BASE_SPEED_PCT = 10;
-    // The global cooldown's cut (1.5 sec to 0.5, a rogue's 1 sec to a third) and the cast time's,
-    // for ARPG players. A share, not a flat cut, so no GCD reaches zero.
-    constexpr int32 ARPG_GCD_CUT_PCT = -67, ARPG_CAST_TIME_PCT = -50;
+    // ARPG pacing: class spells cast at once (Arpg::CastsAtOnce) and recover for their cast time,
+    // a global cooldown at least. The share of the global cooldown kept (1.5 sec to 0.5, a rogue's
+    // 1 sec to a third) and of the cast time, before cooldown reduction and cast speed cut both.
+    constexpr int32 GCD_KEEP_PCT = 33, CAST_KEEP_PCT = 50;
     // The longest gap one rest tick covers: after a loading screen, no lump of healing.
     constexpr uint32 REST_GAP_MAX_MS = 1000;
 
@@ -156,7 +157,20 @@ namespace
     // Melee area's reach: each +100% of melee area would add this many yards to the swing's added
     // hits (the cap, +40%, gives 2).
     constexpr float MELEE_AREA_YARDS = 5.0f;
-    constexpr uint32 WIDE_SWING_PCT[3] = { 20, 35, 50 };
+    // ARPG melee (docs/ARPG-CHARACTER.md, "Melee"): what a melee character has that a caster
+    // does not, for standing in the pack. Every swing strikes the enemies in front of it too, for
+    // SWING_ARC_PCT of the hit (Wide Swing's ranks for more); a swing that lands Fortifies, taking
+    // FORTIFY_PCT less damage for FORTIFY_MS; and heals LIFE_ON_HIT_PERMILLE of the maximum health
+    // for each enemy it strikes, the first LIFE_ON_HIT_MAX. The pace: a swing comes at least
+    // 1 / SWING_PACE as often as the weapon's own speed, never faster than SWING_FASTEST_MS, and
+    // each white swing and Seal of Righteousness hit is as much less: the same damage in more,
+    // smaller hits, with procs a minute kept to the weapon's speed (PacedWeaponSpeed).
+    constexpr uint32 SWING_ARC_PCT = 40;
+    constexpr uint32 WIDE_SWING_PCT[3] = { 55, 70, 85 };
+    constexpr uint32 FORTIFY_MS = 4000;
+    constexpr int32 FORTIFY_PCT = 15;
+    constexpr uint32 LIFE_ON_HIT_PERMILLE = 10, LIFE_ON_HIT_MAX = 5;
+    constexpr float SWING_PACE = 0.5f, SWING_FASTEST_MS = 1000.0f;
     constexpr uint32 WHIRL_EVERY = 4, WHIRL_PCT = 75;
     constexpr uint32 MOMENTUM_WINDOW = 3000, MOMENTUM_MAX = 5;
     constexpr uint32 PACE_MS = 3000;
@@ -185,7 +199,9 @@ namespace
     {
         int32 stat[5] = {};
         int32 armourPct = 0;
-        float haste = 0.0f;          // the attack speed percent applied (Zealot, Quickened, Zeal)
+        float haste = 0.0f;          // the attack speed percent applied (Zealot, Quickened, Zeal, the pace)
+        float pacePct = 0.0f;        // the pace's share of it: each white swing is this much less
+        uint32 lastSwingLanded = 0;  // Fortify: the last swing that landed (0: none)
         bool stunImmune = false;     // Unyielding, or Steadfast inside Consecration
         bool snareImmune = false;    // Unyielding
         std::vector<std::pair<SkillSpellMod, SpellModifier*>> skillMods;
@@ -196,6 +212,10 @@ namespace
         uint32 lastWalk = 0;         // Walking Consecration: the last time it followed
         SpellModifier* cooldownMod = nullptr;
         int32 cooldownPct = 0;
+        SpellModifier* gcdMod = nullptr;     // the pacing's (SetPacing)
+        int32 gcdPct = 0;
+        SpellModifier* castMod = nullptr;
+        int32 castPct = 0;
         float speed = 1.0f;
         uint32 lastRefresh = 0;
         std::deque<uint32> kills;    // Crusade: kill times
@@ -465,7 +485,7 @@ namespace
             lines.push_back(Format("%sCritical strike multiplier +%d%%|r", SHEET_ARPG, crit));
         if (int32 const ail = t.ailmentPct)
             lines.push_back(Format("%sDamage with ailments +%d%%|r", SHEET_ARPG, ail));
-        lines.push_back(Format("%sEvery class spell: a 0.5 sec global cooldown and half the cast time.|r", SHEET_NOTE));
+        lines.push_back(Format("%sEvery class spell casts at once, then recovers for half its cast time (a 0.5 sec global cooldown at least); cooldown reduction cuts the recovery, and cast speed too.|r", SHEET_NOTE));
         // The worn uniques.
         for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
             if (Item const* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
@@ -522,23 +542,37 @@ namespace
         return 0;
     }
 
-    void SetCooldownMod(Player* player, Runtime& r, int32 pct)
+    // One percentage modifier over every class spell, kept at `pct` (0: none).
+    void SetPctMod(Player* player, SpellModifier*& mod, int32& have, SpellModOp op, int32 pct)
     {
-        if (pct == r.cooldownPct && (pct == 0) == (r.cooldownMod == nullptr))
+        if (pct == have && (pct == 0) == (mod == nullptr))
             return;
-        if (r.cooldownMod)
+        if (mod)
         {
-            player->AddSpellMod(r.cooldownMod, false); // deletes it
-            r.cooldownMod = nullptr;
+            player->AddSpellMod(mod, false); // deletes it
+            mod = nullptr;
         }
-        r.cooldownPct = pct;
+        have = pct;
         if (!pct)
             return;
         uint32 const owner = FamilySpell(player);
         if (!owner)
             return;
-        r.cooldownMod = new SpellModifier(SPELLMOD_COOLDOWN, SPELLMOD_PCT, -pct, owner, ~uint64(0));
-        player->AddSpellMod(r.cooldownMod, true);
+        mod = new SpellModifier(op, SPELLMOD_PCT, pct, owner, ~uint64(0));
+        player->AddSpellMod(mod, true);
+    }
+
+    // The cooldowns' cut, and the pacing: the global cooldown and the cast time (each spell's
+    // recovery) kept, less the cooldown reduction, the cast time less the cast speed too. One
+    // modifier each, multiplied here: Player::ApplySpellMod adds percentages up, and a sum of
+    // these would reach zero.
+    void SetPacing(Player* player, Runtime& r, int32 cooldownPct, int32 castSpeedPct)
+    {
+        SetPctMod(player, r.cooldownMod, r.cooldownPct, SPELLMOD_COOLDOWN, -cooldownPct);
+        int32 const keep = 100 - cooldownPct;
+        SetPctMod(player, r.gcdMod, r.gcdPct, SPELLMOD_GLOBAL_COOLDOWN, GCD_KEEP_PCT * keep / 100 - 100);
+        SetPctMod(player, r.castMod, r.castPct, SPELLMOD_CASTING_TIME,
+                  CAST_KEEP_PCT * keep * (100 - std::clamp(castSpeedPct, 0, CAST_SPEED_CAP)) / 10000 - 100);
     }
 
     bool SealOn(Player const* player)
@@ -594,8 +628,21 @@ namespace
         return haste;
     }
 
+    // The pace's cut of the main hand's swing time, in percent (SWING_PACE).
+    float PacePct(Player const* player)
+    {
+        float const base = float(player->GetAttackTime(BASE_ATTACK));
+        if (base <= SWING_FASTEST_MS)
+            return 0.0f;
+        return 100.0f * (1.0f - std::max(SWING_PACE, SWING_FASTEST_MS / base));
+    }
+
     void SetHaste(Player* player, Runtime& r, float haste)
     {
+        // The haste and the pace multiply. Attack speed divides the swing time (by 1 + haste%),
+        // and the pace cuts it to (100 - pacePct)%: an attack speed of 100 / that.
+        r.pacePct = PacePct(player);
+        haste = 100.0f * ((1.0f + haste / 100.0f) * 100.0f / (100.0f - r.pacePct) - 1.0f);
         if (std::abs(haste - r.haste) < 0.01f)
             return;
         for (WeaponAttackType att : { BASE_ATTACK, OFF_ATTACK })
@@ -694,7 +741,7 @@ namespace
             r.speed = speed;
             player->UpdateSpeed(MOVE_RUN, true);
         }
-        SetCooldownMod(player, r, CooldownPct(player, t, r, now));
+        SetPacing(player, r, CooldownPct(player, t, r, now), t.castSpeedPct);
         SetHaste(player, r, HasteFor(player, t));
 
         // Consecration's skill nodes (Walking Consecration moves it in UpdateCharacter).
@@ -846,6 +893,11 @@ namespace
         }
         if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
             more(5 * t.Rank(KEY_HEAVY_HAND), "Heavy Hand");
+        // The melee pace: twice the swings, each half (SWING_PACE).
+        if ((!spellInfo && (tags & TagBit(TAG_MELEE))) ||
+                (spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Righteousness", 21) == 0))
+            if (int32 const pace = int32(R(player).pacePct + 0.5f))
+                more(-pace, "quick swings");
         if (IsSealHit(spellInfo))
         {
             more(6 * t.Rank(KEY_HOLY_EDGE), "Holy Edge");
@@ -947,17 +999,12 @@ namespace Arpg
         }
 
         SetHaste(player, r, HasteFor(player, t));
-        // ARPG pacing on every class spell, beside the trees' modifiers: a 0.5 sec global
-        // cooldown and half the cast time. Spell modifiers, so the client's cooldown sweep and
-        // the cast bar follow on their own.
+        // The item affixes' spell stats, over every class spell, beside the trees' modifiers
+        // (the pacing, cast speed with it, is SetPacing's). Spell modifiers, so the client's
+        // cooldown sweep and costs follow on their own.
         std::vector<SkillSpellMod> mods = t.mods;
         if (Active(player))
         {
-            mods.push_back({ uint8(SPELLMOD_GLOBAL_COOLDOWN), uint8(SPELLMOD_PCT), ARPG_GCD_CUT_PCT, ~uint64(0) });
-            mods.push_back({ uint8(SPELLMOD_CASTING_TIME), uint8(SPELLMOD_PCT), ARPG_CAST_TIME_PCT, ~uint64(0) });
-            // The item affixes' spell stats, over every class spell.
-            if (int32 const v = std::clamp(t.castSpeedPct, 0, CAST_SPEED_CAP))
-                mods.push_back({ uint8(SPELLMOD_CASTING_TIME), uint8(SPELLMOD_PCT), -v, ~uint64(0) });
             if (int32 const v = std::clamp(t.costPct, 0, COST_CAP))
                 mods.push_back({ uint8(SPELLMOD_COST), uint8(SPELLMOD_PCT), -v, ~uint64(0) });
             if (int32 const v = std::clamp(t.spellCritPct, 0, CRIT_CAP))
@@ -1124,7 +1171,13 @@ namespace Arpg
             // Damage taken, the victim's item affixes.
             if (victim && victim->GetTypeId() == TYPEID_PLAYER)
                 if (std::shared_ptr<WebTotals const> taken = TotalsOf(victim))
+                {
                     mod *= 1.0f - std::clamp(taken->damageTakenPct, 0, DAMAGE_TAKEN_CAP) / 100.0f;
+                    // Fortified: a swing landed lately.
+                    uint32 const landed = R(victim).lastSwingLanded;
+                    if (landed && WorldTimer::getMSTimeDiff(landed, WorldTimer::getMSTime()) < FORTIFY_MS)
+                        mod *= 1.0f - FORTIFY_PCT / 100.0f;
+                }
             return mod;
         }
         std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
@@ -1740,14 +1793,18 @@ namespace Arpg
         }
         if (!damage)
             return;
+        // Fortified (FORTIFY_PCT).
+        r.lastSwingLanded = now ? now : 1;
+        uint32 struckAll = 1;
         float const reach = ExtraMeleeReach(attacker);
         // Melee area (Strength, gear) widens the swing's added hits.
         float const area = MeleeAreaScale(attacker);
         bool const whirl = t.Has(KEY_WHIRLING_STRIKES) && ++r.swings % WHIRL_EVERY == 0;
         uint8 const wide = t.Rank(KEY_WIDE_SWING);
-        if (whirl || wide)
+        // Every swing strikes the enemies in front of it (SWING_ARC_PCT), Wide Swing's more.
         {
-            uint32 const pct = whirl ? WHIRL_PCT : WIDE_SWING_PCT[std::min<uint8>(wide, 3) - 1];
+            uint32 const pct = whirl ? std::max(WHIRL_PCT, wide ? WIDE_SWING_PCT[std::min<uint8>(wide, 3) - 1] : SWING_ARC_PCT)
+                                     : wide ? WIDE_SWING_PCT[std::min<uint8>(wide, 3) - 1] : SWING_ARC_PCT;
             SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(whirl ? WHIRLWIND : CLEAVE);
             if (shown)
             {
@@ -1762,11 +1819,16 @@ namespace Arpg
                         StrikeFoe(attacker, unit, shown, SPELL_SCHOOL_MASK_NORMAL, share, SwingLook(attacker));
                         ++struck;
                     }
-                if (struck)
+                if (struck && (whirl || wide))
                     ReportProc(attacker, PROC_DAMAGE, 0, whirl ? "Whirling Strikes" : "Wide Swing", "also hits %u %s for %u%% (%u).",
                                struck, struck == 1 ? "enemy" : "enemies", pct, share);
+                struckAll += struck;
             }
         }
+        // Life on hit, for each enemy struck: quietly, as every swing has it.
+        if (attacker->IsAlive() && attacker->GetHealth() < attacker->GetMaxHealth())
+            attacker->ModifyHealth(int32(std::max<uint32>(1, attacker->GetMaxHealth() * LIFE_ON_HIT_PERMILLE *
+                                                                  std::min(struckAll, LIFE_ON_HIT_MAX) / 1000)));
         if (t.Has(KEY_STAGGER) && victim->IsAlive() && roll_chance_i(10 * t.Rank(KEY_STAGGER)))
         {
             ApplyState(static_cast<Player*>(attacker), victim, STATE_DAZED);
@@ -1893,6 +1955,13 @@ namespace Arpg
     {
         if (uint8 rank = KeyRank(caster, KEY_RIGHTEOUS_MIND))
             ProcMana(caster, "Righteous Mind", caster->GetMaxPower(POWER_MANA) * 5 * rank / 100);
+    }
+
+    uint32 PacedWeaponSpeed(Unit const* unit, WeaponAttackType attType, uint32 weaponSpeed)
+    {
+        if (attType == RANGED_ATTACK || !Active(unit))
+            return weaponSpeed;
+        return uint32(float(weaponSpeed) * (100.0f - PacePct(static_cast<Player const*>(unit))) / 100.0f);
     }
 
     float ExtraPpm(Unit const* caster, SpellEntry const* spellInfo)

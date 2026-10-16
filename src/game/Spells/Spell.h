@@ -596,6 +596,9 @@ class Spell
         bool m_ignoreRoot; //
 
         int32 GetCastTime() const { return m_casttime; }
+        // ARPG: the cast time this cast would have had; an ARPG spell casts at once and this is
+        // its recovery (Arpg::CastsAtOnce).
+        int32 GetArpgCastTime() const { return m_arpgRecovery ? int32(m_arpgRecovery) : m_casttime; }
         uint32 GetCastedTime() const { return m_timer; }
         bool IsAutoRepeat() const { return m_autoRepeat; }
         void SetAutoRepeat(bool rep) { m_autoRepeat = rep; }
@@ -970,6 +973,7 @@ class Spell
         bool m_arpgAimSet;
         uint32 m_arpgSecondaryPct;
         ObjectGuid m_arpgExclude;
+        uint32 m_arpgRecovery;
         // ARPG: a piercing bolt's flight: where it left from, how far it flies and has flown, how
         // many it has struck of the most it may, and the share each after the first takes.
         bool m_arpgPierceBolt;

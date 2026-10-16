@@ -317,7 +317,7 @@ namespace
               { "Fire", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
               {
                   { { "Kindling", "+4% Fire damage", { TagFx(TAG_FIRE, 4) } },
-                    { "Improved Fireball", "Your Fireball's cast time is 0.5 sec shorter.", {}, 0, "Improved Fireball", 5 },
+                    { "Improved Fireball", "Your Fireball's recovery is 0.5 sec shorter.", {}, 0, "Improved Fireball", 5 },
                     { "Pyromancer", "40% more Fire damage. Your Frost and Arcane damage is 30% less.", {}, 11366, nullptr, 0, KEY_PYROMANCER },
                     true },
                   { { "Insight", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
@@ -353,7 +353,7 @@ namespace
               { "Frost", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
               {
                   { { "Rime", "+4% Frost damage", { TagFx(TAG_FROST, 4) } },
-                    { "Improved Frostbolt", "Your Frostbolt's cast time is 0.5 sec shorter.", {}, 0, "Improved Frostbolt", 5 },
+                    { "Improved Frostbolt", "Your Frostbolt's recovery is 0.5 sec shorter.", {}, 0, "Improved Frostbolt", 5 },
                     { "Shatter", "40% more damage against frozen enemies (rooted, as by Frost Nova, or frozen by a chill). 15% less against the rest.", {}, 122, nullptr, 0, KEY_SHATTER },
                     true },
                   { { "Fortitude", "+6 Stamina", { Stat(STAT_STAMINA, 6) } },
@@ -388,7 +388,7 @@ namespace
               { "Balance", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
               {
                   { { "Starlight", "+4% Arcane damage", { TagFx(TAG_ARCANE, 4) } },
-                    { "Improved Wrath", "Your Wrath's cast time is 0.5 sec shorter.", {}, 0, "Improved Wrath", 5 },
+                    { "Improved Wrath", "Your Wrath's recovery is 0.5 sec shorter.", {}, 0, "Improved Wrath", 5 },
                     { "Celestial Focus", "30% more Arcane and Nature spell damage. Your attacks deal 40% less.", {}, 24858, nullptr, 0, KEY_CELESTIAL_FOCUS },
                     true },
                   { { "Insight", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
@@ -429,7 +429,7 @@ namespace
                     true },
                   { { "Spirit", "+4 Spirit", { Stat(STAT_SPIRIT, 4) } },
                     { "Furor", "Rage or energy when you shift into Bear or Cat Form.", {}, 0, "Furor", 5 },
-                    { "Improved Healing Touch", "Your Healing Touch's cast time is 0.5 sec shorter.", {}, 0, "Improved Healing Touch", 5 },
+                    { "Improved Healing Touch", "Your Healing Touch's recovery is 0.5 sec shorter.", {}, 0, "Improved Healing Touch", 5 },
                     false },
                   { { "Bark", "+4% armour and +2 Stamina", { Of(FX_ARMOUR, 4), Stat(STAT_STAMINA, 2) } },
                     { "Improved Thorns", "Your Thorns deals 75% more damage.", {}, 0, "Improved Thorns", 3 },
