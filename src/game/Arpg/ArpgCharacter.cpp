@@ -5,6 +5,8 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgScenes.h"
+#include "Arpg/ArpgStates.h"
+#include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDruid.h"
@@ -854,7 +856,13 @@ namespace
             more(8 * t.Rank(KEY_RADIANCE), "Radiance");
         if (skill == SKILL_CONSECRATION)
             more(8 * t.Rank(KEY_BURNING_GROUND), "Burning Ground");
-        if (victim && victim->IsStunned())
+        // The enemy's states (Arpg/ArpgStates.h): the affixes against each, and the stun payoffs,
+        // which count a Daze as a stun.
+        uint32 const states = victim ? StateMask(victim) : 0;
+        for (uint8 s = 0; s < MAX_STATE; ++s)
+            if ((states & StateBit(State(s))) && t.vsState[s])
+                increased(t.vsState[s], (std::string("against ") + StateName(s) + " enemies").c_str());
+        if (states & (StateBit(STATE_STUNNED) | StateBit(STATE_DAZED)))
         {
             if (skill == SKILL_JUDGEMENT && t.Has(KEY_SENTENCE))
                 more(100, "Sentence");
@@ -976,6 +984,8 @@ namespace Arpg
         ForgetCosts(player);
         ForgetActs(player);
         ForgetScenes(player);
+        ForgetStatesSent(player);
+        ForgetSynergy(player);
         ForgetCompare(player);
         std::lock_guard<std::mutex> guard(sRuntimeLock);
         sRuntime.erase(player->GetObjectGuid());
@@ -999,6 +1009,8 @@ namespace Arpg
         UpdateActs(player);
         // A scene starts, acts or ends (Arpg/ArpgScenes.h).
         UpdateScenes(player);
+        // Nearby enemies' states to the client (Arpg/ArpgStates.h).
+        UpdateStates(player);
 
         // Rest: out of combat a moment, health and mana flow back (no eating or drinking).
         if (player->IsInCombat() || !player->IsAlive() || !r.combatSeen)
@@ -1120,7 +1132,7 @@ namespace Arpg
             return 1.0f;
         DamageParts const parts = DamagePartsFor(static_cast<Player const*>(attacker), *totals, victim, spellInfo, tags, nullptr);
         return std::max(0.0f, 1.0f + parts.increased / 100.0f) * parts.more * DamageScale(attacker, victim) *
-               AilmentTakenMod(attacker, victim);
+               AilmentTakenMod(attacker, victim) * StateTakenMod(victim);
     }
 
     void ConditionalDamageLines(Player const* player, uint32 tags, uint8 skill, std::vector<std::string>& out)
@@ -1266,6 +1278,21 @@ namespace Arpg
             for (std::string const& line : why)
                 out.push_back("  " + line);
             HitExtraLines(player, sample, tags, out);
+            // Against enemies in a state, when they are; and the synergy triggers it has
+            // (Arpg/ArpgStates.h, ArpgSynergy.h).
+            for (uint8 s = 0; s < MAX_STATE; ++s)
+                if (totals->vsState[s])
+                    out.push_back(Format("  %s+%d%% increased|r %sagainst %s enemies, when they are|r", SHEET_ARPG,
+                                         totals->vsState[s], SHEET_NOTE, StateName(s)));
+            if (totals->dazeBuildPct)
+                out.push_back(Format("  %s+%d%% Daze build-up|r", SHEET_ARPG, totals->dazeBuildPct));
+            std::vector<std::string> const synergies = SynergyLines(player);
+            if (!synergies.empty())
+            {
+                out.push_back("|cffffd200Synergies|r");
+                for (std::string const& line : synergies)
+                    out.push_back("  " + line);
+            }
         }
 
         // An estimate: the swing's, or the skill's best known rank's direct or periodic damage, with
@@ -1647,8 +1674,9 @@ namespace Arpg
             return;
         if (static_cast<Creature*>(victim)->GetCreatureInfo()->CreatureType == CREATURE_TYPE_CRITTER)
             return;
-        // A kill may ready another skill (Arpg/ArpgProcs.h).
+        // A kill may ready another skill (Arpg/ArpgProcs.h), and set off a synergy (Arpg/ArpgSynergy.h).
         OnProcKill(killer, victim);
+        OnSynergyKill(killer, victim);
         std::shared_ptr<WebTotals const> totals = TotalsOf(killer);
         WebTotals const& t = totals ? *totals : NoTotals();
         int32 const life = int32(killer->GetStat(STAT_STAMINA)) / STA_PER_LIFE + t.lifeOnKill;
@@ -1741,8 +1769,7 @@ namespace Arpg
         }
         if (t.Has(KEY_STAGGER) && victim->IsAlive() && roll_chance_i(10 * t.Rank(KEY_STAGGER)))
         {
-            attacker->CastSpell(victim, DAZED, TRIGGERED_OLD_TRIGGERED);
-            ReportProc(attacker, PROC_EFFECT, 0, "Stagger", "dazes %s.", victim->GetName());
+            ApplyState(static_cast<Player*>(attacker), victim, STATE_DAZED);
         }
         if (crit && t.Has(KEY_SHOCKWAVE_STRIKE))
             if (SpellEntry const* shown = sSpellTemplate.LookupEntry<SpellEntry>(WAR_STOMP))

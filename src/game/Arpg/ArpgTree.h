@@ -44,6 +44,7 @@
 #define MANGOS_ARPG_TREE_H
 
 #include "Common.h"
+#include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgUniques.h"
 
@@ -236,6 +237,11 @@ namespace Arpg
         // The skill trees' ailment nodes: by skill id, the % chance its hits inflict each damage
         // tag's ailment, whatever their own type.
         int32 skillAilment[16][7] = {};
+        // Synergy (Arpg/ArpgStates.h): increased damage against enemies in each state, Daze build-up,
+        // and the skill trees' conversions: by skill id, a damage tag + 1 its hits count as (0: none).
+        int32 vsState[MAX_STATE] = {};
+        int32 dazeBuildPct = 0;
+        uint8 convert[16] = {};
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers

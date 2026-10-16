@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgActions.h"
@@ -1214,6 +1215,7 @@ namespace Arpg
             return;
         ObjectGuid const guid = creature->GetObjectGuid();
         ForgetScaled(creature);
+        ForgetStates(creature);
         ForgetTelegraph(creature);
         std::lock_guard<std::mutex> guard(sPacksLock);
         // Guids repeat between map copies, so a stale record could crown another creature.

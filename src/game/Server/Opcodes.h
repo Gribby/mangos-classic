@@ -906,10 +906,12 @@ enum Opcodes
     SMSG_ARPG_BOLT_STOP                             = 0x351,
     // ARPG: a scene's camera track and subtitles (Arpg/ArpgScenes.h)
     SMSG_ARPG_SCENE                                 = 0x352,
+    // ARPG: nearby enemies' states (Arpg/ArpgStates.h)
+    SMSG_ARPG_STATES                                = 0x353,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x353
+#define NUM_MSG_TYPES 0x354
 
 /// Player state
 enum SessionStatus

@@ -125,6 +125,13 @@ namespace Arpg
     // `player`'s Ignite on `victim`: ended, its burn left returned (0: none).
     uint32 TakeIgnite(Player* player, Unit* victim);
 
+    // The ailments any player has on `victim`, as a mask of damage tags (1 << tag) (Arpg/ArpgStates.h).
+    uint32 AfflictionMask(Unit const* victim);
+
+    // Consume every player's `tag` ailment on `victim` (a damage over time's ticks left, Judged's
+    // or Overload's stored damage, Wither's stacks): what was left of it, 0 if it had none.
+    uint32 TakeAffliction(Unit const* victim, uint8 tag);
+
     // Copy `player`'s Ignite on `from` (a dying enemy) onto the `count` enemies nearest it within
     // `range`, fresh; returns how many.
     size_t SpreadIgnite(Player* player, Unit* from, float range, size_t count);

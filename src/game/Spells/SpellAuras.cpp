@@ -55,6 +55,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgMage.h"
+#include "Arpg/ArpgStates.h"
 
 #define NULL_AURA_SLOT 0xFF
 
@@ -4611,6 +4612,8 @@ void Aura::PeriodicTick()
             {
                 Arpg::OnPeriodicHit(caster, target, spellProto);
                 Arpg::OnDruidTick(caster, target, spellProto, pdamage);
+                // ARPG: a Consecration's tick builds Daze (Arpg/ArpgStates.h).
+                Arpg::OnStateTick(caster, target, spellProto);
             }
 
             Unit::ProcDamageAndSpell(ProcSystemArguments(caster, target, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, absorb, BASE_ATTACK, spellProto));

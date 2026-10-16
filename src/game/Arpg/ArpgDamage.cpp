@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgStates.h"
+#include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDruid.h"
@@ -83,10 +85,31 @@ namespace
     {
         std::vector<Affliction> list;
         uint32 lastUpdate = 0;
+        uint64 where = 0;        // the map copy its afflictions are on (guids repeat between copies)
     };
+
+
 
     std::mutex sLock;
     std::unordered_map<ObjectGuid, PlayerAilments> sAilments;
+
+    uint64 WhereOf(Unit const* unit)
+    {
+        return (uint64(unit->GetMapId()) << 32) | unit->GetInstanceId();
+    }
+
+    // `player`'s afflictions, on its own map copy: those left on another copy are dropped. sLock held.
+    std::vector<Affliction>& ListOf(Player const* player)
+    {
+        PlayerAilments& pa = sAilments[player->GetObjectGuid()];
+        uint64 const where = WhereOf(player);
+        if (pa.where != where)
+        {
+            pa.list.clear();
+            pa.where = where;
+        }
+        return pa.list;
+    }
 
     // What a tick or burst does, done outside the lock.
     struct Strike
@@ -165,7 +188,7 @@ namespace
             return;
         }
         std::lock_guard<std::mutex> guard(sLock);
-        std::vector<Affliction>& list = sAilments[player->GetObjectGuid()].list;
+        std::vector<Affliction>& list = ListOf(player);
         switch (tag)
         {
             case TAG_PHYSICAL:
@@ -370,9 +393,19 @@ namespace Arpg
         WebTotals const& t = *totals;
         Player* player = static_cast<Player*>(attacker);
 
+        // A skill tree's conversion: its hits count as another damage type, for their ailments,
+        // their Daze and the triggers (Arpg/ArpgStates.h).
+        uint8 const skill = uint8(SkillOfSpell(player->getClass(), spellInfo));
+        if (skill < 16 && t.convert[skill])
+            tags = (tags & ~((1u << DAMAGE_TAGS) - 1)) | TagBit(Tag(t.convert[skill] - 1));
         // The main hit's own ailments, and its skill tree's (a dead target takes none).
         if (victim->IsAlive())
-            RollAilments(player, t, victim, tags, dealt, crit, uint8(SkillOfSpell(player->getClass(), spellInfo)));
+            RollAilments(player, t, victim, tags, dealt, crit, skill);
+        // The synergy triggers it sets off (Arpg/ArpgSynergy.h), then its Daze: a hit pays off a
+        // state set up before it, never one it completes itself.
+        OnSynergyHit(player, victim, spellInfo, tags, dealt, crit);
+        if (victim->IsAlive())
+            BuildDaze(player, victim, dealt, tags);
         // The mage's and the druid's keystones on a spell's hit (Arpg/ArpgMage.h, ArpgDruid.h), the
         // dead included.
         if (spellInfo)
@@ -627,6 +660,42 @@ namespace Arpg
         return left;
     }
 
+    uint32 AfflictionMask(Unit const* victim)
+    {
+        if (!victim)
+            return 0;
+        uint32 const now = WorldTimer::getMSTime();
+        ObjectGuid const guid = victim->GetObjectGuid();
+        uint64 const where = WhereOf(victim);
+        uint32 mask = 0;
+        std::lock_guard<std::mutex> guard(sLock);
+        for (auto const& [player, pa] : sAilments)
+            for (Affliction const& a : pa.list)
+                if (pa.where == where && a.victim == guid && (a.ticks || ((a.stacks || a.stored) && int32(a.until - now) > 0)))
+                    mask |= 1u << a.tag;
+        return mask;
+    }
+
+    uint32 TakeAffliction(Unit const* victim, uint8 tag)
+    {
+        if (!victim || tag >= DAMAGE_TAGS)
+            return 0;
+        ObjectGuid const guid = victim->GetObjectGuid();
+        uint64 const where = WhereOf(victim);
+        uint32 left = 0;
+        std::lock_guard<std::mutex> guard(sLock);
+        for (auto& [player, pa] : sAilments)
+            for (Affliction& a : pa.list)
+                if (pa.where == where && a.victim == guid && a.tag == tag)
+                {
+                    left += a.perTick * a.ticks + a.stored;
+                    a.ticks = 0;
+                    a.stacks = 0;
+                    a.stored = 0;
+                }
+        return left;
+    }
+
     size_t SpreadIgnite(Player* player, Unit* from, float range, size_t count)
     {
         if (!player || !from)
@@ -646,7 +715,7 @@ namespace Arpg
         uint32 const now = WorldTimer::getMSTime();
         size_t spread = 0;
         std::lock_guard<std::mutex> guard(sLock);
-        std::vector<Affliction>& list = sAilments[player->GetObjectGuid()].list;
+        std::vector<Affliction>& list = ListOf(player);
         for (Unit* unit : foes)
         {
             if (!Scaled(unit) || !player->CanAttack(unit))

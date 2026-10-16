@@ -61,6 +61,7 @@ namespace
         char const* only = nullptr; // a spell modifier over this spell (by name) alone, not the skill's every spell
         int8 ailTag = -1;         // an ailment node: its damage tag, and the chance per rank
         uint8 ailPerRank = 0;
+        int8 convertTag = -1;     // a conversion node: the damage tag the skill's hits count as
     };
 
     struct SkillDef
@@ -96,6 +97,15 @@ namespace
 
     // An ailment node: the skill's hits have `perRank`% per rank to inflict `tag`'s ailment
     // (Arpg/ArpgDamage.h), whatever their own damage type.
+    // A conversion: the skill's hits count as `tag` for their ailments, their Daze and the
+    // synergy triggers (Arpg/ArpgStates.h), moving the skill into that damage type's pairings.
+    SkillNode Conv(uint16 id, uint8 col, uint8 row, uint16 parent, char const* name, char const* text, uint32 icon, Tag tag)
+    {
+        SkillNode n{ id, SKILL_NODE_TRANSFORMER, col, row, parent, 1, name, text, icon };
+        n.convertTag = int8(tag);
+        return n;
+    }
+
     SkillNode Ail(uint16 id, uint8 col, uint8 row, uint16 parent, uint8 max, char const* name, char const* text,
                   uint32 icon, Tag tag, uint8 perRank)
     {
@@ -172,6 +182,9 @@ namespace
                   Key(113, SKILL_NODE_MODIFIER, 2, 3, 112, 3, "Zeal", "+10% attack speed per rank while Seal of the Crusader is on you.", 21082, KEY_ZEAL),
                   Key(114, SKILL_NODE_SYNERGY, 2, 4, 113, 1, "Light of the Crusader", "Your Seal hits heal you for 10% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
                   Key(115, SKILL_NODE_CAPSTONE, 2, 5, 114, 1, "Shockwave", "Your critical swings send a shockwave 10 yards ahead, for 40% of the hit.", 20549, KEY_SHOCKWAVE_STRIKE),
+                  // Synergy (Arpg/ArpgSynergy.h, ArpgStates.h).
+                  Key(116, SKILL_NODE_SYNERGY, 0, 6, 105, 3, "Concussive Blows", "Your critical physical or holy Crusader hits add 15% of the way to a Daze per rank.", 12809, KEY_NONE),
+                  Conv(117, 1, 6, 110, "Sun Seal", "Your swings and Seals count as Fire: they Ignite instead of Judge, and build no Daze.", 2136, TAG_FIRE),
               } },
             { SKILL_HOLY_LIGHT, CLASS_PALADIN, "Holy Light", "Holy Light and Flash of Light: heals, which its tree turns on your enemies too.", 635, { "Holy Light", "Flash of Light" },
               { "Radiance", "", "Retribution" },
@@ -198,7 +211,8 @@ namespace
                       KIT_BURST, 20271, { 0, 0, 0 }, { 4, 6, 8 }, { 40, 40, 40 }),
                   Key(306, SKILL_NODE_MODIFIER, 1, 2, 305, 4, "Radiance", "8% more Judgement damage per rank.", 20218, KEY_RADIANCE),
                   Mod(307, 1, 3, 306, 3, "Severity", "Judgement's critical strikes deal 20% more of their bonus per rank.", 20101, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
-                  Key(308, SKILL_NODE_CAPSTONE, 1, 4, 307, 1, "Sentence", "Judgement deals 100% more damage to stunned enemies.", 879, KEY_SENTENCE),
+                  Key(308, SKILL_NODE_CAPSTONE, 1, 4, 307, 1, "Sentence", "Judgement deals 100% more damage to stunned or Dazed enemies.", 879, KEY_SENTENCE),
+                  Conv(314, 1, 5, 308, "Frozen Verdict", "Judgement counts as Frost: it Chills, and a critical one on a Chilled enemy Freezes.", 116, TAG_FROST),
                   Key(309, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Avenger", "Judgement no longer uses up your Seal, but its cooldown is doubled.", 25780, KEY_AVENGER),
                   Mod(310, 2, 2, 309, 3, "Swift Judgement", "-1 sec Judgement cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
                   Key(311, SKILL_NODE_SYNERGY, 2, 3, 310, 1, "Crusader's Verdict", "A critical swing makes your next Judgement deal 50% more (once every 6 sec).", 20271, KEY_NONE),
@@ -230,7 +244,8 @@ namespace
                       KIT_SPREAD, 853, { 1, 2 }, { 8, 8 }, { 100, 100 }),
                   Mod(506, 1, 2, 505, 3, "Long Stun", "+0.5 sec stun per rank.", 5588, SPELLMOD_DURATION, SPELLMOD_FLAT, 500, "Hammer of Justice"),
                   Mod(507, 1, 3, 506, 3, "Quick Hammer", "-10 sec Hammer of Justice cooldown per rank.", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000, "Hammer of Justice"),
-                  Key(508, SKILL_NODE_CAPSTONE, 1, 4, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned enemies.", 879, KEY_SENTENCE_PASSED),
+                  Key(508, SKILL_NODE_CAPSTONE, 1, 4, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned or Dazed enemies.", 879, KEY_SENTENCE_PASSED),
+                  Key(514, SKILL_NODE_SYNERGY, 1, 5, 508, 1, "Aftershock", "When you consume Daze, the 2 nearest enemies within 10 yards are Dazed (once every 2 sec).", 20549, KEY_NONE),
                   Kit(509, 2, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
                       KIT_EXTRA_PROJECTILES, 24275, { 1, 2 }, { 15, 15 }, { 60, 60 }),
                   Mod(510, 2, 2, 509, 4, "Weighted Hammer", "8% more Hammer of Wrath damage per rank.", 20218, SPELLMOD_DAMAGE, SPELLMOD_PCT, 8, "Hammer of Wrath"),
@@ -254,6 +269,7 @@ namespace
                   Kit(607, 1, 3, 606, 2, "Shattering Wrath", "Each enemy Holy Wrath strikes bursts onto those within 4/6 yards, at 20/30%.", 24275,
                       KIT_BURST, 2812, { 0, 0 }, { 4, 6 }, { 20, 30 }),
                   Key(608, SKILL_NODE_CAPSTONE, 1, 4, 607, 1, "Wrathful", "Holy Wrath fires on its own whenever 4 or more enemies are within 10 yards, every 12 sec at most.", 20925, KEY_WRATHFUL),
+                  Key(614, SKILL_NODE_SYNERGY, 1, 5, 608, 1, "Cleansing Fire", "Exorcism and Holy Wrath consume Ignite to burst onto every enemy within 8 yards for 80% of the hit and the burn left.", 2120, KEY_NONE),
                   Mod(609, 2, 1, 0, 3, "Swift Exorcism", "-2 sec Exorcism cooldown per rank.", 1044, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -2000, "Exorcism"),
                   Key(610, SKILL_NODE_SYNERGY, 2, 2, 609, 1, "Righteous Thunder", "Stunning an enemy with Hammer of Justice makes your next Holy Wrath instant (once every 10 sec).", 2812, KEY_NONE),
                   Mod(611, 2, 3, 610, 3, "Exorcist", "+5% critical strike chance per rank with Exorcism and Holy Wrath.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 5),
@@ -1527,6 +1543,8 @@ namespace Arpg
             }
             if (node->ailTag >= 0 && node->ailTag < 7 && skill->id < 16)
                 totals.skillAilment[skill->id][node->ailTag] += int32(node->ailPerRank) * rank;
+            if (node->convertTag >= 0 && node->convertTag < 7 && skill->id < 16)
+                totals.convert[skill->id] = uint8(node->convertTag + 1);
         }
         // Avenger: Judgement keeps the Seal, for a doubled cooldown.
         if (totals.rank[KEY_AVENGER])

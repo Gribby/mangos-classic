@@ -5,6 +5,7 @@
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCraft.h"
+#include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgCompare.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgDungeons.h"
@@ -53,6 +54,8 @@ namespace
         // Damage (Arpg/ArpgDamage.h).
         AK_ADDED_ATTACK, AK_ADDED_SPELL, AK_CRIT_DAMAGE, AK_AILMENT_CHANCE, AK_AILMENT_DAMAGE,
         AK_SKILL_LEVEL,
+        // Synergy (Arpg/ArpgStates.h).
+        AK_VS_STATE, AK_DAZE_BUILD,
     };
 
     // Where an affix may roll.
@@ -168,6 +171,17 @@ namespace
         { AK_SKILL_LEVEL, 1, 1, 1, "+%d to all Spell skills", W_SKILL, 2 },
         { AK_SKILL_LEVEL, 2, 1, 1, "+%d to all Holy skills", W_SKILL, 2 },
         { AK_SKILL_LEVEL, 3, 1, 1, "+%d to all Fire, Frost, Nature, Arcane and Shadow skills", W_SKILL, 2 },
+        // Synergy (Arpg/ArpgStates.h): damage against enemies in a state, whoever put them there,
+        // so an item opens a pairing rather than adding a number. Appended: ids only grow.
+        { AK_VS_STATE, STATE_DAZED,       10, 30, "+%d%% increased damage against Dazed enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_JUDGED,      10, 30, "+%d%% increased damage against Judged enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_CHILLED,     10, 30, "+%d%% increased damage against Chilled enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_IGNITED,     10, 30, "+%d%% increased damage against Ignited enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_BLEEDING,    10, 30, "+%d%% increased damage against Bleeding enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_POISONED,    10, 30, "+%d%% increased damage against Poisoned enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_STUNNED,     15, 40, "+%d%% increased damage against Stunned enemies", W_OFFENCE, 0 },
+        { AK_VS_STATE, STATE_CONSECRATED, 10, 30, "+%d%% increased damage against enemies on Consecrated ground", W_OFFENCE, 0 },
+        { AK_DAZE_BUILD, 0,               15, 40, "+%d%% increased Daze build-up", W_ANY, 0 },
     };
 
     // A value's share of the level 60 range, by item level: it grows by half again every nine
@@ -348,8 +362,11 @@ namespace
 
     // The affixes a seed rolls from: an item stored before the damage affixes keeps rolling from
     // the first pool (the first POOL_FIRST_COUNT affixes), so its affixes never change.
-    enum AffixPool : uint8 { POOL_FIRST = 0, POOL_DAMAGE = 1, POOL_CURRENT = POOL_DAMAGE };
+    // Each pool is frozen at its size, as an item rolled from it re-rolls from its seed: an item
+    // stored with the damage affixes keeps the first POOL_DAMAGE_COUNT, the synergy ones came after.
+    enum AffixPool : uint8 { POOL_FIRST = 0, POOL_DAMAGE = 1, POOL_SYNERGY = 2, POOL_CURRENT = POOL_SYNERGY };
     constexpr size_t POOL_FIRST_COUNT = 61;
+    constexpr size_t POOL_DAMAGE_COUNT = 86;
 
     size_t PoolSize(uint8 pool);
 
@@ -409,10 +426,11 @@ namespace
     constexpr char const* CRAFTED = "v1|";
     constexpr uint16 AFFIX_COUNT = uint16(sizeof(AFFIXES) / sizeof(AFFIXES[0]));
     static_assert(POOL_FIRST_COUNT < AFFIX_COUNT, "the first pool is the affixes before the damage ones");
+    static_assert(POOL_DAMAGE_COUNT < AFFIX_COUNT, "the damage pool is the affixes before the synergy ones");
 
     size_t PoolSize(uint8 pool)
     {
-        return pool == POOL_FIRST ? POOL_FIRST_COUNT : AFFIX_COUNT;
+        return pool == POOL_FIRST ? POOL_FIRST_COUNT : pool == POOL_DAMAGE ? POOL_DAMAGE_COUNT : AFFIX_COUNT;
     }
 
     uint16 IdOf(AffixDef const* def) { return uint16(def - AFFIXES + 1); }
@@ -593,8 +611,10 @@ namespace
     }
 
     // Added damage's size against the skills it rides on: vanilla's stat growth leaves a bare
-    // affix at about 2% of a skill's hit; this puts it near a fifth, worth an affix slot.
-    constexpr float ADDED_DAMAGE_SIZE = 8.0f;
+    // affix at about 2% of a skill's hit; this puts it near a fifteenth. It was eight times (a
+    // fifth) and carried builds by brute numbers (Jeff): power comes from synergy now
+    // (Arpg/ArpgStates.h, ArpgSynergy.h).
+    constexpr float ADDED_DAMAGE_SIZE = 3.0f;
 
     // Added damage's range at the ARPG's size for an item of `itemLevel` (Arpg/ArpgDamage.h).
     void AddedRange(int32 average, uint32 itemLevel, int32& low, int32& high)
@@ -869,6 +889,8 @@ namespace Arpg
                     case AK_AILMENT_CHANCE: if (p < 7) totals.ailmentChance[p] += v; break;
                     case AK_AILMENT_DAMAGE: totals.ailmentPct += v; break;
                     case AK_SKILL_LEVEL: if (p < 4) totals.skillLevel[p] += v; break;
+                    case AK_VS_STATE: if (p < MAX_STATE) totals.vsState[p] += v; break;
+                    case AK_DAZE_BUILD: totals.dazeBuildPct += v; break;
                 }
             }
         }
@@ -978,6 +1000,8 @@ namespace Arpg
                 static char const* const NAMES[7] = { "Bleeding", "Judgement", "Ignition", "Chilling", "Overload", "Poison", "Withering" };
                 return std::string("Shard of ") + NAMES[std::min<uint8>(def.param, 6)];
             }
+            case AK_VS_STATE: return std::string("Shard of the ") + StateName(def.param);
+            case AK_DAZE_BUILD: return "Shard of Concussion";
             default: break;
         }
         // The line without its number: "+%d%% Holy damage" is a Shard of Holy damage.
