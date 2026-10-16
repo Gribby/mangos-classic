@@ -23,11 +23,13 @@ namespace
 {
     using namespace Arpg;
 
-    // In-combat mana regeneration, as a share of maximum mana a second.
-    constexpr float REGEN_PCT = 1.5f;
-    // A filler's mana back on a hit, and a sealed swing's, as shares of maximum mana.
+    // In-combat mana regeneration, as a share of maximum mana a second. (The play statistics
+    // showed no pressure at 1.5: a mage never fell below 61% with Fireball alone.)
+    constexpr float REGEN_PCT = 1.0f;
+    // A filler's mana back on a hit, and a sealed swing's, as shares of maximum mana (a swing
+    // comes twice as often since the melee pace, ArpgCharacter.cpp, so its share is half).
     constexpr uint32 FILLER_PCT = 3;
-    constexpr uint32 SEALED_SWING_PCT = 2;
+    constexpr uint32 SEALED_SWING_PCT = 1;
     // A spell not in the table costs its vanilla share of base mana, this much of it, of maximum
     // mana; at least 1% and at most MISC_MAX_PCT.
     constexpr float MISC_SHARE = 0.5f;
@@ -38,7 +40,7 @@ namespace
     CostRow const COSTS[] =
     {
         // Mage: Frostbolt is the free filler.
-        { "Frostbolt", 0.0f }, { "Fireball", 9.0f }, { "Fire Blast", 0.0f }, { "Scorch", 6.0f },
+        { "Frostbolt", 0.0f }, { "Fireball", 11.0f }, { "Fire Blast", 0.0f }, { "Scorch", 6.0f },
         { "Pyroblast", 20.0f }, { "Arcane Missiles", 18.0f }, { "Arcane Explosion", 12.0f },
         { "Blizzard", 25.0f }, { "Flamestrike", 20.0f }, { "Cone of Cold", 12.0f },
         { "Frost Nova", 0.0f }, { "Blink", 0.0f }, { "Ice Barrier", 10.0f }, { "Mana Shield", 0.0f },

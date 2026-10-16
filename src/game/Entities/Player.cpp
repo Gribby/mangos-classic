@@ -20241,7 +20241,11 @@ void Player::AddGCD(SpellEntry const& spellEntry, uint32 forcedDuration /*= 0*/,
         return;
 
     // gcd modifier auras applied only to self spells and only player have mods for this
-    ApplySpellMod(spellEntry.Id, SPELLMOD_GLOBAL_COOLDOWN, gcdDuration);
+    // ARPG: as the client counts them, so its GCD is the server's (Arpg::ClientSpellMod).
+    if (Arpg::Active(this))
+        gcdDuration = Arpg::ClientSpellMod(this, &spellEntry, SPELLMOD_GLOBAL_COOLDOWN, gcdDuration);
+    else
+        ApplySpellMod(spellEntry.Id, SPELLMOD_GLOBAL_COOLDOWN, gcdDuration);
     // ARPG: a spell that cast at once recovers for its cast time, at least (Arpg::CastsAtOnce).
     gcdDuration = std::max(gcdDuration, int32(forcedDuration));
 

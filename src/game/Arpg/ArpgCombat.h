@@ -86,6 +86,14 @@ namespace Arpg
     // teleport or a portal keeps its cast). The client's spell/cast_send.rs mirrors it.
     constexpr int32 INSTANT_CAST_MAX_MS = 6000;
     bool CastsAtOnce(WorldObject const* caster, SpellEntry const* spellInfo);
+    // `base` through `player`'s spell modifiers of `op` as the client applies them: per family
+    // bit of the spell, every modifier sent for that bit, so a modifier over several of its bits
+    // counts once for each (where Player::ApplySpellMod counts it once). The ARPG's GCD and
+    // recovery are reckoned this way, so the client's prediction of them is exact.
+    int32 ClientSpellMod(Player const* player, SpellEntry const* spellInfo, uint8 op, int32 base);
+    // The recovery of a spell that casts at once, as the client reckons it: the cast time row at
+    // the player's level, through ClientSpellMod, and no cast speed.
+    uint32 ClientRecovery(Player const* player, SpellEntry const* spellInfo);
 
     // Whether `unit` never misses: an ARPG player, or a pet, totem or guardian of one. The ARPG
     // has no hit stat: swings, shots and spells always connect (dodge, parry, block and

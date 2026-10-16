@@ -1338,7 +1338,12 @@ namespace Arpg
         {
             Readied& r = pp.readied[i];
             ProcDef const& def = Procs()[r.proc];
-            if (r.spentBy || !(r.mod ? r.mod->isAffectedOnSpell(info) : Named(info, def.targets)))
+            // A cast-time proc on a spell that casts at once goes by the client's rule, the family
+            // mask: that is how its recovery was reckoned (Arpg::ClientRecovery), so a spell it made
+            // free of recovery spends it, named or not.
+            bool const byMask = r.mod && r.mod->op == SPELLMOD_CASTING_TIME && CastsAtOnce(player, info);
+            if (r.spentBy || !(r.mod ? (byMask ? r.mod->mask.IsFitToFamilyMask(info->SpellFamilyFlags) : r.mod->isAffectedOnSpell(info))
+                                     : Named(info, def.targets)))
                 continue;
             bool const carriesKit = def.kit.kit != UniqueKit(0);
             if (!r.mod)

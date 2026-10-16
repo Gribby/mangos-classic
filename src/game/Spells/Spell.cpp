@@ -3126,15 +3126,15 @@ void Spell::Prepare()
     if (!m_ignoreCastTime)
     {
         SpellModRAII spellModController(this, m_trueCaster->GetSpellModOwner(), false, true);
+        // ARPG: a class spell casts at once, and its cast time is its recovery instead, reckoned
+        // as the client reckons it (Arpg::ClientRecovery: no cast speed, its modifier count), so
+        // its prediction of the GCD is exact. Before the cast time, whose charges it spends.
+        bool const atOnce = !m_IsTriggeredSpell && Arpg::CastsAtOnce(m_trueCaster, m_spellInfo);
+        uint32 const recovery = atOnce ? Arpg::ClientRecovery(static_cast<Player*>(m_trueCaster), m_spellInfo) : 0;
         m_casttime = GetSpellCastTime(m_spellInfo, m_trueCaster, this, true);
-        // ARPG: a class spell casts at once, and its cast time is its recovery instead.
-        // The recovery leaves out the caster's cast speed (a slow such as Curse of Tongues), which
-        // the client's prediction of it cannot see.
-        if (m_casttime > 0 && !m_IsTriggeredSpell && Arpg::CastsAtOnce(m_trueCaster, m_spellInfo))
+        if (atOnce)
         {
-            float const castSpeed = static_cast<Unit*>(m_trueCaster)->GetFloatValue(UNIT_MOD_CAST_SPEED);
-            m_arpgRecovery = castSpeed > 0.0f ? uint32(std::floor(float(m_casttime) / castSpeed)) : uint32(m_casttime);
-            m_arpgRecovery = std::max<uint32>(m_arpgRecovery, 1);
+            m_arpgRecovery = recovery;
             m_casttime = 0;
         }
     }

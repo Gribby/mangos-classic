@@ -11,6 +11,7 @@
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Log/Log.h"
 #include "Server/SQLStorages.h"
 #include "Util/Timer.h"
 
@@ -24,7 +25,7 @@ namespace
     using namespace Arpg;
 
     enum Event : uint8 { EV_HIT, EV_CRIT, EV_KILL, EV_STATE_APPLIED, EV_STATE_CONSUMED, EV_BLOCK, EV_DODGE };
-    enum Effect : uint8 { FX_APPLY, FX_STRIKE, FX_BURST, FX_SPREAD, FX_DAZE };
+    enum Effect : uint8 { FX_APPLY, FX_STRIKE, FX_BURST, FX_SPREAD, FX_DAZE, FX_NOVA };
 
     constexpr int8 ANY = -1;
     constexpr uint8 DAMAGE_TAGS = 7;        // the damage tags, Physical to Shadow (Arpg/ArpgTags.h)
@@ -83,6 +84,11 @@ namespace
               FX_APPLY, STATE_CHILLED, 0, 2000, 0, nullptr,
               "Dodging a blow Chills its attacker (once every 2 sec)." },
 
+            // Its grounds (Flamestrike, Blizzard) are where its hits do more.
+            { "Kindling Ground", EV_HIT, CLASS_MAGE, nullptr, Arpg::SKILL_NONE, TagBit(TAG_FIRE), STATE_SCORCHED_GROUND, ANY,
+              FX_APPLY, STATE_IGNITED, 0, 1000, 0, nullptr,
+              "Your Fire hits Ignite an enemy standing in your Flamestrike (once a second)." },
+
             { "Pyre", EV_KILL, CLASS_MAGE, nullptr, Arpg::SKILL_NONE, 0, STATE_IGNITED, ANY,
               FX_SPREAD, STATE_IGNITED, 2, 0, 0, nullptr,
               "An Ignited enemy's death Ignites the 2 nearest enemies within 10 yards." },
@@ -94,6 +100,11 @@ namespace
             { "Blooming Star", EV_HIT, CLASS_DRUID, "Starfire", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
               FX_BURST, STATE_POISONED, 60, 0, 0, nullptr,
               "Starfire consumes Poison to burst onto every enemy within 8 yards for 60% of the hit and the poison left." },
+
+            // Its ground: the Hurricane.
+            { "Eye of the Storm", EV_HIT, CLASS_DRUID, "Wrath", Arpg::SKILL_NONE, 0, STATE_STORM_GROUND, ANY,
+              FX_NOVA, STATE_STORM_GROUND, 40, 1000, 0, nullptr,
+              "Wrath on an enemy in your Hurricane also strikes every enemy within 8 yards of it for 40% (once a second)." },
 
             { "Plague Bearer", EV_KILL, CLASS_DRUID, nullptr, Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
               FX_SPREAD, STATE_POISONED, 2, 0, 0, nullptr,
@@ -173,6 +184,41 @@ namespace
             { "Rod of the Sleepwalker", EV_HIT, CLASS_DRUID, "Wrath", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
               FX_STRIKE, STATE_POISONED, 80, 0, 0, "Rod of the Sleepwalker",
               "Wrath consumes Poison for an extra hit of 80% of the hit and the poison left." },
+            // The act's later dungeons: Scarlet Monastery, Uldaman, Zul'Farrak, Maraudon,
+            // Blackrock Depths. The swing ("") rows fit any class that swings.
+            { "Ravager", EV_CRIT, 0, "", Arpg::SKILL_NONE, 0, STATE_BLEEDING, ANY,
+              FX_SPREAD, STATE_BLEEDING, 2, 2000, 0, "Ravager",
+              "A critical swing on a Bleeding enemy spreads Bleeding to the 2 nearest enemies within 10 yards (once every 2 sec)." },
+            { "Mirah's Song", EV_CRIT, 0, "", Arpg::SKILL_NONE, 0, STATE_DAZED, ANY,
+              FX_APPLY, STATE_JUDGED, 0, 1000, 0, "Mirah's Song",
+              "A critical swing on a Dazed enemy Judges it (once a second)." },
+            { "Aegis of the Scarlet Commander", EV_BLOCK, 0, nullptr, Arpg::SKILL_NONE, 0, ANY, ANY,
+              FX_DAZE, STATE_DAZED, 35, 1000, 0, "Aegis of the Scarlet Commander",
+              "Blocking a blow takes its attacker 35% of the way to a Daze (once a second)." },
+            { "The Rockpounder", EV_HIT, 0, "", Arpg::SKILL_NONE, 0, STATE_DAZED, ANY,
+              FX_BURST, STATE_DAZED, 80, 1500, 0, "The Rockpounder",
+              "Your swings consume Daze to burst onto every enemy within 8 yards for 80% of the hit (once every 1.5 sec)." },
+            { "Galgann's Firehammer", EV_HIT, 0, "", Arpg::SKILL_NONE, 0, STATE_DAZED, ANY,
+              FX_APPLY, STATE_IGNITED, 0, 1000, 0, "Galgann's Firehammer",
+              "Your swings Ignite a Dazed enemy (once a second)." },
+            { "Ironfoe", EV_CRIT, 0, "", Arpg::SKILL_NONE, 0, STATE_JUDGED, ANY,
+              FX_STRIKE, STATE_JUDGED, 100, 0, 0, "Ironfoe",
+              "A critical swing consumes Judged for an extra hit of 100% of the hit and the stored damage." },
+            { "Hypnotic Blade", EV_HIT, CLASS_MAGE, "Arcane Explosion", Arpg::SKILL_NONE, 0, STATE_OVERLOADED, ANY,
+              FX_APPLY, STATE_CHILLED, 0, 0, 0, "Hypnotic Blade",
+              "Arcane Explosion Chills an Overloaded enemy." },
+            { "Archaedic Stone", EV_HIT, CLASS_MAGE, "Flamestrike", Arpg::SKILL_NONE, 0, STATE_CHILLED, ANY,
+              FX_BURST, STATE_CHILLED, 60, 1000, 0, "Archaedic Stone",
+              "Flamestrike consumes Chill to burst onto every enemy within 8 yards for 60% of the hit (once a second)." },
+            { "Gahz'rilla Fang", EV_KILL, 0, nullptr, Arpg::SKILL_NONE, 0, STATE_FROZEN, ANY,
+              FX_SPREAD, STATE_FROZEN, 2, 2000, 0, "Gahz'rilla Fang",
+              "A Frozen enemy's death Freezes the 2 nearest enemies within 10 yards (once every 2 sec)." },
+            { "Witch Doctor's Cane", EV_HIT, CLASS_DRUID, "Moonfire", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
+              FX_SPREAD, STATE_POISONED, 2, 2000, 0, "Witch Doctor's Cane",
+              "Moonfire on a Poisoned enemy spreads Poison to the 2 nearest enemies within 10 yards (once every 2 sec)." },
+            { "Rotgrip Mantle", EV_HIT, CLASS_DRUID, nullptr, Arpg::SKILL_NONE, TagBit(TAG_NATURE) | TagBit(TAG_ARCANE), STATE_STORM_GROUND, ANY,
+              FX_APPLY, STATE_POISONED, 0, 1000, 0, "Rotgrip Mantle",
+              "Your Nature and Arcane hits Poison an enemy standing in your Hurricane (once a second)." },
             { "Wolfshead Helm", EV_HIT, CLASS_DRUID, "Shred", Arpg::SKILL_NONE, 0, STATE_BLEEDING, ANY,
               FX_DAZE, STATE_DAZED, 20, 0, 0, "Wolfshead Helm",
               "Shred on a Bleeding enemy takes it 20% of the way to a Daze." },
@@ -332,6 +378,24 @@ namespace
                              StateName(row.state), victim->GetName(), uint32(foes.size()), foes.size() == 1 ? "enemy" : "enemies", amount);
                 break;
             }
+            case FX_NOVA:
+            {
+                // A burst that consumes nothing (a ground's, which is read, not spent): a share of
+                // the hit on every other enemy around.
+                uint8 const tag = FirstDamageTag(c.tags);
+                uint32 const amount = std::max<uint32>(1, uint32(uint64(c.dealt) * value / 100));
+                uint32 struck = 0;
+                for (Unit* foe : NearestFoes(player, victim, BURST_REACH, BURST_MAX + 1))
+                    if (foe != victim && foe->IsAlive() && struck < BURST_MAX)
+                    {
+                        StrikeFoe(player, foe, LookOf(tag), SchoolOfTag(tag), amount);
+                        ++struck;
+                    }
+                if (struck)
+                    ReportProcOn(player, victim, tag, PROC_DAMAGE, amount, row.name, "strikes %u %s around %s for %u.",
+                                 struck, struck == 1 ? "enemy" : "enemies", victim->GetName(), amount);
+                break;
+            }
             case FX_SPREAD:
             {
                 uint32 const count = uint32(std::max<int32>(1, value));
@@ -410,8 +474,15 @@ namespace
         }
         ++tDepth;
         for (auto const& [i, rank] : ready)
-            if (c.victim->IsInWorld())
-                Act(player, rows[i], rank, c);
+        {
+            if (!c.victim->IsInWorld())
+                continue;
+            // A row before may have consumed the state this one needs.
+            Row const& row = rows[i];
+            if (row.needState != ANY && !(StateMask(c.victim, c.event == EV_KILL) & StateBit(State(row.needState))))
+                continue;
+            Act(player, row, rank, c);
+        }
         --tDepth;
     }
 }
@@ -475,6 +546,8 @@ namespace Arpg
                     if (ItemPrototype const* proto = sItemStorage.LookupEntry<ItemPrototype>(id))
                         if (proto->Name1 && std::strcmp(proto->Name1, row.item) == 0)
                             entry = id;
+                if (!entry)
+                    sLog.outError("ARPG synergy: no item is named \"%s\"; its row never fires.", row.item);
                 it = found.emplace(row.item, entry).first;
             }
             if (it->second)

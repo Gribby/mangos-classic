@@ -199,6 +199,36 @@ namespace Arpg
         return row && row->CastTime > 0 && row->CastTime <= INSTANT_CAST_MAX_MS;
     }
 
+    int32 ClientSpellMod(Player const* player, SpellEntry const* spellInfo, uint8 op, int32 base)
+    {
+        if (spellInfo->SpellFamilyName != uint32(player->GetSpellClass()) || !spellInfo->SpellFamilyName ||
+                spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
+            return base;
+        int64 flat = 0, pct = 0;
+        for (uint32 bit = 0; bit < 64; ++bit)
+        {
+            uint64 const one = uint64(1) << bit;
+            if (!spellInfo->IsFitToFamilyMask(one))
+                continue;
+            for (SpellModifier const* mod : player->GetSpellModList(SpellModOp(op)))
+                if (mod->mask.IsFitToFamilyMask(one))
+                    (mod->type == SPELLMOD_FLAT ? flat : pct) += mod->value;
+        }
+        if (!flat && !pct)
+            return base;
+        return int32((int64(base) + flat) * std::max<int64>(0, pct + 100) / 100);
+    }
+
+    uint32 ClientRecovery(Player const* player, SpellEntry const* spellInfo)
+    {
+        SpellCastTimesEntry const* row = sSpellCastTimesStore.LookupEntry(spellInfo->CastingTimeIndex);
+        if (!row)
+            return 0;
+        int32 const cast = std::max(row->CastTime + row->CastTimePerLevel * (int32(player->GetLevel()) - int32(spellInfo->baseLevel)),
+                                    row->MinCastTime);
+        return uint32(std::max(0, ClientSpellMod(player, spellInfo, SPELLMOD_CASTING_TIME, cast)));
+    }
+
     bool ItemsBind(Player const* player)
     {
         return !Active(player);

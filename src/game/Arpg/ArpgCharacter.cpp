@@ -68,7 +68,9 @@ namespace
     // REST_DELAY_MS (no hit dealt or taken, out of combat), health comes back REST_HEALTH_PCT a
     // second and mana REST_MANA_PCT, slow enough that a run between packs is not a refill. The run
     // is BASE_SPEED_PCT faster than vanilla's.
-    constexpr uint32 MANA_ON_SWING_PERMILLE = 5, MANA_ON_SPELL_PERMILLE = 5, MANA_ON_KILL_PERMILLE = 20;
+    // (Kill and swing mana were halved after the play statistics showed mana never ran low in
+    // dense packs, and the melee pace doubled the swings.)
+    constexpr uint32 MANA_ON_SWING_PERMILLE = 3, MANA_ON_SPELL_PERMILLE = 5, MANA_ON_KILL_PERMILLE = 10;
     constexpr uint32 MANA_SPELL_EVERY = 1000;
     constexpr uint32 REST_DELAY_MS = 5000;
     constexpr float REST_HEALTH_PCT = 5.0f, REST_MANA_PCT = 2.0f;
@@ -1354,8 +1356,14 @@ namespace Arpg
         {
             float const lo = player->GetFloatValue(UNIT_FIELD_MINDAMAGE), hi = player->GetFloatValue(UNIT_FIELD_MAXDAMAGE);
             float const mod = DamageDoneMod(player, nullptr, nullptr);
+            // The swing time as it is, hastened and paced (GetAttackTime is the weapon's own).
             out.push_back(Format("|cff20ff20Each swing: %d to %d, every %.2f sec|r", int32(lo * mod), int32(hi * mod),
-                                 player->GetAttackTime(BASE_ATTACK) / 1000.0f));
+                                 player->GetFloatValue(UNIT_FIELD_BASEATTACKTIME) / 1000.0f));
+            std::shared_ptr<WebTotals const> const swingTotals = TotalsOf(player);
+            uint8 const wide = swingTotals ? swingTotals->Rank(KEY_WIDE_SWING) : 0;
+            out.push_back(Format("%sIt also strikes the enemies in front for %u%%, Fortifies you (%d%% less damage taken for %u sec) and heals %u%% of your health for each enemy struck.|r",
+                                 SHEET_NOTE, wide ? WIDE_SWING_PCT[std::min<uint8>(wide, 3) - 1] : SWING_ARC_PCT, FORTIFY_PCT,
+                                 FORTIFY_MS / 1000, LIFE_ON_HIT_PERMILLE / 10));
         }
         else
         {

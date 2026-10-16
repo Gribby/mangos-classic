@@ -33,12 +33,13 @@ namespace
     char const* const STATE_NAMES[MAX_STATE] = {
         "Chilled", "Frozen", "Ignited", "Bleeding", "Poisoned", "Withered", "Overloaded", "Judged",
         "Dazed", "Stunned", "Consecrated", "Scorched Ground", "Frozen Ground",
+        "Storm Ground",
     };
 
     // The ailment (a damage tag) behind each state, or 0xFF.
     uint8 const STATE_TAG[MAX_STATE] = {
         TAG_FROST, TAG_FROST, TAG_FIRE, TAG_PHYSICAL, TAG_NATURE, TAG_SHADOW, TAG_ARCANE, TAG_HOLY,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     };
 
     constexpr uint32 SPELL_CHILLED = 12484, SPELL_FROSTBITE = 12494, SPELL_DAZED = 1604;
@@ -136,6 +137,8 @@ namespace
                 mask |= StateBit(STATE_SCORCHED_GROUND);
             else if (std::strncmp(name, "Blizzard", 8) == 0)
                 mask |= StateBit(STATE_FROZEN_GROUND);
+            else if (std::strncmp(name, "Hurricane", 9) == 0)
+                mask |= StateBit(STATE_STORM_GROUND);
         }
         return mask;
     }
@@ -306,6 +309,7 @@ namespace Arpg
             case STATE_CONSECRATED:
             case STATE_SCORCHED_GROUND:
             case STATE_FROZEN_GROUND:
+            case STATE_STORM_GROUND:
                 return false;                   // a stun or a ground is read, never consumed
             default:
                 worth = TakeAffliction(victim, STATE_TAG[state]);

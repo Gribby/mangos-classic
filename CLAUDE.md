@@ -11,3 +11,5 @@
 
   (the second covers new files). Hits inside comments or strings are fine; an identifier is not.
 - More pitfalls: the client repo's `docs/ARPG-HANDOFF.md`, "Pitfalls that have bitten".
+- Design decisions and research: the client repo's `docs/ARPG-DECISIONS.md`. Read it before
+  planning; add to it when something is decided.

@@ -11,7 +11,8 @@
  *                Dazed for a few seconds: slowed, its cast broken, and taking more damage.
  *   Stunned      any stun.
  *   Consecrated  standing in a Consecration.
- *   Scorched Ground, Frozen Ground  standing in a Flamestrike or Rain of Fire, in a Blizzard.
+ *   Scorched Ground, Frozen Ground, Storm Ground  standing in a Flamestrike or Rain of Fire, in a
+ *                Blizzard, in a Hurricane.
  *
  * States are kept per enemy, whoever put them there. Consuming a state ends it and gives back what
  * it held (a damage over time's damage left, Judged's stored damage), for the consumer to pay out.
@@ -45,6 +46,7 @@ namespace Arpg
         STATE_CONSECRATED,
         STATE_SCORCHED_GROUND,
         STATE_FROZEN_GROUND,
+        STATE_STORM_GROUND,
         MAX_STATE
     };
 

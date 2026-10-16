@@ -2396,6 +2396,10 @@ class Player : public Unit
         uint32 m_enchantmentFlatMod[MAX_ATTACK]; // TODO: Stat system - incorporate generically, exposes a required hidden weapon stat that does not apply when unarmed
 
         SpellModList m_spellMods[MAX_SPELLMOD];
+    public:
+        // ARPG: the modifiers of one op, as the client was sent them (Arpg::ClientSpellMod).
+        SpellModList const& GetSpellModList(SpellModOp op) const { return m_spellMods[op]; }
+    protected:
         int32 m_SpellModRemoveCount;
         SpellFamily m_spellClassName; // s_spellClassSet
         EnchantDurationList m_enchantDuration;
