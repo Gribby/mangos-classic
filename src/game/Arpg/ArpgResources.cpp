@@ -56,6 +56,15 @@ namespace
         { "Rejuvenation", 10.0f }, { "Regrowth", 15.0f },
         { "Bear Form", 0.0f }, { "Dire Bear Form", 0.0f }, { "Cat Form", 0.0f }, { "Travel Form", 0.0f },
         { "Aquatic Form", 0.0f }, { "Moonkin Form", 0.0f },
+        // Warlock: Searing Pain is the free filler; Life Tap costs health, not mana.
+        { "Shadow Bolt", 9.0f }, { "Searing Pain", 0.0f }, { "Shadowburn", 10.0f }, { "Immolate", 8.0f },
+        { "Conflagrate", 8.0f }, { "Rain of Fire", 25.0f }, { "Hellfire", 20.0f }, { "Corruption", 6.0f },
+        { "Curse of Agony", 6.0f }, { "Siphon Life", 8.0f }, { "Drain Life", 10.0f }, { "Drain Soul", 8.0f },
+        { "Death Coil", 12.0f }, { "Life Tap", 0.0f }, { "Summon Imp", 15.0f }, { "Summon Voidwalker", 15.0f },
+        { "Summon Succubus", 15.0f }, { "Summon Felhunter", 15.0f }, { "Inferno", 20.0f }, { "Ritual of Doom", 30.0f },
+        { "Fear", 6.0f }, { "Howl of Terror", 10.0f }, { "Curse of Weakness", 5.0f }, { "Curse of Tongues", 5.0f },
+        { "Curse of Recklessness", 5.0f }, { "Curse of the Elements", 5.0f }, { "Curse of Shadow", 5.0f },
+        { "Curse of Doom", 10.0f }, { "Demon Skin", 0.0f }, { "Demon Armor", 0.0f }, { "Shadow Ward", 8.0f },
     };
 
     CostRow const* RowOf(SpellEntry const* spellInfo)
@@ -73,7 +82,8 @@ namespace
     {
         CostRow const* row = RowOf(spellInfo);
         return row && row->pct == 0.0f &&
-            (std::strcmp(row->name, "Frostbolt") == 0 || std::strcmp(row->name, "Wrath") == 0);
+            (std::strcmp(row->name, "Frostbolt") == 0 || std::strcmp(row->name, "Wrath") == 0 ||
+             std::strcmp(row->name, "Searing Pain") == 0);
     }
 
     bool Sealed(Unit const* unit)

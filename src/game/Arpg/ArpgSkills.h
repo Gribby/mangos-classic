@@ -89,6 +89,13 @@ namespace Arpg
         SKILL_BEAR              = 4, // Maul, Swipe, Demoralizing Roar
         SKILL_CAT               = 5, // Claw, Shred, Rake, Rip, Ferocious Bite
         SKILL_REJUVENATION      = 6, // Rejuvenation, Regrowth, Healing Touch, Entangling Roots
+        // A warlock's.
+        SKILL_SHADOW_BOLT       = 1, // Shadow Bolt, Searing Pain, Shadowburn
+        SKILL_CORRUPTION        = 2, // Corruption, Curse of Agony, Siphon Life
+        SKILL_IMMOLATE          = 3, // Immolate, Conflagrate, Rain of Fire, Hellfire
+        SKILL_DRAIN             = 4, // Drain Life, Drain Soul, Death Coil, Life Tap
+        SKILL_DEMON             = 5, // your demon: its summons and its abilities
+        SKILL_LEGION            = 6, // Inferno and Ritual of Doom: the horde's big summons
         // 7 and 8 (Holy Wrath, Hammer of Wrath alone) are folded into Wrath and Hammers.
     };
 
@@ -176,6 +183,10 @@ namespace Arpg
     // The slotted skills by name, each with its spent nodes ("Wide Swing 3"), for the play
     // statistics (Arpg/ArpgStats.h).
     std::vector<std::pair<std::string, std::vector<std::string>>> SkillBuild(Player const* player);
+
+    // A class's own spell modifiers, beside its trees' (a warlock's Inferno and Ritual of Doom on a
+    // minute's and three minutes' cooldown, not an hour's).
+    void AddClassSpellMods(Player const* player, std::vector<SkillSpellMod>& mods);
 
     // Add what the player's skill nodes give to `totals`.
     void AddSkillTotals(Player const* player, WebTotals& totals);

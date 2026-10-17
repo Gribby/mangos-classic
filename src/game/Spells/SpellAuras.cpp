@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgResources.h"
 #include "Common.h"
@@ -4612,6 +4613,7 @@ void Aura::PeriodicTick()
             {
                 Arpg::OnPeriodicHit(caster, target, spellProto);
                 Arpg::OnDruidTick(caster, target, spellProto, pdamage);
+                Arpg::OnWarlockTick(caster, target, spellProto, pdamage);
                 // ARPG: a Consecration's tick builds Daze (Arpg/ArpgStates.h).
                 Arpg::OnStateTick(caster, target, spellProto);
             }
@@ -4693,6 +4695,9 @@ void Aura::PeriodicTick()
 
             CleanDamage cleanDamage(pdamage, BASE_ATTACK, MELEE_HIT_NORMAL, pdamage || absorb);
             int32 new_damage = Unit::DealDamage(caster, victim, pdamage, &cleanDamage, DOT, GetSpellSchoolMask(spellProto), spellProto, false);
+            // ARPG: a warlock's drain tick (Arpg/ArpgWarlock.h).
+            if (pdamage)
+                Arpg::OnWarlockTick(caster, victim, spellProto, pdamage);
             Unit::ProcDamageAndSpell(ProcSystemArguments(caster, victim, procAttacker, procVictim, PROC_EX_NORMAL_HIT, pdamage, absorb, BASE_ATTACK, spellProto));
 
             if (!target->IsAlive() && caster->IsNonMeleeSpellCasted(false))

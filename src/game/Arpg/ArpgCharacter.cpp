@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgMinions.h"
+#include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgScenes.h"
 #include "Arpg/ArpgStates.h"
@@ -28,6 +30,7 @@
 #include "Entities/DynamicObject.h"
 #include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Entities/Pet.h"
 #include "Spells/Spell.h"
 #include "Spells/SpellAuras.h"
 #include "Spells/SpellMgr.h"
@@ -99,6 +102,12 @@ namespace
         if (max && unit->GetPower(POWER_MANA) < max)
             unit->ModifyPower(POWER_MANA, gain);
     }
+
+    // The warlock's keystones and nodes on damage (Arpg/ArpgWarlock.h).
+    constexpr int32 PLAGUE_LORD_PCT = 40, PLAGUE_LORD_LESS_PCT = 20, SOUL_SIPHON_LESS_PCT = 15, HELLSTORM_LESS_PCT = 20;
+    constexpr int32 RUINOUS_POWER_PCT = 30, LEGION_LESS_PCT = 15, DEMONIC_KNOWLEDGE_LESS_PCT = 20;
+    constexpr int32 DEMONIC_MASTERY_PER_RANK = 4, DEMONIC_SACRIFICE_PCT = 30, SOUL_REAPER_PER_RANK = 30;
+    constexpr uint32 SOUL_REAPER_BELOW_PCT = 25;
 
     // Executioner: below this share of health; Wrathful: this many enemies this close, this often.
     constexpr float EXECUTE_BELOW = 0.2f;
@@ -886,6 +895,37 @@ namespace
         if (int32 const verdant = VerdantFuryPct(player))
             more(verdant, "Verdant Fury");
 
+        // The warlock's (Arpg/ArpgWarlock.h): its own hits only; a minion's (the Minion tag) takes
+        // its own instead (Arpg::MinionDamageMod).
+        if (!(tags & TagBit(TAG_MINION)) && player->getClass() == CLASS_WARLOCK)
+        {
+            bool const dot = (tags & TagBit(TAG_DURATION)) != 0;
+            char const* name = spellInfo && spellInfo->SpellName[0] ? spellInfo->SpellName[0] : "";
+            if (t.Has(KEY_PLAGUE_LORD))
+                more(dot ? PLAGUE_LORD_PCT : -PLAGUE_LORD_LESS_PCT, "Plague Lord");
+            if (t.Has(KEY_SOUL_SIPHON) && !dot)
+                more(-SOUL_SIPHON_LESS_PCT, "Soul Siphon");
+            if (t.Has(KEY_HELLSTORM) && dot)
+                more(-HELLSTORM_LESS_PCT, "Hellstorm");
+            if (t.Has(KEY_RUINOUS_POWER) && (std::strcmp(name, "Shadow Bolt") == 0 || std::strcmp(name, "Searing Pain") == 0))
+                more(RUINOUS_POWER_PCT, "Ruinous Power");
+            if (t.Has(KEY_LEGION) && spellInfo)
+                more(-LEGION_LESS_PCT, "Legion");
+            if (t.Has(KEY_DEMONIC_KNOWLEDGE))
+                more(-DEMONIC_KNOWLEDGE_LESS_PCT, "Demonic Knowledge");
+            Pet const* pet = player->GetPet();
+            bool const demon = pet && pet->IsAlive();
+            if (demon)
+                more(DEMONIC_MASTERY_PER_RANK * t.Rank(KEY_DEMONIC_MASTERY), "Demonic Mastery");
+            else if (t.Has(KEY_DEMONIC_SACRIFICE))
+                more(DEMONIC_SACRIFICE_PCT, "Demonic Sacrifice");
+            if (victim && t.Has(KEY_HAUNTING_AGONY) && std::strcmp(name, "Curse of Agony") == 0 && HasState(victim, STATE_WITHERED))
+                more(100, "Haunting Agony");
+            if (victim && t.Has(KEY_SOUL_REAPER) && std::strcmp(name, "Drain Soul") == 0 &&
+                    victim->GetHealth() * 100 < victim->GetMaxHealth() * SOUL_REAPER_BELOW_PCT)
+                more(SOUL_REAPER_PER_RANK * t.Rank(KEY_SOUL_REAPER), "Soul Reaper");
+        }
+
         SkillId const skill = SkillOfSpell(player->getClass(), spellInfo);
         if (skill == SKILL_STRIKE && t.Has(KEY_MOMENTUM))
         {
@@ -896,7 +936,7 @@ namespace
         if ((tags & TagBit(TAG_PHYSICAL)) && t.Has(KEY_HEAVY_HAND) && TwoHanded(player))
             more(5 * t.Rank(KEY_HEAVY_HAND), "Heavy Hand");
         // The melee pace: twice the swings, each half (SWING_PACE).
-        if ((!spellInfo && (tags & TagBit(TAG_MELEE))) ||
+        if ((!spellInfo && (tags & TagBit(TAG_MELEE)) && !(tags & TagBit(TAG_MINION))) ||
                 (spellInfo && spellInfo->SpellName[0] && std::strncmp(spellInfo->SpellName[0], "Seal of Righteousness", 21) == 0))
             if (int32 const pace = int32(R(player).pacePct + 0.5f))
                 more(-pace, "quick swings");
@@ -1013,6 +1053,8 @@ namespace Arpg
                 mods.push_back({ uint8(SPELLMOD_CRITICAL_CHANCE), uint8(SPELLMOD_FLAT), v, ~uint64(0) });
             // (Spell critical strike damage adds to the multiplier: Arpg::CritBonus.)
         }
+        if (Active(player))
+            AddClassSpellMods(player, mods);
         SetSkillMods(player, r, mods);
         SetImmunity(player, r, t.Has(KEY_UNYIELDING) || (r.stunImmune && t.Has(KEY_STEADFAST)), t.Has(KEY_UNYIELDING));
         // Speed and cooldowns at once, not at the next refresh.
@@ -1029,6 +1071,8 @@ namespace Arpg
         ForgetAilments(player);
         ForgetMage(player);
         ForgetDruid(player);
+        ForgetWarlock(player);
+        ForgetMinions(player);
         FlushStats(player);
         ForgetCosts(player);
         ForgetActs(player);
@@ -1046,6 +1090,9 @@ namespace Arpg
         uint32 const now = WorldTimer::getMSTime();
         // A readied proc that waited too long goes (Arpg/ArpgProcs.h).
         UpdateProcs(player);
+        // The minions' leash and targets, and the warlock's Fel Domination (Arpg/ArpgMinions.h).
+        UpdateMinions(player);
+        UpdateWarlock(player);
         // The ailments this player inflicted tick and burst (Arpg/ArpgDamage.h).
         UpdateAilments(player);
         // The druid's pulse (Living Thorns, Arpg/ArpgDruid.h).
@@ -1170,6 +1217,15 @@ namespace Arpg
         {
             // A player above the creature's level takes less from it, below it more.
             float mod = PackDamageMod(attacker) * DamageScale(attacker, victim) * LevelGapMod(attacker, victim);
+            // An ARPG player's minion: its owner's bonuses where its tags (and Minion) match, its
+            // own more, and the enemy's states, as the owner's own hit (Arpg/ArpgMinions.h).
+            if (Player const* owner = MinionOwner(attacker))
+                if (std::shared_ptr<WebTotals const> ot = TotalsOf(owner))
+                {
+                    DamageParts const parts = DamagePartsFor(owner, *ot, victim, spellInfo, tags | TagBit(TAG_MINION), nullptr);
+                    mod *= std::max(0.0f, 1.0f + parts.increased / 100.0f) * parts.more * MinionDamageMod(attacker, owner, victim) *
+                           AilmentTakenMod(owner, victim) * StateTakenMod(victim);
+                }
             // Damage taken, the victim's item affixes.
             if (victim && victim->GetTypeId() == TYPEID_PLAYER)
                 if (std::shared_ptr<WebTotals const> taken = TotalsOf(victim))
@@ -1745,6 +1801,7 @@ namespace Arpg
             ProcHeal(killer, "Life on kill", uint32(life));
         GiveManaPermille(killer, MANA_ON_KILL_PERMILLE);
         OnDruidKill(killer);
+        OnWarlockKill(killer, victim);
         if (t.Has(KEY_CRUSADE))
         {
             Runtime& r = R(killer);

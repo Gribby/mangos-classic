@@ -169,6 +169,49 @@ namespace Arpg
         KEY_NATURES_WRATH,     // heals strike the nearest enemy for 15% per rank as Nature
         KEY_VERDANT_FURY,      // healing yourself: 5% more damage per rank for 5 sec
         KEY_WRATH_OF_THE_WILD, // heals Poison every enemy within 8 yd
+        // The warlock's web (Arpg/ArpgWarlock.cpp)
+        KEY_SOUL_SIPHON,       // drains heal 2% more per damage over time on the target; direct hits 15% less
+        KEY_PLAGUE_LORD,       // damage over time 40% more; direct hits 20% less
+        KEY_HELLSTORM,         // Rain of Fire and Hellfire stun on a crit; damage over time 20% less
+        KEY_RUINOUS_POWER,     // Shadow Bolt and Searing Pain 30% more; minions 30% less
+        KEY_LEGION,            // every kill raises an imp; your own spells 15% less
+        KEY_DEMONIC_KNOWLEDGE, // minions 30% more damage and life; you 20% less
+        // The warlock's skill trees (Arpg/ArpgWarlock.cpp, Arpg/ArpgMinions.cpp)
+        KEY_NIGHTFALL,         // Corruption and Agony ticks may loose a free Shadow Bolt, 2% per rank
+        KEY_SHADOWBURN,        // a kill with Shadowburn readies it again
+        KEY_TORMENTED_SOUL,    // Curse of Agony ticks may Wither, 10% per rank
+        KEY_HAUNTING_AGONY,    // Curse of Agony 100% more on Withered enemies
+        KEY_SOUL_FEAST,        // damage over time ticks heal 0.3% of max health
+        KEY_BURNING_RAIN,      // Rain of Fire ticks may Ignite, 10% per rank
+        KEY_FIRESTORM,         // Rain of Fire strikes Ignited enemies twice
+        KEY_HELLFIRE_WARD,     // 25% less self-damage from Hellfire per rank
+        KEY_INFERNAL_HEAT,     // Hellfire ticks give minions 5% more damage per rank for 4 sec
+        KEY_BACKLASH,          // 20% less damage taken while channelling Hellfire
+        KEY_LIFE_LINK,         // Drain Life ticks heal your minions
+        KEY_SOUL_REAPER,       // Drain Soul 30% more per rank below 25% health
+        KEY_REAPING,           // a kill under your Drain Soul raises an imp and restores 5% mana
+        KEY_DARK_PACT,         // Life Tap gives 1% more of max mana per rank
+        KEY_DEMONIC_PACT,      // Life Tap also heals you 5% of max health, from your demon
+        KEY_FEL_VITALITY,      // your demon has 10% more life per rank
+        KEY_DEMONIC_EMBRACE,   // your demon deals 8% more per rank
+        KEY_CLEAVING_DEMON,    // your demon's melee strikes those in front, 30/45/60%
+        KEY_FEL_DOMINATION,    // a dead demon is summoned again at once (once every 30 sec)
+        KEY_LASH_ARC,          // Lash of Pain and Firebolt strike 1 more per rank
+        KEY_DEMONIC_MASTERY,   // while your demon lives, 4% more damage per rank
+        KEY_GRAND_PACT,        // your demon: 40% more life, 25% more damage
+        KEY_TORMENT_COMMAND,   // your curses send every minion at their target, 20% more to it
+        KEY_SACRIFICE_COMMAND, // Life Tap detonates your oldest horde minion
+        KEY_SOUL_LINK,         // 10% per rank of damage taken goes to your demon
+        KEY_DEMONIC_SACRIFICE, // no demon: 30% more damage
+        KEY_IMP_GATE,          // kills raise an imp, 25% per rank
+        KEY_IMP_SWARM,         // the horde holds 2 more per rank
+        KEY_FIERY_SWARM,       // horde imps' Firebolts Ignite, 10% per rank
+        KEY_BURNING_LEGION,    // a horde minion's kill raises an imp
+        KEY_INFERNAL_FALL,     // Inferno's landing stuns and strikes within 8/10/12 yd
+        KEY_IMMOLATION_AURA,   // Infernals deal 20% more per rank
+        KEY_LORD_OF_FLAME,     // Inferno calls two Infernals
+        KEY_DOOMBRINGER,       // the Doomguard deals 15% more per rank
+        KEY_PIT_LORD,          // the Doomguard stays 10 min
         MAX_KEYSTONE
     };
 
@@ -242,6 +285,12 @@ namespace Arpg
         int32 vsState[MAX_STATE] = {};
         int32 dazeBuildPct = 0;
         uint8 convert[16] = {};
+        // Minions (Arpg/ArpgMinions.h): their life, attack and cast speed, the horde's size, and
+        // their life leech (thousandths of their damage). Their damage is the Minion tag's.
+        int32 minionLifePct = 0;
+        int32 minionSpeedPct = 0;
+        int32 hordeSize = 0;
+        int32 minionLeech = 0;
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers

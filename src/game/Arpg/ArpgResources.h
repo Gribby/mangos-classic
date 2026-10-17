@@ -6,12 +6,13 @@
  *     cast empties what is left (a miss's refund is of what it took). The free filler and the
  *     regeneration keep a player from ever being stuck.
  *   - Costs as a share of the pool: a class's main spells cost a set share of maximum mana
- *     (Fireball 9%, Arcane Missiles 18%, Consecration 22%...); any other mana spell its vanilla
+ *     (Fireball 11%, Arcane Missiles 18%, Consecration 22%...); any other mana spell its vanilla
  *     share of base mana, halved, of maximum mana. Talents and gear's cost cuts still apply.
- *   - A free filler per class that gives mana back on a hit: the mage's Frostbolt and the druid's
- *     Wrath (3% each), and a paladin's melee swing while a Seal is on (2%). Shapeshifting is free,
+ *   - A free filler per class that gives mana back on a hit: the mage's Frostbolt, the druid's
+ *     Wrath and the warlock's Searing Pain (3% each), and a paladin's melee swing while a Seal is
+ *     on (1%). Shapeshifting is free,
  *     and a bear comes in with 20 rage (Spells/SpellAuras.cpp, the shapeshift).
- *   - Regeneration: 1.5% of maximum mana a second, and the gear's mana per 5 seconds, whether or
+ *   - Regeneration: 1% of maximum mana a second, and the gear's mana per 5 seconds, whether or
  *     not the player cast lately (no five-second rule); out of combat the rest refills it
  *     (Arpg/ArpgCharacter.h). A health globe also gives back GLOBE_MANA_PCT of maximum mana.
  *

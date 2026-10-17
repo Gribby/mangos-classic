@@ -53,6 +53,8 @@ namespace
         FX_SPELL_AREA,    // % spell area
         FX_BLOCK,         // % block chance
         FX_MANA_ON_HIT,   // mana per swing or skill hit
+        FX_MINION_LIFE,   // % minion life
+        FX_MINION_SPEED,  // % minion attack and cast speed
     };
 
     struct Fx
@@ -450,13 +452,87 @@ namespace
         return Assemble(regions, bridges, ring, bridgeSmall, { "Druid", "Your starting point. Every path leads out from here.", {}, 5176 });
     }
 
+    // The warlock's web: Affliction, Destruction and Demonology. Its notables teach the warlock's own
+    // talents; Demonology's smalls carry the minion stats (Arpg/ArpgMinions.h).
+    ClassWeb BuildWarlock()
+    {
+        RegionSpec const regions[3] =
+        {
+            { "Affliction", -150.0f,
+              { "Affliction", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Rot", "+4% damage over time", { TagFx(TAG_DURATION, 4) } },
+                    { "Improved Corruption", "Your Corruption takes hold at once.", {}, 0, "Improved Corruption", 5 },
+                    { "Plague Lord", "Your damage over time deals 40% more. Your direct hits deal 20% less.", {}, 172, nullptr, 0, KEY_PLAGUE_LORD },
+                    true },
+                  { { "Shadows", "+4% Shadow damage", { TagFx(TAG_SHADOW, 4) } },
+                    { "Shadow Mastery", "+10% Shadow damage.", {}, 0, "Shadow Mastery", 5 },
+                    { "Nightfall", "Your Corruption and Drain Life may make your next Shadow Bolt instant.", {}, 0, "Nightfall", 2 },
+                    false },
+                  { { "Siphon", "+5 Stamina", { Stat(STAT_STAMINA, 5) } },
+                    { "Improved Drain Life", "Your Drain Life drains 10% more.", {}, 0, "Improved Drain Life", 5 },
+                    { "Soul Siphon", "Your drains heal 2% more for each of your damage over time on the target, up to 10. Your direct hits deal 15% less.", {}, 689, nullptr, 0, KEY_SOUL_SIPHON },
+                    true },
+              },
+              { { "Malice", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                { "Hunger", "+6 life on kill and +3 mana on hit", { Of(FX_LIFE_ON_KILL, 6), Of(FX_MANA_ON_HIT, 3) } } } },
+            { "Destruction", -30.0f,
+              { "Destruction", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Cinders", "+4% Fire damage", { TagFx(TAG_FIRE, 4) } },
+                    { "Emberstorm", "+10% Fire damage.", {}, 0, "Emberstorm", 5 },
+                    { "Hellstorm", "Your Rain of Fire and Hellfire stun on a critical strike (once every 4 sec for each enemy). Your damage over time deals 20% less.", {}, 5740, nullptr, 0, KEY_HELLSTORM },
+                    true },
+                  { { "Bolts", "+4% Projectile damage", { TagFx(TAG_PROJECTILE, 4) } },
+                    { "Improved Shadow Bolt", "A critical Shadow Bolt makes its target take more Shadow damage.", {}, 0, "Improved Shadow Bolt", 5 },
+                    { "Devastation", "+5% critical strike chance with Destruction spells.", {}, 0, "Devastation", 5 },
+                    false },
+                  { { "Ruin", "+4% Spell damage", { TagFx(TAG_SPELL, 4) } },
+                    { "Bane", "Your Shadow Bolt's and Immolate's recovery is shorter.", {}, 0, "Bane", 5 },
+                    { "Ruinous Power", "Your Shadow Bolt and Searing Pain deal 30% more. Your minions deal 30% less.", {}, 686, nullptr, 0, KEY_RUINOUS_POWER },
+                    true },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Tempo", "+4% cooldown recovery", { Of(FX_COOLDOWN, 4) } } } },
+            { "Demonology", 90.0f,
+              { "Demonology", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Horde", "+5% Minion damage", { TagFx(TAG_MINION, 5) } },
+                    { "Master Summoner", "Your demons are summoned faster and for less mana.", {}, 0, "Master Summoner", 2 },
+                    { "Legion", "Every kill raises an imp to fight for you for 20 sec. Your own spells deal 15% less.", {}, 688, nullptr, 0, KEY_LEGION },
+                    true },
+                  { { "Fel Blood", "+6% Minion life", { Of(FX_MINION_LIFE, 6) } },
+                    { "Fel Intellect", "Your demon has more mana.", {}, 0, "Fel Intellect", 5 },
+                    { "Unholy Power", "Your demons' attacks and Firebolts deal 20% more.", {}, 0, "Unholy Power", 5 },
+                    false },
+                  { { "Frenzy", "+4% Minion attack and cast speed", { Of(FX_MINION_SPEED, 4) } },
+                    { "Demonic Embrace", "+15% Stamina.", {}, 0, "Demonic Embrace", 5 },
+                    { "Demonic Knowledge", "Your minions deal 30% more and have 30% more life. You deal 20% less.", {}, 697, nullptr, 0, KEY_DEMONIC_KNOWLEDGE },
+                    true },
+              },
+              { { "Pact", "+5% Minion damage and +3% Minion life", { TagFx(TAG_MINION, 5), Of(FX_MINION_LIFE, 3) } },
+                { "Bond", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } } } },
+        };
+        BridgeSpec const bridges[3] =
+        {
+            { 0, 2, 1, 0, -90.0f, { "Cataclysm", "Your Destruction spells cost 5% less mana.", {}, 0, "Cataclysm", 5 } },
+            { 1, 2, 2, 0, 30.0f, { "Fel Stamina", "Your demon has more health.", {}, 0, "Fel Stamina", 5 } },
+            { 2, 2, 0, 0, 150.0f, { "Grim Reach", "+20% range on Affliction spells.", {}, 0, "Grim Reach", 2 } },
+        };
+        Spec const ring = { "Shadowstep", "+3% movement speed", { Of(FX_MOVE, 3) } };
+        Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+        return Assemble(regions, bridges, ring, bridgeSmall, { "Warlock", "Your starting point. Every path leads out from here.", {}, 686 });
+    }
+
     ClassWeb const* WebOf(uint8 classId)
     {
         static ClassWeb const paladin = BuildPaladin();
         static ClassWeb const mage = BuildMage();
         static ClassWeb const druid = BuildDruid();
+        static ClassWeb const warlock = BuildWarlock();
         switch (classId)
         {
+            case CLASS_WARLOCK: return &warlock;
             case CLASS_PALADIN: return &paladin;
             case CLASS_MAGE: return &mage;
             case CLASS_DRUID: return &druid;
@@ -612,6 +688,8 @@ namespace
                     case FX_SPELL_AREA:   t.spellAreaPct += fx.value; break;
                     case FX_BLOCK:        t.blockPct += fx.value; break;
                     case FX_MANA_ON_HIT:  t.manaOnHit += fx.value; break;
+                    case FX_MINION_LIFE:  t.minionLifePct += fx.value; break;
+                    case FX_MINION_SPEED: t.minionSpeedPct += fx.value; break;
                 }
             }
         }
@@ -765,6 +843,14 @@ namespace
         { CLASS_DRUID, 5487, 10 },     // Bear Form (a quest in vanilla)
         { CLASS_DRUID, 779, 10 },      // Swipe, rank 1 (16)
         { CLASS_DRUID, 16914, 20 },    // Hurricane, rank 1 (40)
+        // The warlock: its area spells and its demons sooner, and without their quests.
+        { CLASS_WARLOCK, 697, 10 },    // Summon Voidwalker (a quest at 10)
+        { CLASS_WARLOCK, 5740, 10 },   // Rain of Fire, rank 1 (20)
+        { CLASS_WARLOCK, 712, 20 },    // Summon Succubus (a quest at 20)
+        { CLASS_WARLOCK, 1949, 20 },   // Hellfire, rank 1 (30)
+        { CLASS_WARLOCK, 1122, 20 },   // Inferno (50, and an Infernal Stone)
+        { CLASS_WARLOCK, 691, 30 },    // Summon Felhunter (a quest at 30)
+        { CLASS_WARLOCK, 18540, 40 },  // Ritual of Doom (60, and a party)
     };
 
     // Drop the talent spells the character shouldn't have, and give it the free ones.

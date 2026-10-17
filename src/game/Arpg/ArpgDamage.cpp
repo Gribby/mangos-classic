@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgDamage.h"
+#include "Arpg/ArpgMinions.h"
+#include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgCharacter.h"
@@ -395,15 +397,27 @@ namespace Arpg
 
     void OnHitLanded(Unit* attacker, Unit* victim, SpellEntry const* spellInfo, uint32 tags, uint32 dealt, bool crit)
     {
-        if (!attacker || !victim || !dealt || attacker == victim || attacker->GetTypeId() != TYPEID_PLAYER || !Active(attacker))
+        if (!attacker || !victim || !dealt || attacker == victim)
             return;
+        // A minion's hit is its owner's for the ailments, the Daze and the triggers (Arpg/ArpgMinions.h).
+        Player* player = attacker->GetTypeId() == TYPEID_PLAYER ? (Active(attacker) ? static_cast<Player*>(attacker) : nullptr)
+                                                                : MinionOwner(attacker);
+        if (!player)
+            return;
+        bool const minion = attacker != player;
         if (!Scaled(victim) || !attacker->CanAttack(victim))
             return;
-        std::shared_ptr<WebTotals const> totals = TotalsOf(attacker);
+        std::shared_ptr<WebTotals const> totals = TotalsOf(player);
         if (!totals)
             return;
         WebTotals const& t = *totals;
-        Player* player = static_cast<Player*>(attacker);
+        if (minion)
+        {
+            tags |= TagBit(TAG_MINION);
+            OnMinionHit(attacker, player, victim, spellInfo, dealt);
+        }
+        else
+            OnOwnerStruck(player, victim);
 
         // A skill tree's conversion: its hits count as another damage type, for their ailments,
         // their Daze and the triggers (Arpg/ArpgStates.h).
@@ -420,10 +434,14 @@ namespace Arpg
             BuildDaze(player, victim, dealt, tags);
         // The mage's and the druid's keystones on a spell's hit (Arpg/ArpgMage.h, ArpgDruid.h), the
         // dead included.
+        // A minion's hit stops here: the class hooks and added damage are its owner's own.
+        if (minion)
+            return;
         if (spellInfo)
         {
             OnMageHit(player, victim, spellInfo, dealt, crit);
             OnDruidHit(player, victim, spellInfo, dealt, crit);
+            OnWarlockHit(player, victim, spellInfo, dealt, crit);
         }
 
         // Added damage: attacks take the attack affixes, spells the spell ones. A Seal's hit rides

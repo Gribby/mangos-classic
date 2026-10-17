@@ -485,6 +485,101 @@ namespace
                   Mod(649, 2, 2, 648, 3, "Grasping Vines", "20% more Entangling Roots damage per rank.", 16918, SPELLMOD_DOT, SPELLMOD_PCT, 20, "Entangling Roots"),
                   KitCap(650, 2, 3, 649, "Overgrowth", "Entangling Roots roots every enemy within 10 yards of its target.", 16689, KIT_SPREAD, 339, 10, 10.0f, 100),
               } },
+            // --- The warlock's six, numbered 60-79 within each skill's hundred. ---
+            { SKILL_SHADOW_BOLT, CLASS_WARLOCK, "Shadow Bolt", "Shadow Bolt, Searing Pain and Shadowburn: the warlock's bolts.", 686, { "Shadow Bolt", "Searing Pain", "Shadowburn" },
+              { "Volley", "Nightfall", "Ruin" },
+              {
+                  Kit(161, 0, 1, 0, 3, "Splitting Bolt", "Shadow Bolt launches 1/1/2 extra bolts, at 45/60/60%.", 686,
+                      KIT_EXTRA_PROJECTILES, 686, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
+                  Kit(162, 0, 2, 161, 3, "Piercing Shadow", "Shadow Bolt flies through 1/2/4 enemies, at 60%.", 686,
+                      KIT_PIERCE, 686, { 1, 2, 4 }, { 0, 0, 0 }, { 60, 60, 60 }),
+                  Ail(163, 0, 3, 162, 3, "Withering Bolt", "Your Shadow Bolt skill's hits have an 8% chance per rank to Wither.", 17877, TAG_SHADOW, 8),
+                  KitCap(164, 0, 4, 163, "Shadowstorm", "Shadow Bolt bursts onto every enemy within 6 yards of its target, at 50%.", 17877, KIT_BURST, 686, 0, 6.0f, 50),
+                  Key(165, SKILL_NODE_SYNERGY, 1, 1, 0, 3, "Nightfall", "Each tick of your Corruption and Curse of Agony has a 2% chance per rank to loose a free Shadow Bolt at its target.", 18094, KEY_NIGHTFALL),
+                  Mod(166, 1, 2, 165, 3, "Quick Bolt", "-0.15 sec Shadow Bolt recovery per rank.", 17803, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Shadow Bolt"),
+                  Key(167, SKILL_NODE_SYNERGY, 1, 3, 166, 1, "Shadow Trance", "Shadow Bolt consumes Withered for an extra hit of 100% of the hit and the stacks.", 17941, KEY_NONE),
+                  Mod(168, 2, 1, 0, 3, "Devastation", "+3% Shadow Bolt skill critical strike chance per rank.", 18130, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 3),
+                  Mod(169, 2, 2, 168, 3, "Ruin", "Critical strikes deal 20% more of their bonus per rank.", 17959, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
+                  Mod(170, 2, 3, 169, 3, "Searing Pain", "10% more Searing Pain damage per rank.", 5676, SPELLMOD_DAMAGE, SPELLMOD_PCT, 10, "Searing Pain"),
+                  Key(171, SKILL_NODE_CAPSTONE, 2, 4, 170, 1, "Shadowburn", "A kill with Shadowburn readies it again.", 17877, KEY_SHADOWBURN),
+              } },
+            { SKILL_CORRUPTION, CLASS_WARLOCK, "Corruption", "Corruption, Curse of Agony and Siphon Life: shadow that rots and spreads.", 172, { "Corruption", "Curse of Agony", "Siphon Life" },
+              { "Plague", "Agony", "Siphon" },
+              {
+                  Kit(261, 0, 1, 0, 3, "Spreading Corruption", "Corruption also lands on 1/2/3 more enemies within 8 yards.", 172,
+                      KIT_SPREAD, 172, { 1, 2, 3 }, { 8, 8, 8 }, { 100, 100, 100 }),
+                  Mod(262, 0, 2, 261, 3, "Rot", "15% more Corruption damage per rank.", 17810, SPELLMOD_DOT, SPELLMOD_PCT, 15, "Corruption"),
+                  KitCap(263, 0, 3, 262, "Pandemic", "Corruption spreads to every enemy within 10 yards when its target dies.", 18265, KIT_SPREAD, 172, 0, 10.0f, 100),
+                  Kit(264, 1, 1, 0, 2, "Lingering Curse", "Curse of Agony also lands on 1/2 more enemies within 8 yards.", 980,
+                      KIT_SPREAD, 980, { 1, 2 }, { 8, 8 }, { 100, 100 }),
+                  Key(265, SKILL_NODE_SYNERGY, 1, 2, 264, 3, "Tormented Soul", "Each tick of your Curse of Agony has a 10% chance per rank to Wither its target.", 18827, KEY_TORMENTED_SOUL),
+                  Key(266, SKILL_NODE_CAPSTONE, 1, 3, 265, 1, "Haunting Agony", "Curse of Agony deals 100% more to Withered enemies.", 18829, KEY_HAUNTING_AGONY),
+                  Mod(267, 2, 1, 0, 3, "Siphoning", "10% more Siphon Life damage per rank.", 18265, SPELLMOD_DOT, SPELLMOD_PCT, 10, "Siphon Life"),
+                  Mod(268, 2, 2, 267, 2, "Grim Reach", "+3 sec Corruption, Curse of Agony and Siphon Life duration per rank.", 18218, SPELLMOD_DURATION, SPELLMOD_FLAT, 3000),
+                  Key(269, SKILL_NODE_CAPSTONE, 2, 3, 268, 1, "Soul Feast", "Every tick of your damage over time heals you for 0.3% of your maximum health, 3% a second at most.", 18265, KEY_SOUL_FEAST),
+              } },
+            { SKILL_IMMOLATE, CLASS_WARLOCK, "Immolate", "Immolate, Conflagrate, Rain of Fire and Hellfire: the warlock's fire. An ARPG warlock has Rain of Fire from level 10 and Hellfire from 20.", 348,
+              { "Immolate", "Conflagrate", "Rain of Fire", "Hellfire" },
+              { "Pyre", "Cataclysm", "Hellfire" },
+              {
+                  Kit(361, 0, 1, 0, 2, "Spreading Flame", "Immolate also lands on 1/2 more enemies within 8 yards.", 348,
+                      KIT_SPREAD, 348, { 1, 2 }, { 8, 8 }, { 100, 100 }),
+                  Mod(362, 0, 2, 361, 4, "Emberstorm", "6% more Immolate skill damage per rank.", 17954, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Key(363, SKILL_NODE_SYNERGY, 0, 3, 362, 1, "Conflagration", "Conflagrate consumes Ignite to burst onto every enemy within 8 yards for the hit and the burn left.", 17962, KEY_NONE),
+                  Mod(364, 1, 1, 0, 3, "Wide Rain", "+12% Rain of Fire radius per rank.", 5740, SPELLMOD_RADIUS, SPELLMOD_PCT, 12, "Rain of Fire"),
+                  Key(365, SKILL_NODE_TRANSFORMER, 1, 2, 364, 3, "Burning Rain", "Each Rain of Fire wave has a 10% chance per rank to Ignite the enemy it strikes.", 5740, KEY_BURNING_RAIN),
+                  Key(366, SKILL_NODE_CAPSTONE, 1, 3, 365, 1, "Firestorm", "Rain of Fire strikes Ignited enemies twice.", 11683, KEY_FIRESTORM),
+                  Key(367, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hellfire Ward", "25% less damage to yourself from Hellfire per rank.", 1949, KEY_HELLFIRE_WARD),
+                  Key(368, SKILL_NODE_SYNERGY, 2, 2, 367, 3, "Infernal Heat", "Each tick of your Hellfire gives your minions 5% more damage per rank for 4 sec.", 11683, KEY_INFERNAL_HEAT),
+                  Key(369, SKILL_NODE_CAPSTONE, 2, 3, 368, 1, "Backlash", "While you channel Hellfire, you take 20% less damage.", 11684, KEY_BACKLASH),
+              } },
+            { SKILL_DRAIN, CLASS_WARLOCK, "Drain", "Drain Life, Drain Soul, Death Coil and Life Tap: the warlock lives off its enemies, and off itself.", 689,
+              { "Drain Life", "Drain Soul", "Death Coil", "Life Tap" },
+              { "Siphon", "Reaping", "Pact" },
+              {
+                  Mod(461, 0, 1, 0, 4, "Grim Drain", "10% more Drain Life damage per rank.", 17783, SPELLMOD_DOT, SPELLMOD_PCT, 10, "Drain Life"),
+                  Kit(462, 0, 2, 461, 2, "Chained Drain", "Drain Life also drains 1/2 more enemies within 10 yards.", 689,
+                      KIT_SPREAD, 689, { 1, 2 }, { 10, 10 }, { 100, 100 }),
+                  Key(463, SKILL_NODE_CAPSTONE, 0, 3, 462, 1, "Life Link", "Each tick of your Drain Life heals your minions for 50% of its damage.", 755, KEY_LIFE_LINK),
+                  Key(464, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Soul Reaper", "Drain Soul deals 30% more per rank to enemies below 25% health.", 1120, KEY_SOUL_REAPER),
+                  Key(465, SKILL_NODE_CAPSTONE, 1, 2, 464, 1, "Reaping", "A kill under your Drain Soul raises an imp to fight for you and restores 5% of your maximum mana.", 18371, KEY_REAPING),
+                  Key(466, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Dark Pact", "Life Tap gives you 1% more of your maximum mana per rank.", 18220, KEY_DARK_PACT),
+                  Mod(467, 2, 2, 466, 2, "Death's Grasp", "-10 sec Death Coil cooldown per rank.", 6789, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000, "Death Coil"),
+                  Key(468, SKILL_NODE_CAPSTONE, 2, 3, 467, 1, "Demonic Pact", "Life Tap also heals you for 5% of your maximum health, taken from your demon.", 18220, KEY_DEMONIC_PACT),
+              } },
+            { SKILL_DEMON, CLASS_WARLOCK, "Demon", "Your demon: the Imp burns, the Voidwalker holds, the Succubus withers, the Felhunter eats spells. Summoning needs no Soul Shard and casts at once.", 688,
+              { "Summon Imp", "Summon Voidwalker", "Summon Succubus", "Summon Felhunter", "Firebolt", "Blood Pact", "Fire Shield", "Phase Shift",
+                "Torment", "Sacrifice", "Suffering", "Consume Shadows", "Lash of Pain", "Seduction", "Soothing Kiss", "Lesser Invisibility",
+                "Devour Magic", "Spell Lock", "Tainted Blood", "Paranoia", "Fel Domination", "Soul Link", "Health Funnel" },
+              { "Brute", "Seduction", "Command" },
+              {
+                  Key(561, SKILL_NODE_MODIFIER, 0, 1, 0, 4, "Fel Vitality", "Your demon has 10% more life per rank.", 18731, KEY_FEL_VITALITY),
+                  Key(562, SKILL_NODE_MODIFIER, 0, 2, 561, 3, "Demonic Embrace", "Your demon deals 8% more damage per rank.", 18697, KEY_DEMONIC_EMBRACE),
+                  Key(563, SKILL_NODE_TRANSFORMER, 0, 3, 562, 3, "Cleaving Demon", "Your demon's melee also strikes every enemy in front of it, the extras at 30/45/60%.", 845, KEY_CLEAVING_DEMON),
+                  Key(564, SKILL_NODE_CAPSTONE, 0, 4, 563, 1, "Fel Domination", "When your demon dies, it is summoned again at once (once every 30 sec).", 18708, KEY_FEL_DOMINATION),
+                  Key(565, SKILL_NODE_TRANSFORMER, 1, 1, 0, 2, "Lash Arc", "Lash of Pain and Firebolt also strike 1/2 more enemies within 6 yards, at 50%.", 7814, KEY_LASH_ARC),
+                  Key(566, SKILL_NODE_MODIFIER, 1, 2, 565, 3, "Demonic Mastery", "While your demon lives, you deal 4% more damage per rank.", 23825, KEY_DEMONIC_MASTERY),
+                  Key(567, SKILL_NODE_CAPSTONE, 1, 3, 566, 1, "Grand Pact", "Your demon has 40% more life and deals 25% more damage.", 18788, KEY_GRAND_PACT),
+                  Key(568, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Torment", "Your curses command: every minion turns on the cursed enemy and deals it 20% more for 4 sec.", 3716, KEY_TORMENT_COMMAND),
+                  Key(569, SKILL_NODE_SYNERGY, 2, 2, 568, 1, "Sacrifice", "Life Tap detonates your oldest horde minion: every enemy within 8 yards takes Fire damage of a quarter of its life.", 7812, KEY_SACRIFICE_COMMAND),
+                  Key(570, SKILL_NODE_MODIFIER, 2, 3, 569, 3, "Soul Link", "10% of the damage you take per rank is taken by your demon instead.", 19028, KEY_SOUL_LINK),
+                  Key(571, SKILL_NODE_CAPSTONE, 2, 4, 570, 1, "Demonic Sacrifice", "With no demon at your side, you deal 30% more damage.", 18788, KEY_DEMONIC_SACRIFICE),
+              } },
+            { SKILL_LEGION, CLASS_WARLOCK, "Legion", "Inferno and Ritual of Doom, and the horde: imps, Infernals and the Doomguard. An ARPG warlock has Inferno at 20 and the Doomguard at 40, with no stone, party or ritual.", 1122,
+              { "Inferno", "Ritual of Doom" },
+              { "Imps", "Infernal", "Doom" },
+              {
+                  Key(661, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Imp Gate", "Your kills have a 25% chance per rank to raise an imp that fights for you for 20 sec.", 688, KEY_IMP_GATE),
+                  Key(662, SKILL_NODE_MODIFIER, 0, 2, 661, 2, "Imp Swarm", "The horde holds 2 more minions per rank.", 688, KEY_IMP_SWARM),
+                  Key(663, SKILL_NODE_SYNERGY, 0, 3, 662, 3, "Fiery Swarm", "Your horde imps' Firebolts have a 10% chance per rank to Ignite.", 3110, KEY_FIERY_SWARM),
+                  Key(664, SKILL_NODE_CAPSTONE, 0, 4, 663, 1, "Burning Legion", "A horde minion's kill raises another imp.", 1122, KEY_BURNING_LEGION),
+                  Key(665, SKILL_NODE_TRANSFORMER, 1, 1, 0, 3, "Infernal Fall", "The Infernal's landing stuns and strikes every enemy within 8/10/12 yards.", 22703, KEY_INFERNAL_FALL),
+                  Key(666, SKILL_NODE_MODIFIER, 1, 2, 665, 3, "Immolation Aura", "Your Infernals deal 20% more damage per rank.", 19483, KEY_IMMOLATION_AURA),
+                  Key(667, SKILL_NODE_CAPSTONE, 1, 3, 666, 1, "Lord of Flame", "Inferno calls down two Infernals.", 1122, KEY_LORD_OF_FLAME),
+                  Mod(668, 2, 1, 0, 2, "Ritual Haste", "-60 sec Ritual of Doom cooldown per rank.", 18540, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -60000, "Ritual of Doom"),
+                  Key(669, SKILL_NODE_MODIFIER, 2, 2, 668, 3, "Doombringer", "Your Doomguard deals 15% more damage per rank.", 18540, KEY_DOOMBRINGER),
+                  Key(670, SKILL_NODE_CAPSTONE, 2, 3, 669, 1, "Pit Lord", "Your Doomguard stays for 10 min.", 18540, KEY_PIT_LORD),
+              } },
         };
         return skills;
     }
@@ -582,6 +677,23 @@ namespace
         { 644, 5775,  "Verdan the Everliving, Wailing Caverns" },       // Bloom
         { 647, 3671,  "Lady Anacondra, Wailing Caverns" },              // Wrath of the Wild
         { 650, 3670,  "Lord Pythas, Wailing Caverns" },                 // Overgrowth
+        // The warlock's
+        { 164, 4275,  "Archmage Arugal, Shadowfang Keep" },             // Shadowstorm
+        { 171, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Shadowburn
+        { 263, 7358,  "Amnennar the Coldbringer, Razorfen Downs" },     // Pandemic
+        { 266, 10503, "Jandice Barov, Scholomance" },                   // Haunting Agony
+        { 269, 1853,  "Darkmaster Gandling, Scholomance" },             // Soul Feast
+        { 366, 9017,  "Lord Incendius, Blackrock Depths" },             // Firestorm
+        { 369, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Backlash
+        { 463, 10813, "Balnazzar, Stratholme" },                        // Life Link
+        { 465, 10440, "Baron Rivendare, Stratholme" },                  // Reaping
+        { 468, 11486, "Prince Tortheldrin, Dire Maul" },                // Demonic Pact
+        { 564, 11520, "Taragaman the Hungerer, Ragefire Chasm" },       // Fel Domination
+        { 567, 11496, "Immol'thar, Dire Maul" },                        // Grand Pact
+        { 571, 5709,  "Shade of Eranikus, the Temple of Atal'Hakkar" }, // Demonic Sacrifice
+        { 664, 2748,  "Archaedas, Uldaman" },                           // Burning Legion
+        { 667, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Lord of Flame
+        { 670, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Pit Lord
     };
 
     // Revision 2 of the trees renumbered the capstones: a page read for an old one is read for its
@@ -621,6 +733,7 @@ namespace
         std::vector<std::tuple<uint8, uint8, int32>> mods; // RUNE_MODS: op, type, amount
         uint8 mageFits = 0;       // `fits` for a mage's skills (`fits` is a paladin's)
         uint8 druidFits = 0;      // and a druid's
+        uint8 warlockFits = 0;    // and a warlock's
     };
 
     // The skills of `classId`'s a rune fits: a bit per SkillId (0: none, a rune of another class).
@@ -631,6 +744,7 @@ namespace
             case CLASS_PALADIN: return rune.fits;
             case CLASS_MAGE: return rune.mageFits;
             case CLASS_DRUID: return rune.druidFits;
+            case CLASS_WARLOCK: return rune.warlockFits;
             default: return 0;
         }
     }
@@ -643,27 +757,33 @@ namespace
         static std::vector<RuneDef> const runes =
         {
             { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on a chain its tree gives).", 20186,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE)) },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE)),
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_DRAIN)) },
             { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on a burst its tree gives).", 24275,
-              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)) },
+              uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)),
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_IMMOLATE)) },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) },
-              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)), uint8(FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR)) },
+              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)), uint8(FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR)),
+              uint8(FIT(SKILL_IMMOLATE)) },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
-              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)), uint8(FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_REJUVENATION)) },
+              uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)), uint8(FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_REJUVENATION)),
+              uint8(FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE)) },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_WRATH) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) },
               uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_FIRE_BLAST)) },
             { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
-              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)) },
+              uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)),
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)) },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) },
-              uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT) | FIT(SKILL_REJUVENATION)) },
+              uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT) | FIT(SKILL_REJUVENATION)),
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)) },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 55% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
             // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
@@ -715,6 +835,19 @@ namespace
         }
     }
 
+    // A warlock's skills' kit spells, for its kit runes.
+    std::vector<uint32> WarlockKitSpellsOf(SkillId skill)
+    {
+        switch (skill)
+        {
+            case SKILL_SHADOW_BOLT: return { 686, 5676 };   // Shadow Bolt, Searing Pain
+            case SKILL_CORRUPTION: return { 172, 980 };     // Corruption, Curse of Agony
+            case SKILL_IMMOLATE: return { 348 };
+            case SKILL_DRAIN: return { 689 };               // Drain Life
+            default: return {};
+        }
+    }
+
     // The spells a rune's kit row lands on, by skill: the kit spells its tree's own rows use.
     std::vector<uint32> KitSpellsOf(uint8 classId, SkillId skill)
     {
@@ -722,6 +855,8 @@ namespace
             return MageKitSpellsOf(skill);
         if (classId == CLASS_DRUID)
             return DruidKitSpellsOf(skill);
+        if (classId == CLASS_WARLOCK)
+            return WarlockKitSpellsOf(skill);
         if (classId != CLASS_PALADIN)
             return {};
         switch (skill)
@@ -1853,6 +1988,20 @@ namespace Arpg
             return 0;
         auto rank = it->second.ranks.find(node);
         return rank == it->second.ranks.end() ? 0 : rank->second;
+    }
+
+    void AddClassSpellMods(Player const* player, std::vector<SkillSpellMod>& mods)
+    {
+        if (player->getClass() != CLASS_WARLOCK)
+            return;
+        // Their stock cooldown is an hour: these bring it to INFERNO_COOLDOWN and RITUAL_COOLDOWN.
+        constexpr int32 STOCK = 3600000, INFERNO_COOLDOWN = 60000, RITUAL_COOLDOWN = 180000;
+        NamedSpells const inferno = NamesMask(CLASS_WARLOCK, { "Inferno" }, "Inferno");
+        if (inferno.spells)
+            mods.push_back({ uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_FLAT), INFERNO_COOLDOWN - STOCK, inferno.mask, inferno.spells });
+        NamedSpells const ritual = NamesMask(CLASS_WARLOCK, { "Ritual of Doom" }, "Ritual of Doom");
+        if (ritual.spells)
+            mods.push_back({ uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_FLAT), RITUAL_COOLDOWN - STOCK, ritual.mask, ritual.spells });
     }
 
     std::vector<std::pair<std::string, std::vector<std::string>>> SkillBuild(Player const* player)

@@ -908,10 +908,12 @@ enum Opcodes
     SMSG_ARPG_SCENE                                 = 0x352,
     // ARPG: nearby enemies' states (Arpg/ArpgStates.h)
     SMSG_ARPG_STATES                                = 0x353,
+    // ARPG: the player's demon and horde, for the HUD (Arpg/ArpgMinions.h)
+    SMSG_ARPG_MINIONS                               = 0x354,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x354
+#define NUM_MSG_TYPES 0x355
 
 /// Player state
 enum SessionStatus

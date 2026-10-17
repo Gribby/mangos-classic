@@ -51,6 +51,7 @@
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
+#include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgLoot.h"
@@ -931,6 +932,8 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
             victim->SetStandState(UNIT_STAND_STATE_STAND);
     }
 
+    // ARPG: an ARPG warlock's Soul Link, Hellfire Ward and Backlash (Arpg/ArpgWarlock.h).
+    damage = Arpg::WarlockDamageTaken(victim, dealer, damage, spellInfo, damagetype == INSTAKILL);
     // ARPG: the Martyr keystone strikes back with a share of the damage (Arpg/ArpgCharacter.h).
     Arpg::OnDamageTaken(victim, dealer, damage);
     // ARPG: play statistics, damage dealt by spell and the blows before a death (Arpg/ArpgStats.h).
@@ -1454,6 +1457,8 @@ void Unit::JustKilledCreature(Unit* killer, Creature* victim, Player* responsibl
     // ARPG: play statistics, a kill or a death (Arpg/ArpgStats.h).
     Arpg::OnStatsKill(killer, victim);
     Arpg::OnKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
+    // ARPG: a minion's own kill (Arpg/ArpgWarlock.h).
+    Arpg::OnMinionKill(killer, victim);
     // ARPG: life on kill, the Crusade keystone, a final boss's passive point (Arpg/ArpgCharacter.h).
     Arpg::OnCharacterKill(killer ? killer->GetBeneficiaryPlayer() : nullptr, victim);
     // ARPG: the kill fills the killer's flask (Arpg/ArpgActions.h).

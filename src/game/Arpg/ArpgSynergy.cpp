@@ -110,6 +110,14 @@ namespace
               FX_SPREAD, STATE_POISONED, 2, 0, 0, nullptr,
               "A Poisoned enemy's death Poisons the 2 nearest enemies within 10 yards." },
 
+            // --- The warlock's own: shadow Withers, its minions carry it, its bolts and coils cash it. ---
+            { "Feast of Souls", EV_HIT, CLASS_WARLOCK, "Death Coil", Arpg::SKILL_NONE, 0, STATE_WITHERED, ANY,
+              FX_STRIKE, STATE_WITHERED, 100, 0, 0, nullptr,
+              "Death Coil consumes Withered for an extra hit of 100% of the hit and the stacks." },
+            { "Contagion", EV_KILL, CLASS_WARLOCK, nullptr, Arpg::SKILL_NONE, 0, STATE_WITHERED, ANY,
+              FX_SPREAD, STATE_WITHERED, 2, 0, 0, nullptr,
+              "A Withered enemy's death Withers the 2 nearest enemies within 10 yards." },
+
             // --- Paladin tree nodes (Arpg/ArpgSkills.cpp). ---
             { "Concussive Blows", EV_CRIT, CLASS_PALADIN, nullptr, SKILL_STRIKE, TagBit(TAG_PHYSICAL) | TagBit(TAG_HOLY), ANY, ANY,
               FX_DAZE, STATE_DAZED, 15, 0, 116, nullptr,
@@ -145,6 +153,14 @@ namespace
             { "Thorns of Cenarius", EV_CRIT, CLASS_DRUID, "Wrath", Arpg::SKILL_NONE, 0, STATE_POISONED, ANY,
               FX_SPREAD, STATE_POISONED, 2, 0, 153, nullptr,
               "A critical Wrath on a Poisoned enemy spreads Poison to the 2 nearest enemies within 10 yards." },
+
+            // --- Warlock tree nodes. ---
+            { "Shadow Trance", EV_HIT, CLASS_WARLOCK, "Shadow Bolt", Arpg::SKILL_NONE, 0, STATE_WITHERED, ANY,
+              FX_STRIKE, STATE_WITHERED, 100, 0, 167, nullptr,
+              "Shadow Bolt consumes Withered for an extra hit of 100% of the hit and the stacks." },
+            { "Conflagration", EV_HIT, CLASS_WARLOCK, "Conflagrate", Arpg::SKILL_NONE, 0, STATE_IGNITED, ANY,
+              FX_BURST, STATE_IGNITED, 100, 0, 363, nullptr,
+              "Conflagrate consumes Ignite to burst onto every enemy within 8 yards for the hit and the burn left." },
 
             // --- Uniques, by name: worn, they open a pairing of their own. ---
             { "Kresh's Back", EV_HIT, CLASS_PALADIN, "Hammer of Justice", Arpg::SKILL_NONE, 0, ANY, ANY,

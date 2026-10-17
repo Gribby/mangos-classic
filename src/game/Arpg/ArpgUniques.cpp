@@ -5,6 +5,7 @@
 #include "Arpg/ArpgProcs.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgUniques.h"
+#include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgSkills.h"
 #include "Arpg/ArpgCombat.h"
@@ -1066,17 +1067,11 @@ namespace Arpg
         UniqueMechanic const* raise = WornAny(killer, KIT_RAISE);
         if (!raise || !roll_chance_f(raise->value))
             return;
-        Creature* risen = killer->SummonCreature(raise->spell, victim->GetPositionX(), victim->GetPositionY(),
-                          victim->GetPositionZ(), victim->GetOrientation(), TEMPSPAWN_TIMED_OR_DEAD_DESPAWN,
-                          raise->pct * IN_MILLISECONDS);
+        // Into the horde (Arpg/ArpgMinions.h): its cap, its leash, its owner's minion stats.
+        Creature* risen = SummonHorde(static_cast<Player*>(killer), raise->spell, MINION_RAISED, victim->GetPositionX(),
+                                      victim->GetPositionY(), victim->GetPositionZ(), raise->pct * IN_MILLISECONDS);
         if (!risen)
             return;
-        risen->SelectLevel(killer->GetLevel());
-        risen->setFaction(killer->GetFaction());
-        risen->SetOwnerGuid(killer->GetObjectGuid());
-        std::vector<Unit*> foes = NearestTo(killer, risen, 20.0f, 1);
-        if (!foes.empty() && risen->AI())
-            risen->AI()->AttackStart(foes.front());
         ReportProc(killer, PROC_EFFECT, 0, MechanicName(raise), "raises %s to fight for you.", risen->GetName());
     }
 

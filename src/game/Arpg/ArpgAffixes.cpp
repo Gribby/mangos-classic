@@ -56,6 +56,8 @@ namespace
         AK_SKILL_LEVEL,
         // Synergy (Arpg/ArpgStates.h).
         AK_VS_STATE, AK_DAZE_BUILD,
+        // Minions (Arpg/ArpgMinions.h).
+        AK_MINION_LIFE, AK_MINION_SPEED, AK_HORDE_SIZE, AK_MINION_LEECH,
     };
 
     // Where an affix may roll.
@@ -182,6 +184,12 @@ namespace
         { AK_VS_STATE, STATE_STUNNED,     15, 40, "+%d%% increased damage against Stunned enemies", W_OFFENCE, 0 },
         { AK_VS_STATE, STATE_CONSECRATED, 10, 30, "+%d%% increased damage against enemies on Consecrated ground", W_OFFENCE, 0 },
         { AK_DAZE_BUILD, 0,               15, 40, "+%d%% increased Daze build-up", W_ANY, 0 },
+        // Minions (Arpg/ArpgMinions.h), from the minion pool on (POOL_MINION).
+        { AK_TAG, TAG_MINION,             10, 30, "+%d%% Minion damage", W_ANY, 0 },
+        { AK_MINION_LIFE, 0,              10, 30, "+%d%% Minion life", W_ANY, 0 },
+        { AK_MINION_SPEED, 0,             5, 15, "+%d%% Minion attack and cast speed", W_OFFENCE, 30 },
+        { AK_HORDE_SIZE, 0,               1, 2, "+%d to the horde's size", W_SKILL, 3 },
+        { AK_MINION_LEECH, 0,             5, 20, "Minions leech %s%% of their damage as life", W_ANY, 50, true },
     };
 
     // A value's share of the level 60 range, by item level: it grows by half again every nine
@@ -364,9 +372,10 @@ namespace
     // the first pool (the first POOL_FIRST_COUNT affixes), so its affixes never change.
     // Each pool is frozen at its size, as an item rolled from it re-rolls from its seed: an item
     // stored with the damage affixes keeps the first POOL_DAMAGE_COUNT, the synergy ones came after.
-    enum AffixPool : uint8 { POOL_FIRST = 0, POOL_DAMAGE = 1, POOL_SYNERGY = 2, POOL_CURRENT = POOL_SYNERGY };
+    enum AffixPool : uint8 { POOL_FIRST = 0, POOL_DAMAGE = 1, POOL_SYNERGY = 2, POOL_MINION = 3, POOL_CURRENT = POOL_MINION };
     constexpr size_t POOL_FIRST_COUNT = 61;
     constexpr size_t POOL_DAMAGE_COUNT = 86;
+    constexpr size_t POOL_SYNERGY_COUNT = 95;
 
     size_t PoolSize(uint8 pool);
 
@@ -427,10 +436,12 @@ namespace
     constexpr uint16 AFFIX_COUNT = uint16(sizeof(AFFIXES) / sizeof(AFFIXES[0]));
     static_assert(POOL_FIRST_COUNT < AFFIX_COUNT, "the first pool is the affixes before the damage ones");
     static_assert(POOL_DAMAGE_COUNT < AFFIX_COUNT, "the damage pool is the affixes before the synergy ones");
+    static_assert(POOL_SYNERGY_COUNT < AFFIX_COUNT, "the synergy pool is the affixes before the minion ones");
 
     size_t PoolSize(uint8 pool)
     {
-        return pool == POOL_FIRST ? POOL_FIRST_COUNT : pool == POOL_DAMAGE ? POOL_DAMAGE_COUNT : AFFIX_COUNT;
+        return pool == POOL_FIRST ? POOL_FIRST_COUNT : pool == POOL_DAMAGE ? POOL_DAMAGE_COUNT
+             : pool == POOL_SYNERGY ? POOL_SYNERGY_COUNT : AFFIX_COUNT;
     }
 
     uint16 IdOf(AffixDef const* def) { return uint16(def - AFFIXES + 1); }
@@ -891,6 +902,10 @@ namespace Arpg
                     case AK_SKILL_LEVEL: if (p < 4) totals.skillLevel[p] += v; break;
                     case AK_VS_STATE: if (p < MAX_STATE) totals.vsState[p] += v; break;
                     case AK_DAZE_BUILD: totals.dazeBuildPct += v; break;
+                    case AK_MINION_LIFE: totals.minionLifePct += v; break;
+                    case AK_MINION_SPEED: totals.minionSpeedPct += v; break;
+                    case AK_HORDE_SIZE: totals.hordeSize += v; break;
+                    case AK_MINION_LEECH: totals.minionLeech += v; break;
                 }
             }
         }
@@ -1002,6 +1017,10 @@ namespace Arpg
             }
             case AK_VS_STATE: return std::string("Shard of the ") + StateName(def.param);
             case AK_DAZE_BUILD: return "Shard of Concussion";
+            case AK_MINION_LIFE: return "Shard of Fel Blood";
+            case AK_MINION_SPEED: return "Shard of Frenzy";
+            case AK_HORDE_SIZE: return "Shard of the Legion";
+            case AK_MINION_LEECH: return "Shard of the Feast";
             default: break;
         }
         // The line without its number: "+%d%% Holy damage" is a Shard of Holy damage.

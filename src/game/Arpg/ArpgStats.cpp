@@ -268,7 +268,16 @@ namespace
             o << (i ? "," : "") << Json(taken[i].first) << ":" << taken[i].second;
         // The build as it is at the end: the weapon, the defences and the skills' nodes.
         Item const* weapon = player->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
-        o << "},\"build\":{\"weapon\":" << Json(weapon ? weapon->GetProto()->Name1 : "none")
+        // The share of the damage its minions dealt, in percent.
+        uint64 all = 0, minions = 0;
+        for (auto const& [name, t] : s.dealt)
+        {
+            all += t.damage;
+            if (name.find(" (minion): ") != std::string::npos)
+                minions += t.damage;
+        }
+        o << "},\"minionPct\":" << (all ? uint32(minions * 100 / all) : 0);
+        o << ",\"build\":{\"weapon\":" << Json(weapon ? weapon->GetProto()->Name1 : "none")
           << ",\"weaponSpeed\":" << (weapon ? weapon->GetProto()->Delay : 0)
           << ",\"swingMs\":" << uint32(player->GetFloatValue(UNIT_FIELD_BASEATTACKTIME))
           << ",\"maxHealth\":" << player->GetMaxHealth() << ",\"armor\":" << player->GetArmor()
@@ -303,7 +312,9 @@ namespace Arpg
         if (hitter && victim->GetTypeId() == TYPEID_UNIT)
         {
             Session& s = SessionOf(hitter, now);
-            std::string const key = dealer == hitter ? spellName : std::string("Pet: ") + spellName;
+            // A minion's, by its name: "Imp (minion): Firebolt".
+            std::string const key = dealer == hitter ? spellName
+                                  : std::string(dealer->GetName() ? dealer->GetName() : "?") + " (minion): " + spellName;
             SpellTally& t = s.dealt[key];
             ++t.hits;
             t.damage += damage;

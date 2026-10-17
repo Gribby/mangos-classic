@@ -32,6 +32,7 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgProcs.h"
+#include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgTags.h"
 #include "Arpg/ArpgStats.h"
@@ -3555,6 +3556,7 @@ SpellCastResult Spell::cast(bool skipCheck)
     // ARPG: a readied cast this fits is spent (Arpg/ArpgProcs.h).
     Arpg::OnProcCast(this);
     Arpg::OnStatsCast(this);
+    Arpg::OnWarlockCast(this);
 
     InitializeDamageMultipliers();
 
@@ -4946,6 +4948,10 @@ void Spell::ExecuteEffects(Unit* unitTarget, Item* itemTarget, GameObject* GOTar
 
 void Spell::HandleEffect(Unit* pUnitTarget, Item* pItemTarget, GameObject* pGOTarget, SpellEffectIndex i, float DamageMultiplier)
 {
+    // ARPG: an ARPG warlock's Ritual of Doom summons its Doomguard without the ritual (Arpg/ArpgWarlock.h).
+    if (Arpg::VetoSpellEffect(this, uint8(i)))
+        return;
+
     if (m_effectTriggerChance[i] != -1)
     {
         if (m_effectTriggerChance[i] == 0 || irand(1, 100) > m_effectTriggerChance[i])

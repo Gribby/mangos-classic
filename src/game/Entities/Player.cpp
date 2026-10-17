@@ -18780,8 +18780,11 @@ bool Player::HasItemFitToSpellReqirements(SpellEntry const* spellInfo, Item cons
     return false;
 }
 
-bool Player::CanNoReagentCast(SpellEntry const* /*spellInfo*/) const
+bool Player::CanNoReagentCast(SpellEntry const* spellInfo) const
 {
+    // ARPG: an ARPG player's own class spells need no reagents (a Soul Shard, an Infernal Stone).
+    if (spellInfo && Arpg::Active(this) && spellInfo->SpellFamilyName && spellInfo->SpellFamilyName == uint32(GetSpellClass()))
+        return true;
     // don't take reagents for spells with SPELL_ATTR_EX5_NO_REAGENT_WHILE_PREP
 //[-ZERO]    if (spellInfo->AttributesEx5 & SPELL_ATTR_EX5_NO_REAGENT_WHILE_PREP &&
 //        HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PREPARATION))

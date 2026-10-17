@@ -7,6 +7,7 @@
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgEvents.h"
+#include "Arpg/ArpgWarlock.h"
 
 #include "Entities/Unit.h"
 #include "Entities/Creature.h"
@@ -196,7 +197,8 @@ namespace Arpg
                 || spellInfo->HasAttribute(SPELL_ATTR_EX3_IGNORE_CASTER_MODIFIERS))
             return false;
         SpellCastTimesEntry const* row = sSpellCastTimesStore.LookupEntry(spellInfo->CastingTimeIndex);
-        return row && row->CastTime > 0 && row->CastTime <= INSTANT_CAST_MAX_MS;
+        // A warlock's summons cast at once whatever their cast (Arpg/ArpgWarlock.h).
+        return row && row->CastTime > 0 && (row->CastTime <= INSTANT_CAST_MAX_MS || IsArpgSummon(spellInfo));
     }
 
     int32 ClientSpellMod(Player const* player, SpellEntry const* spellInfo, uint8 op, int32 base)
@@ -221,6 +223,8 @@ namespace Arpg
 
     uint32 ClientRecovery(Player const* player, SpellEntry const* spellInfo)
     {
+        if (IsArpgSummon(spellInfo))
+            return SUMMON_RECOVERY_MS;
         SpellCastTimesEntry const* row = sSpellCastTimesStore.LookupEntry(spellInfo->CastingTimeIndex);
         if (!row)
             return 0;

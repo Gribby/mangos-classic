@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
  
+#include "Arpg/ArpgWarlock.h"
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
 #include "Spells/SpellMgr.h"
@@ -39,6 +40,14 @@ struct InfernoWarlockSummon : public SpellScript
 {
     void OnSummon(Spell* spell, Creature* summon) const override
     {
+        // ARPG: an ARPG warlock's Infernal joins its horde a while, never to turn on it
+        // (Arpg/ArpgWarlock.h): its landing and its Immolation, without the enslaving.
+        if (Arpg::AdoptSpellSummon(spell->GetCaster(), summon))
+        {
+            summon->CastSpell(nullptr, 22703, TRIGGERED_NONE);
+            summon->AI()->DoCastSpellIfCan(nullptr, 19483, CAST_TRIGGERED | CAST_AURA_NOT_PRESENT);
+            return;
+        }
         // Enslave demon effect, without mana cost and cooldown
         summon->CastSpell(nullptr, 22707, TRIGGERED_OLD_TRIGGERED); // short root spell on infernal from sniffs
         spell->GetCaster()->CastSpell(summon, 20882, TRIGGERED_OLD_TRIGGERED);
