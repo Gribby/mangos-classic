@@ -38,6 +38,8 @@ namespace
         B_CRIT_DAMAGE,     // % critical strike damage
         B_MANA,            // % maximum mana
         B_SKILLS,          // param: the skill group (0 Melee, 1 Spell, 2 Holy, 3 elemental); levels
+        B_MINION_LIFE,     // % minion life (Arpg/ArpgMinions.h)
+        B_HORDE,           // the horde's size
     };
 
     struct Bonus
@@ -79,6 +81,7 @@ namespace
         { CLASS_PALADIN, { 0.45f, 0.0f, 0.35f, 0.20f, 0.0f } },
         { CLASS_MAGE,    { 0.0f, 0.0f, 0.35f, 0.50f, 0.15f } },
         { CLASS_DRUID,   { 0.0f, 0.35f, 0.30f, 0.35f, 0.0f } },
+        { CLASS_WARLOCK, { 0.0f, 0.0f, 0.40f, 0.45f, 0.15f } },
     };
     // The attribute budget of a piece: its level times this, times its slot's weight.
     constexpr float BUDGET_PER_LEVEL = 0.55f;
@@ -164,6 +167,31 @@ namespace
                 { 3, B_TAG, TAG_NATURE, 12, "+12% Nature damage." },
                 { 4, B_SKILLS, 1, 1, "+1 to all Spell skills." } },
               { 0, KIT_BURST, 2912, 0, 8.0f, 40, "Starfire bursts onto every enemy within 8 yards of its target for 40% damage.", "Wildheart Vestments" } },
+            // --- The warlock: shadow and fire, and the horde's stats ---
+            { CLASS_WARLOCK, 20, ITEM_SUBCLASS_ARMOR_CLOTH, "Shadowsworn Rags",
+              { { CHEST, "Shadowsworn Robe" }, { LEGS, "Shadowsworn Leggings" }, { HANDS, "Shadowsworn Gloves" }, { FEET, "Shadowsworn Slippers" } },
+              { { 2, B_STAT, STAT_INTELLECT, 8, "+8 Intellect." },
+                { 3, B_TAG, TAG_SHADOW, 10, "+10% Shadow damage." } },
+              { 0, KIT_PIERCE, 686, 1, 0.0f, 60, "Shadow Bolt flies through 1 enemy, which takes 60% damage.", "Shadowsworn Rags" } },
+            { CLASS_WARLOCK, 30, ITEM_SUBCLASS_ARMOR_CLOTH, "Summoner's Bindings",
+              { { CHEST, "Binder's Robe" }, { LEGS, "Binder's Leggings" }, { HANDS, "Binder's Handwraps" }, { FEET, "Binder's Sandals" } },
+              { { 2, B_TAG, TAG_MINION, 10, "+10% Minion damage." },
+                { 3, B_MINION_LIFE, 0, 15, "+15% Minion life." } },
+              { 0, KIT_SPREAD, 172, 1, 8.0f, 100, "Corruption also lands on 1 more enemy within 8 yards.", "Summoner's Bindings" } },
+            { CLASS_WARLOCK, 40, ITEM_SUBCLASS_ARMOR_CLOTH, "Felfire Regalia",
+              { { HEAD, "Felfire Circlet" }, { SHOULDERS, "Felfire Mantle" }, { CHEST, "Felfire Robe" },
+                { LEGS, "Felfire Leggings" }, { HANDS, "Felfire Gloves" } },
+              { { 2, B_STAT, STAT_INTELLECT, 15, "+15 Intellect." },
+                { 3, B_TAG, TAG_FIRE, 12, "+12% Fire damage." },
+                { 4, B_HORDE, 0, 1, "+1 to the horde's size." } },
+              { 0, KIT_BURST, 348, 0, 6.0f, 40, "Immolate bursts onto every enemy within 6 yards of its target for 40% damage.", "Felfire Regalia" } },
+            { CLASS_WARLOCK, 50, ITEM_SUBCLASS_ARMOR_CLOTH, "Dreadlord's Mantle",
+              { { HEAD, "Dreadweave Cowl" }, { SHOULDERS, "Dreadweave Amice" }, { CHEST, "Dreadweave Robe" },
+                { LEGS, "Dreadweave Leggings" }, { HANDS, "Dreadweave Gloves" } },
+              { { 2, B_TAG, TAG_MINION, 20, "+20% Minion damage." },
+                { 3, B_TAG, TAG_SHADOW, 12, "+12% Shadow damage." },
+                { 4, B_SKILLS, 1, 1, "+1 to all Spell skills." } },
+              { 0, KIT_CHAIN, 686, 2, 10.0f, 50, "Shadow Bolt chains to 2 more enemies within 10 yards for 50% damage.", "Dreadlord's Mantle" } },
         };
         return sets;
     }
@@ -381,6 +409,8 @@ namespace Arpg
                     case B_CRIT_DAMAGE: totals.critDamagePct += b.value; break;
                     case B_MANA: totals.manaPct += b.value; break;
                     case B_SKILLS: totals.skillLevel[b.param] += b.value; break;
+                    case B_MINION_LIFE: totals.minionLifePct += b.value; break;
+                    case B_HORDE: totals.hordeSize += b.value; break;
                 }
             }
     }
