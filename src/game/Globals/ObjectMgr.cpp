@@ -2773,6 +2773,13 @@ void ObjectMgr::LoadItemPrototypes()
             const_cast<ItemPrototype*>(proto)->RandomProperty = 0;
         }
 
+        // ARPG: no vanilla item is one class's (a priest's robe, a tier piece); any class may use it.
+        // Only an ARPG set's pieces keep their class (Arpg/ArpgSets.h), and an item no class may use
+        // stays unusable.
+        uint32 const classes = proto->AllowableClass & CLASSMASK_ALL_PLAYABLE;
+        if (classes && classes != CLASSMASK_ALL_PLAYABLE && !Arpg::IsSetPiece(i))
+            const_cast<ItemPrototype*>(proto)->AllowableClass = uint32(-1);
+
         // ARPG: a set of its own (Arpg/ArpgSets.h) is not ItemSet.dbc's.
         if (proto->ItemSet && !sItemSetStore.LookupEntry(proto->ItemSet) && !Arpg::IsSetPiece(i))
         {
