@@ -44,6 +44,7 @@ namespace
     // A demon's own state on its hits, in percent (Imp, Succubus, Felhunter; the Voidwalker's
     // physical blows build Daze anyway).
     constexpr uint32 DEMON_AILMENT_PCT = 15;
+    constexpr uint32 MINION_THREAT_MULT = 4;     // a minion's hit is worth 4 times its damage in threat
     constexpr uint32 ENTRY_IMP = 416, ENTRY_FELHUNTER = 417, ENTRY_VOIDWALKER = 1860, ENTRY_SUCCUBUS = 1863;
     constexpr uint32 CLEAVE = 845;
     constexpr float CLEAVE_REACH = 5.0f, LASH_REACH = 6.0f, SACRIFICE_REACH = 8.0f;
@@ -427,6 +428,10 @@ namespace Arpg
             minion->ModifyHealth(int32(std::max<uint32>(1, uint32(uint64(FromDamage(minion, victim, dealt)) * uint32(t.minionLeech) / 1000))));
         if (!victim->IsAlive())
             return;
+        // Minions hold the enemy's eye: their hits are worth MINION_THREAT_MULT times their damage
+        // in threat, so a pack turns on the demons, not the warlock behind them.
+        if (victim->CanHaveThreatList())
+            victim->AddThreat(minion, float(dealt) * float(MINION_THREAT_MULT - 1));
         bool const isPet = static_cast<Creature*>(minion)->IsPet();
         uint32 const entry = minion->GetEntry();
         // A demon's own state.

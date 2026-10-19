@@ -58,6 +58,7 @@ namespace
         uint32 summonSpell = 0;        // the last demon summoned, for Fel Domination
         bool hadPet = false;
         bool resummonDue = false;      // its demon died: summon it again once it is gone
+        bool fellWithDemon = false;    // it died with a demon out: the demon comes back as it rises
         uint32 felDominationAt = 0;
         uint32 feastAt = 0, feastGiven = 0;
         std::unordered_map<ObjectGuid, uint32> stunnedAt; // Hellstorm, per enemy
@@ -422,26 +423,57 @@ namespace Arpg
 
     void UpdateWarlock(Player* player)
     {
-        if (!player || player->getClass() != CLASS_WARLOCK || !player->IsAlive())
+        if (!player || player->getClass() != CLASS_WARLOCK || !Active(player))
             return;
         Pet* pet = player->GetPet();
         bool const hasPet = pet && pet->IsAlive();
         uint32 spell = 0;
+        bool risen = false;
         uint32 const now = WorldTimer::getMSTime();
         {
             std::lock_guard<std::mutex> guard(sLock);
             WarlockState& w = sWarlocks[player->GetObjectGuid()];
-            if (w.hadPet && !hasPet && w.summonSpell && HasKeystone(player, KEY_FEL_DOMINATION) &&
-                    (!w.felDominationAt || WorldTimer::getMSTimeDiff(w.felDominationAt, now) >= FEL_DOMINATION_EVERY))
-                w.resummonDue = true;
-            w.hadPet = hasPet;
-            if (hasPet)
+            // A death with a demon out: the demon comes back as the warlock rises at its checkpoint
+            // (a demon dies with its master; an ARPG warlock is never left without its tank).
+            if (!player->IsAlive())
+            {
+                if (w.hadPet && w.summonSpell)
+                    w.fellWithDemon = true;
+                w.hadPet = false;
                 w.resummonDue = false;
-            else if (w.resummonDue)
-                spell = w.summonSpell;
+                return;
+            }
+            if (w.fellWithDemon && !player->IsBeingTeleported())
+            {
+                w.fellWithDemon = false;
+                if (!hasPet)
+                {
+                    spell = w.summonSpell;
+                    risen = true;
+                }
+            }
+            if (!risen)
+            {
+                if (w.hadPet && !hasPet && w.summonSpell && HasKeystone(player, KEY_FEL_DOMINATION) &&
+                        (!w.felDominationAt || WorldTimer::getMSTimeDiff(w.felDominationAt, now) >= FEL_DOMINATION_EVERY))
+                    w.resummonDue = true;
+                w.hadPet = hasPet;
+                if (hasPet)
+                    w.resummonDue = false;
+                else if (w.resummonDue)
+                    spell = w.summonSpell;
+            }
         }
         if (!spell)
             return;
+        if (risen)
+        {
+            if (pet && !pet->IsAlive())
+                pet->Unsummon(PET_SAVE_NOT_IN_SLOT, player);
+            if (!player->GetPet())
+                player->CastSpell(player, spell, TRIGGERED_OLD_TRIGGERED);
+            return;
+        }
         // Fel Domination: the lost demon comes back at once. A dead one lies as a corpse until it
         // expires: it goes first.
         if (pet && !pet->IsAlive())
