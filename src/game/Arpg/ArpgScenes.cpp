@@ -72,19 +72,20 @@ namespace
     {
         static std::vector<Scene> const scenes = {
             // Act I opens in Northshire: Marshal McBride, as the first act quest is taken.
-            { 1, 59000, ON_ACCEPT, "Marshal McBride", 0.0f, 16000,
+            { 1, 59000, ON_ACCEPT, "Marshal McBride", 0.0f, 23500,
               {
                   { 0,     { 14.0f,  7.0f, 10.0f }, { 0.0f, 0.0f, 1.6f } },
-                  { 5500,  {  6.0f,  3.5f,  3.0f }, { 0.0f, 0.0f, 1.7f } },
-                  { 11000, {  2.6f, -1.2f,  1.9f }, { 0.0f, 0.0f, 1.75f } },
-                  { 16000, {  3.4f, -2.6f,  2.1f }, { 0.0f, 0.0f, 1.7f } },
+                  { 8200,  {  6.0f,  3.5f,  3.0f }, { 0.0f, 0.0f, 1.7f } },
+                  { 15750, {  2.6f, -1.2f,  1.9f }, { 0.0f, 0.0f, 1.75f } },
+                  { 23500, {  3.4f, -2.6f,  2.1f }, { 0.0f, 0.0f, 1.7f } },
               },
+              // Recorded (the client's sound/scene_voice.rs, by line): each window fits its clip.
               {
-                  { 600,   5400,  nullptr, "Northshire stood quiet for a hundred years. Not any more." },
-                  { 5600,  10600, nullptr, "Kobolds in the vineyards, Defias cutthroats in the woods, and the Watch stretched thin." },
-                  { 10800, 15800, nullptr, "You'll do, $N. Clear them out, and bring me Garrick Padfoot." },
+                  { 600,   8100,  nullptr, "Northshire stood quiet for a hundred years. Not any more." },
+                  { 8300,  15650, nullptr, "Kobolds in the vineyards, Defias cutthroats in the woods, and the Watch stretched thin." },
+                  { 15850, 22450, nullptr, "YOU! $N! Clear them out, and bring me Garrick Padfoot!" },
               },
-              { { 700, EMOTE_ONESHOT_TALK }, { 5700, EMOTE_ONESHOT_POINT }, { 10900, EMOTE_ONESHOT_TALK } } },
+              { { 700, EMOTE_ONESHOT_TALK }, { 8400, EMOTE_ONESHOT_POINT }, { 15950, EMOTE_ONESHOT_SHOUT } } },
 
             // Act I opens in the Valley of Trials: Gornek.
             { 2, 59020, ON_ACCEPT, "Gornek", 0.0f, 16000,
