@@ -74,6 +74,8 @@ copy /y "build\bin\x64_Release\mangosd.exe" "%RUN_DIR%\" >nul || (
     echo Could not copy mangosd.exe. Is the ARPG mangosd still running?
     goto :fail
 )
+rem Its symbols beside it, so a crash report in Crashes\ names the functions.
+if exist "build\bin\x64_Release\mangosd.pdb" copy /y "build\bin\x64_Release\mangosd.pdb" "%RUN_DIR%\" >nul
 echo Copied the new mangosd.exe to %RUN_DIR%.
 call "%~dp0run-arpg-server.bat"
 goto :eof

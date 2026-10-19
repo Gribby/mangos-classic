@@ -30,6 +30,8 @@ copy /y "%BUILT%" "%RUN_DIR%\" >nul || (
     echo Could not copy mangosd.exe. Is the ARPG mangosd still running?
     goto :fail
 )
+rem Its symbols beside it, so a crash report in Crashes\ names the functions.
+if exist "%~dp0build\bin\x64_Release\mangosd.pdb" copy /y "%~dp0build\bin\x64_Release\mangosd.pdb" "%RUN_DIR%\" >nul
 echo Copied the new mangosd.exe to %RUN_DIR%.
 
 cd /d "%RUN_DIR%"

@@ -53,3 +53,12 @@ endif()
 # (And yes, this is a verified , unresolved bug with MSVC... *sigh*)
 string(REGEX REPLACE "/Zm[0-9]+ *" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zm500" CACHE STRING "" FORCE)
+
+# ARPG: Release builds carry their symbols (mangosd.pdb), so a crash report beside mangosd.exe
+# names the functions. /OPT:REF and /OPT:ICF keep the binary as lean as without /DEBUG.
+target_compile_options(cmangos-compile-option-interface
+  INTERFACE
+    $<$<CONFIG:Release>:/Zi>)
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG /OPT:REF /OPT:ICF")
+message(STATUS "MSVC: Release builds write their symbols (pdb)")
