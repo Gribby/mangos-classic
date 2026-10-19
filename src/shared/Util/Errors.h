@@ -21,10 +21,15 @@
 
 #include "Common.h"
 
+// ARPG: a failed assert's function, condition, file and line also go to the server log and to
+// Crashes/asserts.txt, as the console that would show them closes with the server (Util.cpp).
+void ReportFailedAssert(char const* file, int line, char const* function, char const* condition);
+
 // Normal assert.
 #define WPError(CONDITION) \
 if (!(CONDITION)) \
 { \
+    ReportFailedAssert(__FILE__, __LINE__, __FUNCTION__, STRINGIZE(CONDITION)); \
     assert(STRINGIZE(CONDITION) && 0); \
     fprintf(stderr, "Critical Error: A condition which must never be false was found to be false. \
 Server was shut down to protect data integrity.\nIf this error is occurring frequently, please \

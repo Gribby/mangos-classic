@@ -20,6 +20,7 @@
 #include "Util/Timer.h"
 #include <utf8.h>
 #include "TSS.h"
+#include "Log/Log.h"
 
 #include <boost/asio.hpp>
 
@@ -581,4 +582,17 @@ void hexEncodeByteArray(uint8* bytes, uint32 arrayLen, std::string& result)
         }
     }
     result = ss.str();
+}
+
+void ReportFailedAssert(char const* file, int line, char const* function, char const* condition)
+{
+    sLog.outError("ASSERT FAILED: %s(): %s (%s:%i)", function, condition, file, line);
+    if (FILE* out = fopen("Crashes/asserts.txt", "a"))
+    {
+        time_t const now = time(nullptr);
+        char when[32] = {};
+        strftime(when, sizeof(when), "%Y-%m-%d %H:%M:%S", localtime(&now));
+        fprintf(out, "%s ASSERT FAILED: %s(): %s (%s:%i)\n", when, function, condition, file, line);
+        fclose(out);
+    }
 }
