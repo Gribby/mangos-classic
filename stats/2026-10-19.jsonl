@@ -53,3 +53,16 @@
 {"type":"fight","session":"9-1792411799","at":"2026-10-19T13:10:30","char":"Demon","class":"warlock","level":8,"zone":"Elwynn Forest","seconds":4.014,"died":false,"kills":{"follower":1,"normal":1},"foes":{"Mangy Wolf":2},"dealt":272,"dps":67,"taken":4,"takenPctOfMax":2,"minHealthPct":97,"startManaPct":100,"minManaPct":85,"flasks":0,"rolls":0,"topSpells":{"Shadow Bolt":250,"Helthak (minion): Melee":22}}
 {"type":"pack","at":"2026-10-19T13:10:46","name":"Mangy Wolf","size":2,"level":6,"seconds":13.343,"damageDealt":28}
 {"type":"fight","session":"9-1792411799","at":"2026-10-19T13:10:47","char":"Demon","class":"warlock","level":8,"zone":"Elwynn Forest","seconds":14.048,"died":false,"kills":{"follower":1,"normal":1},"foes":{"Mangy Wolf":2},"dealt":277,"dps":19,"taken":23,"takenPctOfMax":12,"minHealthPct":92,"startManaPct":82,"minManaPct":78,"flasks":0,"rolls":0,"topSpells":{"Shadow Bolt":198,"Helthak (minion): Melee":56,"Imp (minion): Firebolt":23}}
+{"type":"pack","at":"2026-10-19T15:32:51","name":"Mangy Wolf","size":3,"level":6,"seconds":3.711,"damageDealt":2}
+{"type":"pack","at":"2026-10-19T15:32:53","name":"Mangy Wolf","size":2,"level":5,"seconds":4.217,"damageDealt":8}
+{"type":"fight","session":"9-1792420346","at":"2026-10-19T15:32:53","char":"Demon","class":"warlock","level":8,"zone":"Elwynn Forest","seconds":5.015,"died":false,"kills":{"follower":3,"normal":2},"foes":{"Mangy Wolf":5},"dealt":556,"dps":110,"taken":10,"takenPctOfMax":5,"minHealthPct":99,"startManaPct":100,"minManaPct":80,"flasks":0,"rolls":0,"topSpells":{"Shadow Bolt":433,"Imp (minion): Firebolt":98,"Helthak (minion): Melee":25}}
+{"type":"pack","at":"2026-10-19T15:33:22","name":"Rockhide Boar","size":3,"level":8,"seconds":2.511,"damageDealt":0}
+{"type":"pack","at":"2026-10-19T15:33:30","name":"Rockhide Boar","size":2,"level":7,"seconds":7.03,"damageDealt":13}
+{"type":"pack","at":"2026-10-19T15:33:43","name":"Young Forest Bear","size":2,"level":8,"seconds":6.418,"damageDealt":17}
+{"type":"pack","at":"2026-10-19T15:33:55","name":"Young Forest Bear","size":3,"level":8,"seconds":4.315,"damageDealt":45}
+{"type":"pack","at":"2026-10-19T15:34:32","name":"Young Forest Bear","size":2,"level":8,"seconds":7.134,"damageDealt":61}
+{"type":"fight","session":"9-1792420346","at":"2026-10-19T15:34:34","char":"Demon","class":"warlock","level":8,"zone":"Elwynn Forest","seconds":73.374,"died":false,"kills":{"follower":8,"normal":5},"foes":{"Rockhide Boar":6,"Young Forest Bear":7},"dealt":3078,"dps":41,"taken":156,"takenPctOfMax":82,"minHealthPct":65,"startManaPct":93,"minManaPct":0,"flasks":1,"rolls":0,"topSpells":{"Shadow Bolt":2754,"Imp (minion): Firebolt":230,"Helthak (minion): Melee":94}}
+{"type":"pack","at":"2026-10-19T15:34:55","name":"Young Forest Bear","size":2,"level":8,"seconds":6.517,"damageDealt":49}
+{"type":"pack","at":"2026-10-19T15:35:00","name":"Rockhide Boar","size":3,"level":7,"seconds":9.23,"damageDealt":130}
+{"type":"pack","at":"2026-10-19T15:35:04","name":"Rockhide Boar","size":2,"level":8,"seconds":11.241,"damageDealt":84}
+{"type":"pack","at":"2026-10-19T15:35:09","name":"Young Forest Bear","size":2,"level":8,"seconds":4.115,"damageDealt":43}
