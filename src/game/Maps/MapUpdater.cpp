@@ -18,6 +18,9 @@
 
 #include "MapUpdater.h"
 #include "MapWorkers.h"
+#include "Log/Log.h"
+
+#include <exception>
 
 MapUpdater::MapUpdater(size_t num_threads) : _cancelationToken(false), pending_requests(0)
 {
@@ -93,7 +96,17 @@ void MapUpdater::WorkerThread()
             return;
         }
 
-        request->execute();
+        // ARPG: an exception nothing caught still ends the server, but says what it was first (an
+        // MSVC std::mutex locked twice on one thread throws; GCC's deadlocks instead).
+        try
+        {
+            request->execute();
+        }
+        catch (std::exception const& e)
+        {
+            sLog.outError("Map update thread: uncaught exception: %s", e.what());
+            throw;
+        }
 
         delete request;
     }
