@@ -284,6 +284,9 @@ namespace Arpg
             return;
         creature->SetOwnerGuid(owner->GetObjectGuid());
         creature->setFaction(owner->GetFaction());
+        // A player's, as a summon spell's guardian is (Spell::EffectSummon): without it a minion
+        // engaging an enemy takes its owner for an AI-run master (Unit::SetInCombatState asserts).
+        creature->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED);
         if (std::shared_ptr<WebTotals const> t = OwnerTotals(owner))
         {
             if (int32 const life = HordeLifePct(*t))
