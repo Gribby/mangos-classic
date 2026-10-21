@@ -11,6 +11,7 @@
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgStats.h"
 
 #include "Entities/Item.h"
 #include "Entities/Player.h"
@@ -240,6 +241,8 @@ namespace
             return;
         if (show)
             ShowImpact(unit, spellInfo, mask);
+        // Logged in the statistics apart from the spell's own casts (Arpg/ArpgStats.h).
+        Arpg::StatsSecondary const secondary(periodic);
         SpellNonMeleeDamage damage(caster, unit, spellInfo->Id, GetFirstSchoolInMask(mask));
         damage.damage = share;
         // An ailment's tick: logged as periodic, so the client draws it as one.

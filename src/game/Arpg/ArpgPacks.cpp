@@ -51,6 +51,9 @@ namespace
 
     // A follower's corpse lies this long, in ms, so its ground loot can be picked up.
     constexpr uint32 PACK_CORPSE_MS = 3 * MINUTE * IN_MILLISECONDS;
+    // A pack fight with no aggro and no blow from the pack for this long was lost or left: the next
+    // pull times a new fight (the statistics).
+    constexpr uint32 PACK_FIGHT_QUIET_MS = 20 * IN_MILLISECONDS;
     // Followers stand this far from their leader, in yards, and are drawn this much smaller.
     constexpr float FOLLOW_MIN = 2.5f, FOLLOW_SPREAD = 1.5f;
     constexpr float FOLLOWER_SCALE = 0.85f;
@@ -161,6 +164,7 @@ namespace
         std::vector<ObjectGuid> followers;
         uint32 level = 0;
         uint32 aggroAt = 0;     // the first aggro of this fight, 0 out of combat
+        uint32 activeAt = 0;    // its last aggro or blow: a fight gone quiet this long was lost or left
         uint32 damage = 0;      // what the pack dealt this fight
     };
 
@@ -1064,11 +1068,19 @@ namespace Arpg
             std::lock_guard<std::mutex> guard(sPacksLock);
             MapRecords& rec = RecordsOf(member);
             auto it = rec.packs.find(leader);
+            uint32 const now = WorldTimer::getMSTime();
+            // A fight the pack reset from (it evaded, or the player died and left) is over: this
+            // pull starts a new one, so the statistics time this fight and not the last.
+            if (it != rec.packs.end() && it->second.aggroAt &&
+                    WorldTimer::getMSTimeDiff(it->second.activeAt, now) > PACK_FIGHT_QUIET_MS)
+                it->second.aggroAt = 0;
             if (it != rec.packs.end() && !it->second.aggroAt)
             {
-                it->second.aggroAt = WorldTimer::getMSTime();
+                it->second.aggroAt = now ? now : 1;
                 it->second.damage = 0;
             }
+            if (it != rec.packs.end())
+                it->second.activeAt = now;
         }
         pulling = true;
         for (ObjectGuid const& guid : members)
@@ -1093,7 +1105,10 @@ namespace Arpg
             return;
         auto pack = rec.packs.find(it->second);
         if (pack != rec.packs.end())
+        {
             pack->second.damage += damage;
+            pack->second.activeAt = WorldTimer::getMSTime();
+        }
     }
 
     void OnPackMemberDied(Unit* victim)

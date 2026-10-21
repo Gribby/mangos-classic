@@ -296,18 +296,40 @@ namespace
     }
 }
 
+namespace
+{
+    // The suffix of the secondary hit being dealt on this thread (Arpg::StatsSecondary).
+    thread_local char const* sSecondary = nullptr;
+}
+
 namespace Arpg
 {
+    StatsSecondary::StatsSecondary(bool periodic) : previous(sSecondary)
+    {
+        sSecondary = periodic ? " (ailment)" : " (proc)";
+    }
+
+    StatsSecondary::~StatsSecondary()
+    {
+        sSecondary = previous;
+    }
+
     void OnStatsDamage(Unit* dealer, Unit* victim, uint32 damage, SpellEntry const* spell)
     {
         if (!damage || !dealer || !victim || dealer == victim || !On())
+            return;
+        // What the victim had left: an overkill's excess is no damage done.
+        damage = std::min<uint32>(damage, victim->GetHealth());
+        if (!damage)
             return;
         Player* hitter = Tracked(dealer->GetBeneficiaryPlayer());
         Player* hurt = Tracked(victim);
         if (!hitter && !hurt)
             return;
         uint32 const now = WorldTimer::getMSTime();
-        std::string const spellName = spell && spell->SpellName[0] ? spell->SpellName[0] : "Melee";
+        std::string spellName = spell && spell->SpellName[0] ? spell->SpellName[0] : "Melee";
+        if (sSecondary)
+            spellName += sSecondary;
         std::lock_guard<std::mutex> guard(sLock);
         if (hitter && victim->GetTypeId() == TYPEID_UNIT)
         {
@@ -470,7 +492,7 @@ namespace Arpg
         if (!On() || !Active(player) || !player->IsInWorld())
             return;
         uint32 const now = WorldTimer::getMSTime();
-        std::string line;
+        std::string fightLine, line;
         {
             std::lock_guard<std::mutex> guard(sLock);
             Session& s = SessionOf(player, now);
@@ -490,7 +512,7 @@ namespace Arpg
                 s.fight.minHealthPct = healthPct;
             }
             else if (!fighting && s.fight.on && player->IsAlive())
-                line = FightLine(player, s, now, false);
+                fightLine = FightLine(player, s, now, false);
             if (s.fight.on)
             {
                 s.fight.minHealthPct = std::min(s.fight.minHealthPct, healthPct);
@@ -516,6 +538,8 @@ namespace Arpg
                 line = SessionLine(player, s, now, false);
             }
         }
+        if (!fightLine.empty())
+            Write(fightLine);
         if (!line.empty())
             Write(line);
     }

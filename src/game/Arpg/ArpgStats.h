@@ -35,8 +35,20 @@ struct SpellEntry;
 
 namespace Arpg
 {
-    // `dealer` dealt `damage` to `victim` with `spell` (nullptr: a swing), any damage at all.
+    // `dealer` dealt `damage` to `victim` with `spell` (nullptr: a swing), any damage at all. Only
+    // what the victim had left counts (no overkill).
     void OnStatsDamage(Unit* dealer, Unit* victim, uint32 damage, SpellEntry const* spell);
+    // While one stands, the damage dealt on this thread is a secondary hit's (a proc, an added
+    // hit, an ailment's tick) and is logged as "<spell> (proc)" or "<spell> (ailment)", apart from
+    // the spell's own casts.
+    struct StatsSecondary
+    {
+        explicit StatsSecondary(bool periodic);
+        ~StatsSecondary();
+        StatsSecondary(StatsSecondary const&) = delete;
+        StatsSecondary& operator=(StatsSecondary const&) = delete;
+        char const* previous;
+    };
     // `victim` died to `killer` (either may be an ARPG player).
     void OnStatsKill(Unit* killer, Unit* victim);
     // `spell` was cast (its go sent).
