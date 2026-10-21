@@ -225,7 +225,8 @@ namespace
             spells.resize(5);
         std::ostringstream o;
         o << "{\"type\":\"fight\",\"session\":" << Json(s.id) << ",\"at\":" << Json(Stamp(std::time(nullptr))) << "," << Who(player)
-          << ",\"zone\":" << Json(ZoneName(player)) << ",\"seconds\":" << seconds << ",\"died\":" << (died ? "true" : "false")
+          << ",\"zone\":" << Json(ZoneName(player)) << ",\"tier\":" << uint32(LootTier(player->GetMap()))
+          << ",\"seconds\":" << seconds << ",\"died\":" << (died ? "true" : "false")
           << ",\"kills\":" << Counts(f.kills) << ",\"foes\":" << Counts(f.foes) << ",\"dealt\":" << f.dealt
           << ",\"dps\":" << (seconds > 0.0f ? uint64(f.dealt / seconds) : 0) << ",\"taken\":" << f.taken
           << ",\"takenPctOfMax\":" << (player->GetMaxHealth() ? f.taken * 100 / player->GetMaxHealth() : 0)
@@ -370,6 +371,7 @@ namespace Arpg
             std::ostringstream o;
             o << "{\"type\":\"death\",\"at\":" << Json(Stamp(std::time(nullptr))) << "," << Who(dead)
               << ",\"zone\":" << Json(ZoneName(dead)) << ",\"map\":" << dead->GetMapId()
+              << ",\"tier\":" << uint32(LootTier(dead->GetMap()))
               << ",\"maxHealth\":" << dead->GetMaxHealth() << ",\"manaPct\":"
               << (dead->GetMaxPower(POWER_MANA) ? dead->GetPower(POWER_MANA) * 100 / dead->GetMaxPower(POWER_MANA) : 0);
             if (killer)

@@ -18,7 +18,9 @@
  *   12% / 30%, raid and world bosses 15% / 35%. The cap follows the player's own health, so it
  *   never needs retuning by level; blows wear a player down, and what kills is standing in the
  *   big spells. The level gap moves the cap and the hit alike (Arpg::LevelGapMod): a player
- *   above the creature's level takes less, below it more.
+ *   above the creature's level takes less, below it more. However the tier, the gap and the
+ *   difficulty raise them, a trash hit never takes more than 12% / 20% and a champion's, rare's or
+ *   open-world elite's 16% / 25%: no one-shots from a pack. Bosses keep their raised caps.
  *
  *   Dungeon trash (not raids) rolls champions and rares as the open world's packs do: from level
  *   8, 6% of mobs a champion and 1.5% a rare, so a run meets a handful.

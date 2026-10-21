@@ -70,6 +70,12 @@ namespace
     constexpr Caps CAP_CHAMPION { 9, 15 };
     constexpr Caps CAP_DUNGEON_BOSS { 12, 30 };
     constexpr Caps CAP_RAID_BOSS { 15, 35 };
+    // However high the tier, the level gap and the difficulty raise them, no trash hit takes more
+    // than this share of a player's health, and no champion's or rare's more than the next: tiers
+    // make the blows come harder and more often, never a one-shot from a pack (Diablo IV's rule).
+    // Bosses keep their raised caps: standing in their big spells is what kills.
+    constexpr Caps CEILING_TRASH { 12, 20 };
+    constexpr Caps CEILING_CHAMPION { 16, 25 };
 
     enum Kind : uint8 { KIND_NONE, KIND_INSTANCE, KIND_ELITE };
 
@@ -706,19 +712,29 @@ namespace Arpg
             return 0;
         bool const champion = ChampionTier(creature) != 0;
         Caps caps;
+        Caps const* ceiling = nullptr;
         if (map->IsDungeon())
-            caps = IsDungeonBoss(creature) ? (map->IsRaid() ? CAP_RAID_BOSS : CAP_DUNGEON_BOSS) :
-                   champion ? CAP_CHAMPION : CAP_TRASH;
+        {
+            bool const boss = IsDungeonBoss(creature);
+            caps = boss ? (map->IsRaid() ? CAP_RAID_BOSS : CAP_DUNGEON_BOSS) : champion ? CAP_CHAMPION : CAP_TRASH;
+            if (!boss)
+                ceiling = champion ? &CEILING_CHAMPION : &CEILING_TRASH;
+        }
         else if (info->Rank == CREATURE_ELITE_WORLDBOSS)
             caps = CAP_RAID_BOSS;
         else if (champion || EliteRank(info->Rank))
+        {
             caps = CAP_CHAMPION;
+            ceiling = &CEILING_CHAMPION;
+        }
         else
             return 0;                                       // open-world mobs hit as vanilla
         // The cap moves with the level gap as the hit does (Arpg/ArpgDamage.h): out-levelling a
         // boss makes its blows smaller, whatever share of the player's health they were capped at.
-        float const pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature) *
-                          LevelGapMod(attacker, victim) * std::sqrt(DifficultyDamageMod(attacker));
+        float pct = float(spell ? caps.spell : caps.melee) * TIER_CAP[TierOf(creature->GetMap())] * EnrageMod(creature) *
+                    LevelGapMod(attacker, victim) * std::sqrt(DifficultyDamageMod(attacker));
+        if (ceiling)
+            pct = std::min(pct, float(spell ? ceiling->spell : ceiling->melee));
         return std::max<uint32>(1, uint32(float(victim->GetMaxHealth()) * pct / 100.0f));
     }
 
