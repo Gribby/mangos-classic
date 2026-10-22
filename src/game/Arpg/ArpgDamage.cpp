@@ -5,6 +5,7 @@
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgWarlock.h"
+#include "Arpg/ArpgShaman.h"
 #include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgCharacter.h"
@@ -431,7 +432,10 @@ namespace Arpg
         if (minion)
         {
             tags |= TagBit(TAG_MINION);
+            if (attacker->GetTypeId() == TYPEID_UNIT && static_cast<Creature*>(attacker)->IsTotem())
+                tags |= TagBit(TAG_TOTEM);
             OnMinionHit(attacker, player, victim, spellInfo, dealt);
+            OnShamanMinionHit(attacker, player, victim, spellInfo, dealt);
         }
         else
             OnOwnerStruck(player, victim);
@@ -459,6 +463,7 @@ namespace Arpg
             OnMageHit(player, victim, spellInfo, dealt, crit);
             OnDruidHit(player, victim, spellInfo, dealt, crit);
             OnWarlockHit(player, victim, spellInfo, dealt, crit);
+            OnShamanHit(player, victim, spellInfo, dealt, crit);
         }
 
         // Added damage: attacks take the attack affixes, spells the spell ones. A Seal's hit rides

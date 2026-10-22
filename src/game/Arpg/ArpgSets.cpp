@@ -82,6 +82,7 @@ namespace
         { CLASS_MAGE,    { 0.0f, 0.0f, 0.35f, 0.50f, 0.15f } },
         { CLASS_DRUID,   { 0.0f, 0.35f, 0.30f, 0.35f, 0.0f } },
         { CLASS_WARLOCK, { 0.0f, 0.0f, 0.40f, 0.45f, 0.15f } },
+        { CLASS_SHAMAN,  { 0.25f, 0.0f, 0.35f, 0.30f, 0.10f } },
     };
     // The attribute budget of a piece: its level times this, times its slot's weight.
     constexpr float BUDGET_PER_LEVEL = 0.55f;
@@ -192,6 +193,31 @@ namespace
                 { 3, B_TAG, TAG_SHADOW, 12, "+12% Shadow damage." },
                 { 4, B_SKILLS, 1, 1, "+1 to all Spell skills." } },
               { 0, KIT_CHAIN, 686, 2, 10.0f, 50, "Shadow Bolt chains to 2 more enemies within 10 yards for 50% damage.", "Dreadlord's Mantle" } },
+            // --- The shaman: lightning, totems and the Enhancer's weapon ---
+            { CLASS_SHAMAN, 20, ITEM_SUBCLASS_ARMOR_LEATHER, "Stormcaller's Garb",
+              { { CHEST, "Stormcaller's Tunic" }, { LEGS, "Stormcaller's Kilt" }, { HANDS, "Stormcaller's Grips" }, { FEET, "Stormcaller's Boots" } },
+              { { 2, B_STAT, STAT_INTELLECT, 8, "+8 Intellect." },
+                { 3, B_TAG, TAG_NATURE, 10, "+10% Nature damage." } },
+              { 0, KIT_CHAIN, 403, 1, 10.0f, 50, "Lightning Bolt chains to 1 more enemy within 10 yards for 50% damage.", "Stormcaller's Garb" } },
+            { CLASS_SHAMAN, 30, ITEM_SUBCLASS_ARMOR_LEATHER, "Totemwarden's Harness",
+              { { CHEST, "Totemwarden's Vest" }, { LEGS, "Totemwarden's Leggings" }, { HANDS, "Totemwarden's Gloves" }, { FEET, "Totemwarden's Treads" } },
+              { { 2, B_TAG, TAG_MINION, 10, "+10% Minion damage." },
+                { 3, B_MINION_LIFE, 0, 15, "+15% Minion life." } },
+              { 0, KIT_SPREAD, 8050, 1, 8.0f, 100, "Flame Shock also lands on 1 more enemy within 8 yards.", "Totemwarden's Harness" } },
+            { CLASS_SHAMAN, 40, ITEM_SUBCLASS_ARMOR_MAIL, "Thunderforged Links",
+              { { HEAD, "Thunderforged Helm" }, { SHOULDERS, "Thunderforged Pauldrons" }, { CHEST, "Thunderforged Hauberk" },
+                { LEGS, "Thunderforged Legguards" }, { HANDS, "Thunderforged Gauntlets" } },
+              { { 2, B_STAT, STAT_STRENGTH, 15, "+15 Strength." },
+                { 3, B_TAG, TAG_MELEE, 12, "+12% Melee damage." },
+                { 4, B_ATTACK_SPEED, 0, 6, "+6% attack speed." } },
+              { 0, KIT_ARC, 17364, 0, 0.0f, 40, "Stormstrike strikes every enemy in front of you. The extra enemies take 40% damage.", "Thunderforged Links" } },
+            { CLASS_SHAMAN, 50, ITEM_SUBCLASS_ARMOR_MAIL, "Elemental Ascendance",
+              { { HEAD, "Ascendant's Crown" }, { SHOULDERS, "Ascendant's Spaulders" }, { CHEST, "Ascendant's Hauberk" },
+                { LEGS, "Ascendant's Leggings" }, { HANDS, "Ascendant's Gauntlets" } },
+              { { 2, B_STAT, STAT_INTELLECT, 15, "+15 Intellect." },
+                { 3, B_TAG, TAG_NATURE, 12, "+12% Nature damage." },
+                { 4, B_SKILLS, 1, 1, "+1 to all Spell skills." } },
+              { 0, KIT_BURST, 421, 0, 8.0f, 40, "Chain Lightning bursts onto every enemy within 8 yards of each it strikes for 40% damage.", "Elemental Ascendance" } },
         };
         return sets;
     }

@@ -6992,7 +6992,8 @@ SpellCastResult Spell::CheckItems()
             }
         }
 
-        // check totem-item requirements (items presence in inventory)
+        // check totem-item requirements (items presence in inventory); ARPG: none for an ARPG
+        // player's own class spells (a shaman's totems), as no reagents
         uint32 totems = MAX_SPELL_TOTEMS;
         for (auto i : m_spellInfo->Totem)
         {
@@ -7007,7 +7008,7 @@ SpellCastResult Spell::CheckItems()
                 totems -= 1;
         }
 
-        if (totems != 0)
+        if (totems != 0 && !p_caster->CanNoReagentCast(m_spellInfo))
             return SPELL_FAILED_TOTEMS;
 
         /*[-ZERO] to rewrite?

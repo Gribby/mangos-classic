@@ -33,13 +33,13 @@ namespace
     char const* const STATE_NAMES[MAX_STATE] = {
         "Chilled", "Frozen", "Ignited", "Bleeding", "Poisoned", "Withered", "Overloaded", "Judged",
         "Dazed", "Stunned", "Consecrated", "Scorched Ground", "Frozen Ground",
-        "Storm Ground", "Vulnerable",
+        "Storm Ground", "Vulnerable", "Shocked",
     };
 
     // The ailment (a damage tag) behind each state, or 0xFF.
     uint8 const STATE_TAG[MAX_STATE] = {
         TAG_FROST, TAG_FROST, TAG_FIRE, TAG_PHYSICAL, TAG_NATURE, TAG_SHADOW, TAG_ARCANE, TAG_HOLY,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     };
 
     constexpr uint32 SPELL_CHILLED = 12484, SPELL_FROSTBITE = 12494, SPELL_DAZED = 1604;
@@ -61,8 +61,9 @@ namespace
         "Faerie Fire", "Curse of Weakness", "Curse of Recklessness", "Curse of the Elements",
         "Curse of Shadow", "Hammer of Justice", "Frost Nova", "Judgement of the Crusader",
         "Frost Shock", "Earthbind",
-        "Frostbolt", "Wrath", "Searing Pain",
+        "Frostbolt", "Wrath", "Searing Pain", "Lightning Bolt",
     };
+    constexpr int32 ROCKBITER_PER_RANK = 15;
     // A Consecration's tick builds this much Daze.
     constexpr float CONSECRATION_DAZE = 8.0f;
 
@@ -76,6 +77,8 @@ namespace
         uint32 lastBuild = 0;
         uint32 dazedUntil = 0;
         uint32 vulnerableUntil = 0;
+        uint32 shockUntil = 0;
+        uint8 shock = 0;            // Shocked's stacks
     };
 
     // By map copy and guid: guids repeat between copies of a dungeon.
@@ -197,6 +200,8 @@ namespace Arpg
             mask |= StateBit(STATE_DAZED);
         if (it != sRecords.end() && int32(it->second.vulnerableUntil - now) > 0)
             mask |= StateBit(STATE_VULNERABLE);
+        if (it != sRecords.end() && it->second.shock && int32(it->second.shockUntil - now) > 0)
+            mask |= StateBit(STATE_SHOCKED);
         return mask;
     }
 
@@ -248,8 +253,9 @@ namespace Arpg
             return;
         uint32 const most = std::max<uint32>(1, victim->GetMaxHealth());
         float pct = float(dealt) * 100.0f / float(most) * DAZE_GAIN;
+        // Rockbiter (the shaman's Strike tree): 15% more a rank.
         if (std::shared_ptr<WebTotals const> t = TotalsOf(by))
-            pct *= std::max(0.0f, 1.0f + t->dazeBuildPct / 100.0f);
+            pct *= std::max(0.0f, 1.0f + (t->dazeBuildPct + ROCKBITER_PER_RANK * t->Rank(KEY_ROCKBITER)) / 100.0f);
         AddDaze(by, victim, pct);
     }
 
@@ -300,6 +306,9 @@ namespace Arpg
                 Chill(by, victim, true);
                 OnStateApplied(by, victim, state);
                 return true;
+            case STATE_SHOCKED:
+                AddShock(by, victim, 1);
+                return true;
             default:
                 return false;                   // ailments: InflictAilment; stuns and ground: their spells
         }
@@ -327,6 +336,18 @@ namespace Arpg
                         it->second.dazedUntil = WorldTimer::getMSTime();
                 }
                 victim->RemoveAurasDueToSpell(SPELL_DAZED);
+                break;
+            }
+            case STATE_SHOCKED:
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                auto it = sRecords.find(KeyOf(victim));
+                if (it != sRecords.end())
+                {
+                    worth = it->second.shock;   // the stacks
+                    it->second.shock = 0;
+                    it->second.shockUntil = 0;
+                }
                 break;
             }
             case STATE_STUNNED:
@@ -367,7 +388,46 @@ namespace Arpg
             mod *= DAZED_TAKEN;
         if (int32(it->second.vulnerableUntil - now) > 0)
             mod *= VULNERABLE_TAKEN;
+        if (it->second.shock && int32(it->second.shockUntil - now) > 0)
+            mod *= 1.0f + SHOCK_TAKEN_PER_STACK * it->second.shock;
         return mod;
+    }
+
+    void AddShock(Player* by, Unit* victim, uint8 stacks)
+    {
+        if (!by || !victim || !stacks || !victim->IsAlive() || victim->GetTypeId() != TYPEID_UNIT ||
+                victim->IsPlayerControlled() || !by->CanAttack(victim))
+            return;
+        // Overcharge: twice the stacks, half the time.
+        bool const super = HasKeystone(by, KEY_SUPERCHARGE);
+        uint8 const cap = super ? SHOCK_STACKS_SUPERCHARGED : SHOCK_STACKS;
+        uint32 const ms = super ? SHOCK_MS_SUPERCHARGED : SHOCK_MS;
+        uint32 const now = WorldTimer::getMSTime();
+        bool fresh;
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            Record& r = sRecords[KeyOf(victim)];
+            if (!r.shock || int32(r.shockUntil - now) <= 0)
+                r.shock = 0;
+            fresh = r.shock == 0;
+            // A lower cap (another shaman's) never takes away stacks already there.
+            r.shock = uint8(std::max<uint32>(r.shock, std::min<uint32>(cap, uint32(r.shock) + stacks)));
+            r.shockUntil = now + ms;
+        }
+        if (fresh)
+            OnStateApplied(by, victim, STATE_SHOCKED);
+    }
+
+    uint8 ShockStacks(Unit const* victim)
+    {
+        if (!victim)
+            return 0;
+        uint32 const now = WorldTimer::getMSTime();
+        std::lock_guard<std::mutex> guard(sLock);
+        auto it = sRecords.find(KeyOf(victim));
+        if (it == sRecords.end() || int32(it->second.shockUntil - now) <= 0)
+            return 0;
+        return it->second.shock;
     }
 
     void OnVulnerableSetup(Player* by, Unit* target, SpellEntry const* spellInfo)

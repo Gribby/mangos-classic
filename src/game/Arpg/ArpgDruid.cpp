@@ -237,7 +237,8 @@ namespace Arpg
 
     void OnDruidHeal(Spell* /*spell*/, Player* player, Unit* target, uint32 amount)
     {
-        if (!player || !amount || player->getClass() != CLASS_DRUID)
+        // The shaman's Healing Wave tree reads the same nodes (Arpg/ArpgShaman.h).
+        if (!player || !amount || (player->getClass() != CLASS_DRUID && player->getClass() != CLASS_SHAMAN))
             return;
         std::shared_ptr<WebTotals const> totals = TotalsOf(player);
         if (!totals)

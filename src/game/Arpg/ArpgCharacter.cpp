@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgShaman.h"
 #include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgMinions.h"
@@ -183,6 +184,10 @@ namespace
     // A paladin's Consecration, the class's area spell, deals this much more (2026-10-22: its
     // ticks were a twentieth of a swing).
     constexpr int32 CONSECRATION_MORE_PCT = 150;
+    // The shaman's keystones and nodes (Arpg/ArpgShaman.h), on its damage.
+    constexpr int32 SHAMAN_TOTEM_LORD_PCT = 50, SHAMAN_TOTEM_LORD_LESS_PCT = 20, SHAMAN_WALKING_LESS_PCT = 15;
+    constexpr int32 SHAMAN_WINDWALKER_LESS_PCT = 30, SHAMAN_BLADES_LESS_PCT = 15, SHAMAN_THUNDERLORD_LESS_PCT = 15;
+    constexpr int32 SHAMAN_AIR_MASTERY_PER_RANK = 4, SHAMAN_CHARGED_SHIELD_PER_RANK = 25, SHAMAN_RAGE_PER_STACK = 5;
     constexpr uint32 FORTIFY_MS = 4000;
     constexpr int32 FORTIFY_PCT = 15;
     constexpr uint32 LIFE_ON_HIT_PERMILLE = 10, LIFE_ON_HIT_MAX = 5;
@@ -645,6 +650,7 @@ namespace
         haste += float(std::clamp(t.attackSpeedPct, 0, ATTACK_SPEED_CAP));
         // A Shrine of Celerity's (Arpg/ArpgShrines.h).
         haste += ShrineHastePct(player);
+        haste += ShamanHastePct(player);
         return haste;
     }
 
@@ -904,6 +910,39 @@ namespace
         if (int32 const verdant = VerdantFuryPct(player))
             more(verdant, "Verdant Fury");
 
+        // The shaman's (Arpg/ArpgShaman.h): its totems' hits (Minion and Totem) and its own.
+        if (player->getClass() == CLASS_SHAMAN)
+        {
+            char const* name = spellInfo && spellInfo->SpellName[0] ? spellInfo->SpellName[0] : "";
+            bool const totem = (tags & TagBit(TAG_TOTEM)) && (tags & TagBit(TAG_MINION));
+            bool const lightning = std::strcmp(name, "Lightning Bolt") == 0 || std::strcmp(name, "Chain Lightning") == 0;
+            if (totem)
+            {
+                if (t.Has(KEY_TOTEMIC_MASTERY))
+                    more(SHAMAN_TOTEM_LORD_PCT, "Totem Lord");
+                if (t.Has(KEY_WALKING_TOTEMS))
+                    more(-SHAMAN_WALKING_LESS_PCT, "Walking Totems");
+            }
+            else if (!(tags & TagBit(TAG_MINION)))
+            {
+                bool const spell = (tags & TagBit(TAG_SPELL)) && !(tags & TagBit(TAG_MELEE));
+                if (spell && t.Has(KEY_TOTEMIC_MASTERY))
+                    more(-SHAMAN_TOTEM_LORD_LESS_PCT, "Totem Lord");
+                if (spell && t.Has(KEY_WINDWALKER))
+                    more(-SHAMAN_WINDWALKER_LESS_PCT, "Windwalker");
+                if (!spellInfo && t.Has(KEY_ELEMENTAL_WEAPONS))
+                    more(-SHAMAN_BLADES_LESS_PCT, "Elemental Blades");
+                if (lightning && t.Has(KEY_THUNDERLORD))
+                    more(-SHAMAN_THUNDERLORD_LESS_PCT, "Thunderlord");
+                if (lightning && HasAirTotemUp(player))
+                    more(SHAMAN_AIR_MASTERY_PER_RANK * t.Rank(KEY_AIR_MASTERY), "Air Mastery");
+                if (std::strcmp(name, "Lightning Shield") == 0)
+                    more(SHAMAN_CHARGED_SHIELD_PER_RANK * t.Rank(KEY_CHARGED_SHIELD), "Charged Shield");
+                if (tags & TagBit(TAG_MELEE))
+                    more(SHAMAN_RAGE_PER_STACK * UnleashedRageStacks(player), "Unleashed Rage");
+            }
+        }
+
         // The warlock's (Arpg/ArpgWarlock.h): its own hits only; a minion's (the Minion tag) takes
         // its own instead (Arpg::MinionDamageMod).
         if (!(tags & TagBit(TAG_MINION)) && player->getClass() == CLASS_WARLOCK)
@@ -1096,6 +1135,7 @@ namespace Arpg
         ForgetMage(player);
         ForgetDruid(player);
         ForgetWarlock(player);
+        ForgetShaman(player);
         ForgetMinions(player);
         ForgetBoons(player);
         ForgetShrines(player);
@@ -1119,6 +1159,7 @@ namespace Arpg
         // The minions' leash and targets, and the warlock's Fel Domination (Arpg/ArpgMinions.h).
         UpdateMinions(player);
         UpdateWarlock(player);
+        UpdateShaman(player);
         // A shrine stepped on, and the shrines' pulses (Arpg/ArpgShrines.h).
         UpdateShrines(player);
         // A dungeon's nightmare, as standing boons (Arpg/ArpgDungeons.h).
@@ -1229,8 +1270,23 @@ namespace Arpg
         Refresh(player, r, now);
     }
 
+    thread_local Unit const* sTotemCast = nullptr;
+
+    TotemCastScope::TotemCastScope(Unit const* totem) : previous(sTotemCast)
+    {
+        sTotemCast = totem;
+    }
+
+    TotemCastScope::~TotemCastScope()
+    {
+        sTotemCast = previous;
+    }
+
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo)
     {
+        // A totem's spell scored through its owner: the totem's, as a minion's.
+        if (sTotemCast && attacker && sTotemCast->GetOwnerGuid() == attacker->GetObjectGuid())
+            return DamageModForTags(sTotemCast, victim, spellInfo, TagsOf(spellInfo));
         return DamageModForTags(attacker, victim, spellInfo, TagsOf(spellInfo));
     }
 
@@ -1254,7 +1310,8 @@ namespace Arpg
             if (Player const* owner = MinionOwner(attacker))
                 if (std::shared_ptr<WebTotals const> ot = TotalsOf(owner))
                 {
-                    DamageParts const parts = DamagePartsFor(owner, *ot, victim, spellInfo, tags | TagBit(TAG_MINION), nullptr);
+                    uint32 const totem = static_cast<Creature const*>(attacker)->IsTotem() ? TagBit(TAG_TOTEM) : 0;
+                    DamageParts const parts = DamagePartsFor(owner, *ot, victim, spellInfo, tags | TagBit(TAG_MINION) | totem, nullptr);
                     mod *= std::max(0.0f, 1.0f + parts.increased / 100.0f) * parts.more * MinionDamageMod(attacker, owner, victim) *
                            AilmentTakenMod(owner, victim) * StateTakenMod(victim);
                 }
@@ -1706,6 +1763,13 @@ namespace Arpg
         // Rejuvenation's tree: the druid's heals that hurt (Arpg/ArpgDruid.h).
         if (player->getClass() == CLASS_DRUID && SkillOfSpell(CLASS_DRUID, spell->m_spellInfo) == SKILL_REJUVENATION)
             OnDruidHeal(spell, player, target, amount);
+        // Healing Wave's tree: the shaman's, on the druid's hooks (Riptide, Ancestral Healing,
+        // Torrent, Healing Stream) and its own (Earthliving).
+        if (player->getClass() == CLASS_SHAMAN && SkillOfSpell(CLASS_SHAMAN, spell->m_spellInfo) == SKILL_HEALING_WAVE)
+        {
+            OnDruidHeal(spell, player, target, amount);
+            OnShamanHeal(player, target, amount);
+        }
         // Holy Light's tree: heals that hurt.
         if (player->getClass() == CLASS_PALADIN && SkillOfSpell(player->getClass(), spell->m_spellInfo) == SKILL_HOLY_LIGHT)
             if (std::shared_ptr<WebTotals const> totals = TotalsOf(caster))
@@ -1837,6 +1901,7 @@ namespace Arpg
         GiveManaPermille(killer, MANA_ON_KILL_PERMILLE);
         OnDruidKill(killer);
         OnWarlockKill(killer, victim);
+        OnShamanKill(killer, victim);
         if (t.Has(KEY_CRUSADE))
         {
             Runtime& r = R(killer);
@@ -1893,6 +1958,8 @@ namespace Arpg
         }
         if (!damage)
             return;
+        // The shaman's swing: Windfury, Static Shock, Stormbringer (Arpg/ArpgShaman.h).
+        OnShamanSwing(player, victim, damage, crit);
         // Fortified (FORTIFY_PCT).
         r.lastSwingLanded = now ? now : 1;
         uint32 struckAll = 1;

@@ -623,6 +623,108 @@ namespace
                   Key(669, SKILL_NODE_MODIFIER, 2, 2, 668, 3, "Doombringer", "Your Doomguard deals 15% more damage per rank.", 18540, KEY_DOOMBRINGER),
                   Key(670, SKILL_NODE_CAPSTONE, 2, 3, 669, 1, "Pit Lord", "Your Doomguard stays for 10 min.", 18540, KEY_PIT_LORD),
               } },
+            // --- The shaman's six, numbered 81-99 within each skill's hundred (the client's
+            // docs/ARPG-CHARACTER.md, "The shaman, in full"; the hooks are Arpg/ArpgShaman.cpp). ---
+            { SKILL_LIGHTNING, CLASS_SHAMAN, "Lightning", "Lightning Bolt, Chain Lightning and Lightning Shield: lightning that jumps, and leaves its foes Shocked.", 403,
+              { "Lightning Bolt", "Chain Lightning", "Lightning Shield" },
+              { "Storm", "Overload", "Conduit" },
+              {
+                  Kit(181, 0, 1, 0, 3, "Forked Lightning", "Lightning Bolt chains to 1/2/3 more enemies within 10 yards, at 50%.", 403,
+                      KIT_CHAIN, 403, { 1, 2, 3 }, { 10, 10, 10 }, { 50, 50, 50 }),
+                  Mod(182, 0, 2, 181, 3, "Quick Bolt", "-0.15 sec Lightning Bolt recovery per rank.", 403, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Lightning Bolt"),
+                  Key(183, SKILL_NODE_MODIFIER, 0, 3, 182, 3, "Static", "Your Lightning hits have a 10% chance per rank to Shock twice.", 324, KEY_STATIC),
+                  KitCap(184, 0, 4, 183, "Thunderstorm", "Chain Lightning bursts onto every enemy within 6 yards of each it strikes, at 40%.", 421, KIT_BURST, 421, 0, 6.0f, 40),
+                  Key(185, SKILL_NODE_SYNERGY, 1, 1, 0, 3, "Lightning Overload", "Your Lightning hits have a 5% chance per rank to strike again, at 50%.", 16166, KEY_LIGHTNING_OVERLOAD),
+                  More(186, 1, 2, 185, 4, "Concussive Storm", "6% more Lightning damage per rank.", 421, 6),
+                  ModCap(187, 1, 3, 186, "Lightning Fury", "Your Lightning's critical strikes deal 100% more of their bonus.", 16166, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 100),
+                  Key(188, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Conduit", "Each Shock consumed restores 1% of your maximum mana per rank.", 324, KEY_CONDUIT),
+                  Key(189, SKILL_NODE_TRANSFORMER, 2, 2, 188, 3, "Charged Shield", "Lightning Shield's discharge Shocks its attacker, and deals 25% more per rank.", 324, KEY_CHARGED_SHIELD),
+                  Key(190, SKILL_NODE_CAPSTONE, 2, 3, 189, 1, "Ball Lightning", "Each Shocked enemy's death throws a Lightning Bolt at the nearest enemy.", 403, KEY_BALL_LIGHTNING),
+                  Mod(191, 2, 4, 190, 3, "Thrift of the Storm", "10% less Chain Lightning mana cost per rank.", 421, SPELLMOD_COST, SPELLMOD_PCT, -10, "Chain Lightning"),
+              } },
+            { SKILL_SHOCKS, CLASS_SHAMAN, "Shocks", "Earth Shock, Flame Shock and Frost Shock: the payoffs, one for each element.", 8042,
+              { "Earth Shock", "Flame Shock", "Frost Shock" },
+              { "Earth", "Flame", "Frost" },
+              {
+                  Key(281, SKILL_NODE_SYNERGY, 0, 1, 0, 1, "Earthquake", "When Earth Shock consumes a Shock, every enemy within 6 yards takes the payoff too.", 8042, KEY_EARTHQUAKE),
+                  Mod(282, 0, 2, 281, 3, "Reverberation", "-1 sec Shock cooldown per rank.", 8042, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000),
+                  Key(283, SKILL_NODE_CAPSTONE, 0, 3, 282, 1, "Earthen Power", "Earth Shock Dazes its target.", 8042, KEY_EARTHEN_POWER),
+                  More(284, 0, 4, 283, 4, "Tectonic Force", "8% more Earth Shock damage per rank.", 8042, 8, "Earth Shock"),
+                  Ail(285, 1, 1, 0, 3, "Searing Flames", "Your Shock hits have a 15% chance per rank to Ignite.", 8050, TAG_FIRE, 15),
+                  Kit(286, 1, 2, 285, 2, "Flame Spread", "Flame Shock also lands on 1/2 more enemies within 8 yards.", 8050,
+                      KIT_SPREAD, 8050, { 1, 2 }, { 8, 8 }, { 100, 100 }),
+                  Key(287, SKILL_NODE_CAPSTONE, 1, 3, 286, 1, "Lava Burst", "Flame Shock on an Ignited enemy consumes the Ignite to burst onto every enemy within 8 yards for the burn left.", 8050, KEY_LAVA_BURST),
+                  More(288, 1, 4, 287, 3, "Magma Core", "10% more Flame Shock damage per rank.", 8050, 10, "Flame Shock"),
+                  More(289, 2, 1, 0, 3, "Frozen Power", "10% more Frost Shock damage per rank.", 8056, 10, "Frost Shock"),
+                  Key(290, SKILL_NODE_SYNERGY, 2, 2, 289, 3, "Frostbite", "Frost Shock on a Chilled enemy has a 15% chance per rank to Freeze it.", 8056, KEY_FROSTBITE_SHOCK),
+                  KitCap(291, 2, 3, 290, "Glacial Shock", "Frost Shock bursts onto every enemy within 6 yards of its target, at 80%.", 8056, KIT_BURST, 8056, 0, 6.0f, 80),
+                  Mod(292, 2, 4, 291, 3, "Shock Thrift", "10% less Shock mana cost per rank.", 8042, SPELLMOD_COST, SPELLMOD_PCT, -10),
+              } },
+            { SKILL_FIRE_TOTEMS, CLASS_SHAMAN, "Fire Totems", "Searing, Magma and Fire Nova Totems: totems that fight, as minions. An ARPG shaman has Fire Nova Totem at 10 and Magma Totem at 20.", 3599,
+              { "Searing Totem", "Magma Totem", "Fire Nova Totem", "Fire Nova", "Attack" },
+              { "Searing", "Magma", "Nova" },
+              {
+                  Key(381, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Searing Bolts", "Searing Totem's bolts strike 1/2/3 more enemies within 8 yards of their target, at 50%.", 3599, KEY_SEARING_BOLTS),
+                  Ail(382, 0, 2, 381, 3, "Burning Totem", "Your Fire Totems' hits have a 10% chance per rank to Ignite.", 3599, TAG_FIRE, 10),
+                  Key(383, SKILL_NODE_CAPSTONE, 0, 3, 382, 1, "Twin Totems", "Searing Totem throws two bolts at once, as two totems would.", 3599, KEY_TWIN_TOTEMS),
+                  More(384, 0, 4, 383, 4, "Searing Heat", "8% more Searing Totem damage per rank.", 3599, 8, "Attack"),
+                  Mod(385, 1, 1, 0, 3, "Wide Magma", "+15% Magma Totem radius per rank.", 8190, SPELLMOD_RADIUS, SPELLMOD_PCT, 15, "Magma Totem"),
+                  More(386, 1, 2, 385, 4, "Magma Pulse", "8% more Magma Totem damage per rank.", 8190, 8, "Magma Totem"),
+                  Key(387, SKILL_NODE_CAPSTONE, 1, 3, 386, 1, "Molten Core", "Magma Totem's pulses Ignite every enemy they strike.", 8190, KEY_MOLTEN_CORE),
+                  More(388, 2, 1, 0, 3, "Nova Fury", "10% more Fire Nova damage per rank.", 1535, 10, "Fire Nova"),
+                  Key(389, SKILL_NODE_MODIFIER, 2, 2, 388, 2, "Echoing Nova", "Fire Nova strikes each enemy 1/2 more times, at 60%.", 1535, KEY_ECHOING_NOVA),
+                  Key(390, SKILL_NODE_CAPSTONE, 2, 3, 389, 1, "Cataclysmic Nova", "Fire Nova consumes the Ignite on every enemy it strikes, for the burn left.", 1535, KEY_CATACLYSMIC_NOVA),
+                  Mod(391, 2, 4, 390, 3, "Totem Thrift", "10% less Fire Totem mana cost per rank.", 3599, SPELLMOD_COST, SPELLMOD_PCT, -10),
+              } },
+            { SKILL_EARTHEN_TOTEMS, CLASS_SHAMAN, "Earthen Totems", "Stoneclaw, Earthbind, Strength of Earth, Windfury, Grace of Air and Tremor Totems: totems that hold and empower.", 5730,
+              { "Stoneclaw Totem", "Earthbind Totem", "Strength of Earth Totem", "Windfury Totem", "Grace of Air Totem", "Tremor Totem", "Stoneskin Totem" },
+              { "Stone", "Wind", "Ward" },
+              {
+                  Key(481, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Stoneclaw", "Stoneclaw Totem has 25% more life per rank, and every enemy within 10 yards turns on it when it is placed.", 5730, KEY_STONECLAW),
+                  Key(482, SKILL_NODE_SYNERGY, 0, 2, 481, 1, "Earth's Grasp", "The enemies your Earthbind Totem slows are Vulnerable.", 2484, KEY_EARTHS_GRASP),
+                  Key(483, SKILL_NODE_CAPSTONE, 0, 3, 482, 1, "Totemic Ward", "While a totem of yours stands, you take 10% less damage.", 8071, KEY_TOTEMIC_WARD),
+                  Mod(484, 0, 4, 483, 3, "Earthen Thrift", "10% less Earthen totem mana cost per rank.", 8071, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Key(485, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Wind's Edge", "+4% attack speed per rank while an air totem of yours stands.", 8512, KEY_WINDS_EDGE),
+                  Key(486, SKILL_NODE_MODIFIER, 1, 2, 485, 3, "Air Mastery", "Your Lightning deals 4% more per rank while an air totem of yours stands.", 8835, KEY_AIR_MASTERY),
+                  Key(487, SKILL_NODE_CAPSTONE, 1, 3, 486, 1, "Storm Totem", "Your Lightning hits on enemies within 10 yards of a totem of yours Shock twice.", 8512, KEY_STORM_TOTEM),
+                  Mod(488, 2, 1, 0, 3, "Totemic Reach", "+15% Earthen totem radius per rank.", 8143, SPELLMOD_RADIUS, SPELLMOD_PCT, 15),
+                  Key(489, SKILL_NODE_MODIFIER, 2, 2, 488, 2, "Earthen Vigor", "While a totem of yours stands, you regain 0.5% of your maximum health a second per rank.", 8143, KEY_EARTHEN_VIGOR),
+                  ModCap(490, 2, 3, 489, "Ancestral Totems", "Your Earthen totems last twice as long.", 8143, SPELLMOD_DURATION, SPELLMOD_PCT, 100),
+              } },
+            { SKILL_SHAMAN_STRIKE, CLASS_SHAMAN, "Strike", "Your held swing, Stormstrike and the weapon imbues: the Enhancer.", 17364,
+              { "Stormstrike", "Windfury Weapon", "Flametongue Weapon", "Frostbrand Weapon", "Rockbiter Weapon", "Windfury Attack",
+                "Flametongue Attack", "Frostbrand Attack" },
+              { "Windfury", "Imbue", "Storm" },
+              {
+                  Key(581, SKILL_NODE_MODIFIER, 0, 1, 0, 3, "Windfury", "Your Windfury Weapon strikes 10% more often per rank.", 8232, KEY_WINDFURY),
+                  Key(582, SKILL_NODE_TRANSFORMER, 0, 2, 581, 3, "Tempest Swing", "Windfury's strikes also hit every enemy in front of you, at 30/45/60%.", 8232, KEY_TEMPEST_SWING),
+                  Key(583, SKILL_NODE_CAPSTONE, 0, 3, 582, 1, "Unleashed Rage", "Each Windfury strike gives you 5% more Melee damage for 6 sec, stacking to 5.", 16257, KEY_UNLEASHED_RAGE),
+                  More(584, 0, 4, 583, 4, "Weapon Fury", "6% more Strike damage per rank.", 17364, 6),
+                  Key(585, SKILL_NODE_MODIFIER, 1, 1, 0, 3, "Rockbiter", "Your hits build 15% more Daze per rank.", 8017, KEY_ROCKBITER),
+                  // A choice of imbue: fire's Ignites or frost's Chills.
+                  Choice(Conv(586, 1, 2, 585, "Flametongue", "Your Strike hits count as Fire: they Ignite, not Bleed, and build no Daze.", 8024, TAG_FIRE), 1),
+                  Choice(Conv(587, 1, 2, 585, "Frostbrand", "Your Strike hits count as Frost: a critical one Chills (Freezes the Chilled), and build no Daze.", 8033, TAG_FROST), 1),
+                  Key(588, SKILL_NODE_MODIFIER, 1, 3, 585, 3, "Flurry", "+4% attack speed per rank.", 16257, KEY_QUICKENED),
+                  Key(589, SKILL_NODE_SYNERGY, 2, 1, 0, 3, "Charged Strike", "Stormstrike Shocks its target 1/2/3 times.", 17364, KEY_STORMSTRIKE_SHOCK),
+                  Key(590, SKILL_NODE_TRANSFORMER, 2, 2, 589, 3, "Static Shock", "Your swings on a Shocked enemy have a 10% chance per rank to throw a Lightning Bolt at it.", 403, KEY_STATIC_SHOCK),
+                  Key(591, SKILL_NODE_CAPSTONE, 2, 3, 590, 1, "Stormbringer", "Your critical swings Shock every enemy within 8 yards.", 421, KEY_STORMBRINGER),
+                  Mod(592, 2, 4, 591, 3, "Quick Storm", "-1 sec Stormstrike cooldown per rank.", 17364, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -1000, "Stormstrike"),
+              } },
+            { SKILL_HEALING_WAVE, CLASS_SHAMAN, "Healing Wave", "Healing Wave, Lesser Healing Wave and Chain Heal: heals, which its tree turns on your enemies too.", 331,
+              { "Healing Wave", "Lesser Healing Wave", "Chain Heal" },
+              { "Tide", "Ancestral", "Torrent" },
+              {
+                  Mod(681, 0, 1, 0, 4, "Tidal Force", "6% more healing per rank.", 331, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Mod(682, 0, 2, 681, 3, "Healing Grace", "-0.2 sec recovery per rank.", 8004, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
+                  Key(683, SKILL_NODE_SYNERGY, 0, 3, 682, 3, "Riptide", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Nature.", 403, KEY_NATURES_WRATH),
+                  Key(684, SKILL_NODE_SYNERGY, 1, 1, 0, 2, "Ancestral Healing", "Healing yourself gives you 5% more damage per rank for 5 sec.", 16176, KEY_VERDANT_FURY),
+                  Mod(685, 1, 2, 684, 3, "Tidal Focus", "10% less mana cost per rank.", 16179, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Key(686, SKILL_NODE_CAPSTONE, 1, 3, 685, 1, "Earthliving", "Your heals Shock every enemy within 8 yards.", 421, KEY_EARTHLIVING),
+                  Mod(687, 2, 1, 0, 3, "Healing Way", "+4% critical strike chance per rank.", 331, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
+                  Key(688, SKILL_NODE_SYNERGY, 2, 2, 687, 1, "Torrent", "Your heals burst outward: every enemy within 8 yards takes 50% of the heal as Nature.", 1064, KEY_BLOOM),
+                  Key(689, SKILL_NODE_CAPSTONE, 2, 3, 688, 1, "Healing Stream", "Your heals Poison every enemy within 8 yards, a hit of 30% of the heal (once every 3 sec).", 5394, KEY_WRATH_OF_THE_WILD),
+                  Mod(690, 1, 4, 686, 3, "Nature's Guidance", "-0.2 sec Chain Heal recovery per rank.", 1064, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200, "Chain Heal"),
+              } },
         };
         return skills;
     }
@@ -737,6 +839,23 @@ namespace
         { 664, 2748,  "Archaedas, Uldaman" },                           // Burning Legion
         { 667, 9568,  "Overlord Wyrmthalak, Lower Blackrock Spire" },   // Lord of Flame
         { 670, 10429, "Warchief Rend Blackhand, Upper Blackrock Spire" },// Pit Lord
+        // The shaman's
+        { 184, 3654,  "Mutanus the Devourer, Wailing Caverns" },        // Thunderstorm
+        { 187, 7267,  "Chief Ukorz Sandscalp, Zul'Farrak" },            // Lightning Fury
+        { 190, 4422,  "Agathelos the Raging, Razorfen Kraul" },         // Ball Lightning
+        { 283, 7228,  "Ironaya, Uldaman" },                             // Earthen Power
+        { 287, 9938,  "Magmus, Blackrock Depths" },                     // Lava Burst
+        { 291, 4829,  "Aku'mai, Blackfathom Deeps" },                   // Glacial Shock
+        { 383, 9156,  "Ambassador Flamelash, Blackrock Depths" },       // Twin Totems
+        { 387, 9816,  "Pyroguard Emberseer, Upper Blackrock Spire" },   // Molten Core
+        { 390, 9017,  "Lord Incendius, Blackrock Depths" },             // Cataclysmic Nova
+        { 483, 2748,  "Archaedas, Uldaman" },                           // Totemic Ward
+        { 487, 12201, "Princess Theradras, Maraudon" },                 // Storm Totem
+        { 490, 4421,  "Charlga Razorflank, Razorfen Kraul" },           // Ancestral Totems
+        { 583, 11501, "King Gordok, Dire Maul" },                       // Unleashed Rage
+        { 591, 9019,  "Emperor Dagran Thaurissan, Blackrock Depths" },  // Stormbringer
+        { 686, 5775,  "Verdan the Everliving, Wailing Caverns" },       // Earthliving
+        { 689, 3671,  "Lady Anacondra, Wailing Caverns" },              // Healing Stream
     };
 
     // Revision 2 of the trees renumbered the capstones: a page read for an old one is read for its
@@ -777,6 +896,7 @@ namespace
         uint8 mageFits = 0;       // `fits` for a mage's skills (`fits` is a paladin's)
         uint8 druidFits = 0;      // and a druid's
         uint8 warlockFits = 0;    // and a warlock's
+        uint8 shamanFits = 0;     // and a shaman's
     };
 
     // The skills of `classId`'s a rune fits: a bit per SkillId (0: none, a rune of another class).
@@ -788,6 +908,7 @@ namespace
             case CLASS_MAGE: return rune.mageFits;
             case CLASS_DRUID: return rune.druidFits;
             case CLASS_WARLOCK: return rune.warlockFits;
+            case CLASS_SHAMAN: return rune.shamanFits;
             default: return 0;
         }
     }
@@ -801,32 +922,34 @@ namespace
         {
             { RUNE_CHAINS, "Rune of Chains", "The skill's hit chains to 1 more enemy within 10 yards, at 50% (one more jump on a chain its tree gives).", 20186,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_CHAIN, 1, 10.0f, 50, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE)),
-              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_DRAIN)) },
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_DRAIN)), uint8(FIT(SKILL_LIGHTNING) | FIT(SKILL_SHOCKS)) },
             { RUNE_SHATTERING, "Rune of Shattering", "The skill's hits burst onto enemies within 6 yards of the target, at 35% (+15% on a burst its tree gives).", 24275,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_STRIKE) | FIT(SKILL_WRATH)), RUNE_KIT, KIT_BURST, 0, 6.0f, 35, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)),
-              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_IMMOLATE)) },
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_IMMOLATE)), uint8(FIT(SKILL_LIGHTNING) | FIT(SKILL_SHOCKS)) },
             { RUNE_EXPANSE, "Rune of Expanse", "+30% area.", 2812,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_RADIUS), uint8(SPELLMOD_PCT), int32(30)) },
               uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS)), uint8(FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR)),
-              uint8(FIT(SKILL_IMMOLATE)) },
+              uint8(FIT(SKILL_IMMOLATE)), uint8(FIT(SKILL_FIRE_TOTEMS) | FIT(SKILL_EARTHEN_TOTEMS)) },
             { RUNE_LINGERING, "Rune of Lingering", "+50% duration.", 20925,
               uint8(FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0, { std::make_tuple(uint8(SPELLMOD_DURATION), uint8(SPELLMOD_PCT), int32(50)) }, uint8(FIT(SKILL_STORMS)), uint8(FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_REJUVENATION)),
-              uint8(FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE)) },
+              uint8(FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE)), uint8(FIT(SKILL_FIRE_TOTEMS) | FIT(SKILL_EARTHEN_TOTEMS)) },
             { RUNE_HASTE, "Rune of Haste", "-25% cooldown, -15% damage.", 1044,
               uint8(FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_HAMMER) | FIT(SKILL_WRATH) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_PCT), int32(-25)), std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(-15)),
                 std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(-15)) },
-              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_FIRE_BLAST)) },
+              uint8(FIT(SKILL_FROSTBOLT) | FIT(SKILL_FIRE_BLAST)), 0, 0, uint8(FIT(SKILL_SHOCKS) | FIT(SKILL_SHAMAN_STRIKE)) },
             { RUNE_LEECH, "Rune of Leech", "5% of the skill's damage heals you.", 20166,
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER)), RUNE_HOOK, UniqueKit(0), 0, 0.0f, 5, {}, uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT)),
-              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)) },
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)),
+              uint8(FIT(SKILL_LIGHTNING) | FIT(SKILL_SHOCKS) | FIT(SKILL_SHAMAN_STRIKE)) },
             { RUNE_COMMAND, "Rune of Command", "The stun spreads to 1 more enemy within 8 yards.", 20549,
               uint8(FIT(SKILL_HAMMER)), RUNE_KIT, KIT_SPREAD, 1, 8.0f, 100, {} },
             { RUNE_SANCTITY, "Rune of Sanctity", "+15% damage.", 20218,
               uint8(FIT(SKILL_STRIKE) | FIT(SKILL_JUDGEMENT) | FIT(SKILL_CONSECRATION) | FIT(SKILL_WRATH) | FIT(SKILL_HAMMER) | FIT(SKILL_HOLY_LIGHT)), RUNE_MODS, UniqueKit(0), 0, 0.0f, 0,
               { std::make_tuple(uint8(SPELLMOD_DAMAGE), uint8(SPELLMOD_PCT), int32(15)), std::make_tuple(uint8(SPELLMOD_DOT), uint8(SPELLMOD_PCT), int32(15)) },
               uint8(FIT(SKILL_FIREBALL) | FIT(SKILL_FROSTBOLT) | FIT(SKILL_ARCANE_MISSILES) | FIT(SKILL_ARCANE_EXPLOSION) | FIT(SKILL_STORMS) | FIT(SKILL_FIRE_BLAST)), uint8(FIT(SKILL_DRUID_WRATH) | FIT(SKILL_MOONFIRE) | FIT(SKILL_HURRICANE) | FIT(SKILL_BEAR) | FIT(SKILL_CAT) | FIT(SKILL_REJUVENATION)),
-              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)) },
+              uint8(FIT(SKILL_SHADOW_BOLT) | FIT(SKILL_CORRUPTION) | FIT(SKILL_IMMOLATE) | FIT(SKILL_DRAIN)),
+              uint8(FIT(SKILL_LIGHTNING) | FIT(SKILL_SHOCKS) | FIT(SKILL_FIRE_TOTEMS) | FIT(SKILL_SHAMAN_STRIKE) | FIT(SKILL_HEALING_WAVE)) },
             { RUNE_FURY, "Rune of Fury", "Your swing strikes one rank wider (Wide Swing +1, or 55% to every enemy in front).", 845,
               uint8(FIT(SKILL_STRIKE)), RUNE_KEY, UniqueKit(0), 0, 0.0f, 0, {} },
             // Cross-skill procs: the proc engine (Arpg/ArpgProcs.h) reads the socket.
@@ -878,6 +1001,17 @@ namespace
         }
     }
 
+    // A shaman's skills' kit spells, for its kit runes.
+    std::vector<uint32> ShamanKitSpellsOf(SkillId skill)
+    {
+        switch (skill)
+        {
+            case SKILL_LIGHTNING: return { 403, 421 };      // Lightning Bolt, Chain Lightning
+            case SKILL_SHOCKS: return { 8042, 8050, 8056 }; // Earth, Flame and Frost Shock
+            default: return {};
+        }
+    }
+
     // A warlock's skills' kit spells, for its kit runes.
     std::vector<uint32> WarlockKitSpellsOf(SkillId skill)
     {
@@ -900,6 +1034,8 @@ namespace
             return DruidKitSpellsOf(skill);
         if (classId == CLASS_WARLOCK)
             return WarlockKitSpellsOf(skill);
+        if (classId == CLASS_SHAMAN)
+            return ShamanKitSpellsOf(skill);
         if (classId != CLASS_PALADIN)
             return {};
         switch (skill)
@@ -1882,7 +2018,7 @@ namespace Arpg
 
     SkillId SwingSkill(uint8 classId)
     {
-        return classId == CLASS_PALADIN ? SKILL_STRIKE : SKILL_NONE;
+        return classId == CLASS_PALADIN ? SKILL_STRIKE : classId == CLASS_SHAMAN ? SKILL_SHAMAN_STRIKE : SKILL_NONE;
     }
 
     std::vector<uint16> AllPages()

@@ -214,6 +214,43 @@ namespace Arpg
         KEY_PIT_LORD,          // the Doomguard stays 10 min
         KEY_EMBERSTORM,        // the Immolate skill, its burns and Rain of Fire too: 6% more per rank
         KEY_LINGERING_FLAME,   // your Ignites burn 15% more per rank
+        // The shaman's web (Arpg/ArpgShaman.h).
+        KEY_THUNDERLORD,       // Lightning Bolt always chains to 2 more; Lightning deals 15% less
+        KEY_SUPERCHARGE,       // Overcharge: Shocked stacks to 8, and lasts 3 sec, not 4
+        KEY_WALKING_TOTEMS,    // your totems follow you; they deal 15% less
+        KEY_TOTEMIC_MASTERY,   // your totems deal 50% more; your own spells 20% less
+        KEY_WINDWALKER,        // Windfury twice as often; your spells deal 30% less
+        KEY_ELEMENTAL_WEAPONS, // swings strike again for 25% as Fire and as Frost; swings 15% less
+        // The shaman's skill trees.
+        KEY_STATIC,            // Lightning hits: 10% per rank to Shock twice
+        KEY_LIGHTNING_OVERLOAD,// Lightning hits: 5% per rank to strike again at 50%
+        KEY_CONDUIT,           // a Shock consumed: 1% mana per rank
+        KEY_CHARGED_SHIELD,    // Lightning Shield's discharge Shocks, 25% more per rank
+        KEY_BALL_LIGHTNING,    // a Shocked enemy's death throws a Lightning Bolt at the nearest
+        KEY_EARTHQUAKE,        // Earth Shock's consumed Shock bursts within 6 yards
+        KEY_EARTHEN_POWER,     // Earth Shock Dazes
+        KEY_LAVA_BURST,        // Flame Shock on the Ignited bursts the burn left within 8 yards
+        KEY_FROSTBITE_SHOCK,   // Frost Shock on the Chilled: 15% per rank to Freeze
+        KEY_SEARING_BOLTS,     // Searing Totem's bolts strike 1/2/3 more, at 50%
+        KEY_TWIN_TOTEMS,       // Searing Totem throws two bolts
+        KEY_MOLTEN_CORE,       // Magma Totem's pulses Ignite
+        KEY_ECHOING_NOVA,      // Fire Nova strikes 1/2 more times, at 60%
+        KEY_CATACLYSMIC_NOVA,  // Fire Nova consumes Ignite for the burn left
+        KEY_STONECLAW,         // Stoneclaw Totem: 25% more life per rank, taunts within 10 yards
+        KEY_EARTHS_GRASP,      // Earthbind Totem's slow makes Vulnerable
+        KEY_TOTEMIC_WARD,      // 10% less damage taken while a totem of yours stands
+        KEY_WINDS_EDGE,        // +4% attack speed per rank while an air totem of yours stands
+        KEY_AIR_MASTERY,       // 4% more Lightning per rank while an air totem of yours stands
+        KEY_STORM_TOTEM,       // Lightning hits within 10 yards of a totem of yours Shock twice
+        KEY_EARTHEN_VIGOR,     // 0.5% of maximum health a second per rank while a totem stands
+        KEY_WINDFURY,          // Windfury procs 10% more often per rank
+        KEY_TEMPEST_SWING,     // Windfury's strikes hit all in front, at 30/45/60%
+        KEY_UNLEASHED_RAGE,    // each Windfury strike: 5% more Melee damage for 6 sec, to 5
+        KEY_ROCKBITER,         // swings build 15% more Daze per rank
+        KEY_STORMSTRIKE_SHOCK, // Stormstrike Shocks 1/2/3 times
+        KEY_STATIC_SHOCK,      // swings on the Shocked: 10% per rank to throw a Lightning Bolt
+        KEY_STORMBRINGER,      // critical swings Shock every enemy within 8 yards
+        KEY_EARTHLIVING,       // your heals Shock every enemy within 8 yards
         MAX_KEYSTONE
     };
 

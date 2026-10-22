@@ -53,6 +53,7 @@
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgBoons.h"
+#include "Arpg/ArpgShaman.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgLoot.h"
@@ -935,6 +936,9 @@ uint32 Unit::DealDamage(Unit* dealer, Unit* victim, uint32 damage, CleanDamage c
 
     // ARPG: an ARPG warlock's Soul Link, Hellfire Ward and Backlash (Arpg/ArpgWarlock.h).
     damage = Arpg::WarlockDamageTaken(victim, dealer, damage, spellInfo, damagetype == INSTAKILL);
+    // ARPG: an ARPG shaman's Totemic Ward (Arpg/ArpgShaman.h); never an instant kill's.
+    if (damagetype != INSTAKILL)
+        damage = uint32(float(damage) * Arpg::ShamanTakenMod(victim));
     // ARPG: the Martyr keystone strikes back with a share of the damage (Arpg/ArpgCharacter.h).
     Arpg::OnDamageTaken(victim, dealer, damage);
     // ARPG: play statistics, damage dealt by spell and the blows before a death (Arpg/ArpgStats.h).
@@ -7175,7 +7179,11 @@ uint32 Unit::SpellDamageBonusDone(Unit* victim, SpellSchoolMask schoolMask, Spel
     if (GetTypeId() == TYPEID_UNIT && ((Creature*)this)->IsTotem() && ((Totem*)this)->GetTotemType() != TOTEM_STATUE)
     {
         if (Unit* owner = GetOwner())
+        {
+            // ARPG: the owner's bonuses, but scored as a minion's (Arpg/ArpgCharacter.h).
+            Arpg::TotemCastScope const scope(this);
             return owner->SpellDamageBonusDone(victim, schoolMask, spellInfo, effectIndex, pdamage, damagetype);
+        }
     }
 
     uint32 creatureTypeMask = victim->GetCreatureTypeMask();

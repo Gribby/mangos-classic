@@ -524,14 +524,88 @@ namespace
         return Assemble(regions, bridges, ring, bridgeSmall, { "Warlock", "Your starting point. Every path leads out from here.", {}, 686 });
     }
 
+    // The shaman's web: Elemental, Enhancement and Restoration. Its notables teach the shaman's own
+    // talents; Restoration's smalls carry the minion stats, for the totems (Arpg/ArpgShaman.h).
+    ClassWeb BuildShaman()
+    {
+        RegionSpec const regions[3] =
+        {
+            { "Elemental", -150.0f,
+              { "Elemental", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Storm", "+4% Nature damage", { TagFx(TAG_NATURE, 4) } },
+                    { "Concussion", "Your Lightning Bolt, Chain Lightning and Shocks deal 5% more.", {}, 0, "Concussion", 5 },
+                    { "Thunderlord", "Your Lightning Bolt always chains to 2 more enemies within 10 yards, at 50%. Your Lightning deals 15% less.", {}, 403, nullptr, 0, KEY_THUNDERLORD },
+                    true },
+                  { { "Focus", "+5 Intellect", { Stat(STAT_INTELLECT, 5) } },
+                    { "Call of Thunder", "+6% critical strike chance with Lightning Bolt and Chain Lightning.", {}, 0, "Call of Thunder", 5 },
+                    { "Elemental Fury", "Your Fire, Frost and Nature critical strikes deal more.", {}, 0, "Elemental Fury", 1 },
+                    false },
+                  { { "Spark", "+4% Spell damage", { TagFx(TAG_SPELL, 4) } },
+                    { "Lightning Mastery", "Your Lightning Bolt's and Chain Lightning's recovery is shorter.", {}, 0, "Lightning Mastery", 5 },
+                    { "Overcharge", "Shocked stacks to 8 on an enemy, and lasts 3 sec, not 4.", {}, 421, nullptr, 0, KEY_SUPERCHARGE },
+                    true },
+              },
+              { { "Expanse", "+5% spell area", { Of(FX_SPELL_AREA, 5) } },
+                { "Current", "+4 Spirit and +3 mana on hit", { Stat(STAT_SPIRIT, 4), Of(FX_MANA_ON_HIT, 3) } } } },
+            { "Enhancement", -30.0f,
+              { "Enhancement", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Edge", "+4% Melee damage", { TagFx(TAG_MELEE, 4) } },
+                    { "Thundering Strikes", "+5% critical strike chance.", {}, 0, "Thundering Strikes", 5 },
+                    { "Windwalker", "Your Windfury Weapon strikes twice as often. Your spells deal 30% less.", {}, 8232, nullptr, 0, KEY_WINDWALKER },
+                    true },
+                  { { "Hide", "+6 Stamina", { Stat(STAT_STAMINA, 6) } },
+                    { "Enhancing Totems", "Your Strength of Earth and Grace of Air Totems give more.", {}, 0, "Enhancing Totems", 2 },
+                    { "Flurry", "A critical strike makes your next 3 swings 30% faster.", {}, 0, "Flurry", 5 },
+                    false },
+                  { { "Might", "+5 Strength", { Stat(STAT_STRENGTH, 5) } },
+                    { "Weapon Mastery", "+10% melee weapon damage.", {}, 0, "Weapon Mastery", 5 },
+                    { "Elemental Blades", "Your swings strike again for 25% of the hit as Fire, and again as Frost. Your swings deal 15% less.", {}, 8024, nullptr, 0, KEY_ELEMENTAL_WEAPONS },
+                    true },
+              },
+              { { "Swiftness", "+3% movement speed", { Of(FX_MOVE, 3) } },
+                { "Fury", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } } } },
+            { "Restoration", 90.0f,
+              { "Restoration", "+2 to all attributes", { Of(FX_ALL_STATS, 2) } },
+              {
+                  { { "Totems", "+5% Minion damage", { TagFx(TAG_MINION, 5) } },
+                    { "Totemic Focus", "Your totems cost 25% less mana.", {}, 0, "Totemic Focus", 5 },
+                    { "Walking Totems", "Your totems walk with you. They deal 15% less.", {}, 3599, nullptr, 0, KEY_WALKING_TOTEMS },
+                    true },
+                  { { "Tide", "+4% healing", { TagFx(TAG_HEAL, 4) } },
+                    { "Tidal Mastery", "+5% critical strike chance with heals and Lightning.", {}, 0, "Tidal Mastery", 5 },
+                    { "Healing Way", "Your Healing Wave heals more on a target it healed lately.", {}, 0, "Healing Way", 3 },
+                    false },
+                  { { "Ancestors", "+6% Minion life and +2 Stamina", { Of(FX_MINION_LIFE, 6), Stat(STAT_STAMINA, 2) } },
+                    { "Purification", "+10% healing.", {}, 0, "Purification", 5 },
+                    { "Totem Lord", "Your totems deal 50% more. Your own spells deal 20% less.", {}, 8190, nullptr, 0, KEY_TOTEMIC_MASTERY },
+                    true },
+              },
+              { { "Spring", "+8 life on kill", { Of(FX_LIFE_ON_KILL, 8) } },
+                { "Tranquility", "+4% cooldown recovery", { Of(FX_COOLDOWN, 4) } } } },
+        };
+        BridgeSpec const bridges[3] =
+        {
+            { 0, 2, 1, 0, -90.0f, { "Convection", "Your Shocks and Lightning cost 10% less mana.", {}, 0, "Convection", 5 } },
+            { 1, 2, 2, 0, 30.0f, { "Ancestral Knowledge", "+5% maximum mana.", {}, 0, "Ancestral Knowledge", 5 } },
+            { 2, 2, 0, 0, 150.0f, { "Tidal Focus", "Your heals cost 5% less mana.", {}, 0, "Tidal Focus", 5 } },
+        };
+        Spec const ring = { "Wind", "+3% movement speed", { Of(FX_MOVE, 3) } };
+        Spec const bridgeSmall = { "Bridge", "+3 to all attributes", { Of(FX_ALL_STATS, 3) } };
+        return Assemble(regions, bridges, ring, bridgeSmall, { "Shaman", "Your starting point. Every path leads out from here.", {}, 403 });
+    }
+
     ClassWeb const* WebOf(uint8 classId)
     {
         static ClassWeb const paladin = BuildPaladin();
         static ClassWeb const mage = BuildMage();
         static ClassWeb const druid = BuildDruid();
         static ClassWeb const warlock = BuildWarlock();
+        static ClassWeb const shaman = BuildShaman();
         switch (classId)
         {
+            case CLASS_SHAMAN: return &shaman;
             case CLASS_WARLOCK: return &warlock;
             case CLASS_PALADIN: return &paladin;
             case CLASS_MAGE: return &mage;
@@ -858,6 +932,10 @@ namespace
         { CLASS_WARLOCK, 1122, 20 },   // Inferno (50, and an Infernal Stone)
         { CLASS_WARLOCK, 691, 30 },    // Summon Felhunter (a quest at 30)
         { CLASS_WARLOCK, 18540, 40 },  // Ritual of Doom (60, and a party)
+        // The shaman: its area spells sooner (the client's docs/ARPG-CHARACTER.md, "The shaman").
+        { CLASS_SHAMAN, 1535, 10 },    // Fire Nova Totem, rank 1 (12)
+        { CLASS_SHAMAN, 421, 20 },     // Chain Lightning, rank 1 (32)
+        { CLASS_SHAMAN, 8190, 20 },    // Magma Totem, rank 1 (26)
     };
 
     // Drop the talent spells the character shouldn't have, and give it the free ones.

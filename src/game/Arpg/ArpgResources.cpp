@@ -67,6 +67,17 @@ namespace
         { "Fear", 6.0f }, { "Howl of Terror", 10.0f }, { "Curse of Weakness", 5.0f }, { "Curse of Tongues", 5.0f },
         { "Curse of Recklessness", 5.0f }, { "Curse of the Elements", 5.0f }, { "Curse of Shadow", 5.0f },
         { "Curse of Doom", 10.0f }, { "Demon Skin", 0.0f }, { "Demon Armor", 0.0f }, { "Shadow Ward", 8.0f },
+        // Shaman: Lightning Bolt is the free filler, Chain Lightning the spender; the imbues and
+        // Ghost Wolf are free.
+        { "Lightning Bolt", 0.0f }, { "Chain Lightning", 16.0f }, { "Earth Shock", 8.0f }, { "Flame Shock", 8.0f },
+        { "Frost Shock", 8.0f }, { "Lightning Shield", 4.0f }, { "Stormstrike", 6.0f }, { "Purge", 4.0f },
+        { "Searing Totem", 6.0f }, { "Magma Totem", 14.0f }, { "Fire Nova Totem", 12.0f },
+        { "Stoneclaw Totem", 6.0f }, { "Earthbind Totem", 4.0f }, { "Strength of Earth Totem", 5.0f },
+        { "Windfury Totem", 6.0f }, { "Grace of Air Totem", 6.0f }, { "Tremor Totem", 4.0f },
+        { "Healing Stream Totem", 6.0f }, { "Mana Spring Totem", 4.0f },
+        { "Healing Wave", 18.0f }, { "Lesser Healing Wave", 11.0f }, { "Chain Heal", 18.0f },
+        { "Ghost Wolf", 0.0f }, { "Rockbiter Weapon", 0.0f }, { "Flametongue Weapon", 0.0f },
+        { "Frostbrand Weapon", 0.0f }, { "Windfury Weapon", 0.0f },
     };
 
     CostRow const* RowOf(SpellEntry const* spellInfo)
@@ -85,7 +96,7 @@ namespace
         CostRow const* row = RowOf(spellInfo);
         return row && row->pct == 0.0f &&
             (std::strcmp(row->name, "Frostbolt") == 0 || std::strcmp(row->name, "Wrath") == 0 ||
-             std::strcmp(row->name, "Searing Pain") == 0);
+             std::strcmp(row->name, "Searing Pain") == 0 || std::strcmp(row->name, "Lightning Bolt") == 0);
     }
 
     bool Sealed(Unit const* unit)

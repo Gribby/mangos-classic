@@ -13,6 +13,10 @@
  *   Consecrated  standing in a Consecration.
  *   Scorched Ground, Frozen Ground, Storm Ground  standing in a Flamestrike or Rain of Fire, in a
  *                Blizzard, in a Hurricane.
+ *   Vulnerable   set up by debuffs, controls and the free fillers: 20% more damage taken.
+ *   Shocked      the shaman's Lightning: stacks, each 5% more damage taken from everyone, up to
+ *                SHOCK_STACKS (8 under the Overcharge keystone), SHOCK_MS (3 sec under it) from the last; Earth
+ *                Shock consumes it (Arpg/ArpgShaman.h). The last state the u16 mask has room for.
  *
  * States are kept per enemy, whoever put them there. Consuming a state ends it and gives back what
  * it held (a damage over time's damage left, Judged's stored damage), for the consumer to pay out.
@@ -48,6 +52,7 @@ namespace Arpg
         STATE_FROZEN_GROUND,
         STATE_STORM_GROUND,
         STATE_VULNERABLE,       // Diablo IV's: 20% more damage taken from everything, a few seconds
+        STATE_SHOCKED,          // the shaman's Lightning: 5% more taken a stack (to 4), 4 sec
         MAX_STATE
     };
 
@@ -82,6 +87,13 @@ namespace Arpg
 
     // Dazed's own effect: the more damage a Dazed enemy takes, as a multiplier.
     float StateTakenMod(Unit const* victim);
+
+    // Shocked: `by` adds `stacks` to `victim` (capped by `by`'s keystones), renewing its time.
+    constexpr uint8 SHOCK_STACKS = 4, SHOCK_STACKS_SUPERCHARGED = 8;
+    constexpr uint32 SHOCK_MS = 4000, SHOCK_MS_SUPERCHARGED = 3000;
+    constexpr float SHOCK_TAKEN_PER_STACK = 0.05f;
+    void AddShock(Player* by, Unit* victim, uint8 stacks);
+    uint8 ShockStacks(Unit const* victim);
 
     // A periodic aura's tick by `caster` on `target`: a Consecration's builds Daze.
     void OnStateTick(Unit* caster, Unit* target, SpellEntry const* spellInfo);

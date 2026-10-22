@@ -52,6 +52,17 @@ namespace Arpg
 
     // The multiplier on damage `attacker` deals with `spellInfo` (nullptr: a weapon swing).
     float DamageDoneMod(Unit const* attacker, Unit const* victim, SpellEntry const* spellInfo);
+    // While one lives, a totem's spell is being scored through its owner's bonuses (the core's
+    // redirect in Unit::SpellDamageBonusDone): DamageDoneMod treats the owner's hit as the
+    // totem's, a minion's (the Minion and Totem tags, the minion's own more).
+    struct TotemCastScope
+    {
+        explicit TotemCastScope(Unit const* totem);
+        ~TotemCastScope();
+        TotemCastScope(TotemCastScope const&) = delete;
+        TotemCastScope& operator=(TotemCastScope const&) = delete;
+        Unit const* previous;
+    };
 
     // The same for a hit of `tags` (an added hit of another damage type than `spellInfo`'s): the
     // power scale, one sum of increased bonuses, each more bonus on its own, and the victim's

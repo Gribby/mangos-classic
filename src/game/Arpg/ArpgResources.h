@@ -9,7 +9,7 @@
  *     (Fireball 15%, Arcane Missiles 18%, Consecration 22%...); any other mana spell its vanilla
  *     share of base mana, halved, of maximum mana. Talents and gear's cost cuts still apply.
  *   - A free filler per class that gives mana back on a hit: the mage's Frostbolt, the druid's
- *     Wrath and the warlock's Searing Pain (4% each; their hits also make the target Vulnerable,
+ *     Wrath, the warlock's Searing Pain and the shaman's Lightning Bolt (4% each; their hits also make the target Vulnerable,
  *     Arpg/ArpgStates.h), and a paladin's melee swing while a Seal is on (1%). Shapeshifting is
  *     free, and a bear comes in with 20 rage (Spells/SpellAuras.cpp, the shapeshift).
  *   - Regeneration: 1% of maximum mana a second, and the gear's mana per 5 seconds, whether or

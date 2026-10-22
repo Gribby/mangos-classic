@@ -16,6 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include "Arpg/ArpgShaman.h"
 #include "Entities/Totem.h"
 #include "Log/Log.h"
 #include "Groups/Group.h"
@@ -108,6 +109,9 @@ void Totem::Summon(Unit* owner)
 
     if (owner->AI())
         owner->AI()->JustSummoned((Creature*)this);
+
+    // ARPG: an ARPG shaman's totem nodes (Stoneclaw; Arpg/ArpgShaman.h).
+    Arpg::OnShamanTotem(owner, this);
 
     // there are some totems, which exist just for their visual appeareance
     for (auto& data : m_spellList.Spells)

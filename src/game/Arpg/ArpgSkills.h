@@ -99,6 +99,13 @@ namespace Arpg
         SKILL_DRAIN             = 4, // Drain Life, Drain Soul, Death Coil, Life Tap
         SKILL_DEMON             = 5, // your demon: its summons and its abilities
         SKILL_LEGION            = 6, // Inferno and Ritual of Doom: the horde's big summons
+        // A shaman's.
+        SKILL_LIGHTNING         = 1, // Lightning Bolt, Chain Lightning, Lightning Shield
+        SKILL_SHOCKS            = 2, // Earth, Flame and Frost Shock
+        SKILL_FIRE_TOTEMS       = 3, // Searing, Magma and Fire Nova Totems
+        SKILL_EARTHEN_TOTEMS    = 4, // Stoneclaw, Earthbind, Strength of Earth, Windfury, Grace of Air, Tremor
+        SKILL_SHAMAN_STRIKE     = 5, // the swing, Stormstrike and the imbues
+        SKILL_HEALING_WAVE      = 6, // Healing Wave, Lesser Healing Wave, Chain Heal
         // 7 and 8 (Holy Wrath, Hammer of Wrath alone) are folded into Wrath and Hammers.
     };
 
