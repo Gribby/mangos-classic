@@ -17,6 +17,8 @@
 #include "Log/Log.h"
 #include "Maps/GridMap.h"
 #include "Maps/Map.h"
+#include "Maps/MapPersistentStateMgr.h"
+#include "Globals/ObjectMgr.h"
 #include "Server/DBCStores.h"
 #include "Server/Opcodes.h"
 #include "Server/SQLStorages.h"
@@ -137,7 +139,7 @@ namespace
         uint32 sentId = 0;                          // the layout the client has
         uint32 checkedAt = 0;
         uint32 stoneAt = 0;                         // when it last left by a stone or exit
-        int returnStone = 0;                        // the stone it came by
+        int returnStone = -1;                       // the stone it came by; -1 its side's
     };
 
     std::mutex sLock;
@@ -148,7 +150,7 @@ namespace
     bool sStoneReady = false, sExitReady = false;
     LayoutPtr sBlocks[BLOCKS];
     int sNextBlock = 0;
-    uint32 sNextId = 1;
+    uint32 sNextId = 0;                             // seeded from the clock at start
     std::unordered_map<uint32, LayoutPtr> sInstances;           // by instance id
     std::set<uint32> sPopulated;                                 // instances whose creatures stand
     std::unordered_map<ObjectGuid, PlayerRift> sPlayers;
@@ -705,6 +707,7 @@ namespace
     void EnterRift(Player* player, int stone)
     {
         LayoutPtr join;
+        ObjectGuid joinGuid;
         // A party member in a rift: that one.
         if (Group* group = player->GetGroup())
         {
@@ -716,7 +719,10 @@ namespace
                     continue;
                 auto it = sInstances.find(member->GetInstanceId());
                 if (it != sInstances.end())
+                {
                     join = it->second;
+                    joinGuid = member->GetObjectGuid();
+                }
             }
         }
         LayoutPtr layout = join;
@@ -726,7 +732,10 @@ namespace
             BuildLibrary();
             int const block = FreeBlock();
             if (block < 0)
+            {
+                ChatHandler(player).PSendSysMessage("|cffffd100Elwynn Rift:|r every rift is open already; try again soon.");
                 return;
+            }
             std::shared_ptr<Layout> made = MakeLayout(block, urand(1, 0x7fffffff));
             if (!made)
             {
@@ -743,20 +752,39 @@ namespace
             pr.returnStone = stone;
             pr.sentId = layout->id;
         }
-        // A new rift is a new instance: the old binds go.
-        player->UnbindInstance(RIFT_MAP);
-        if (!join)
-            if (Group* group = player->GetGroup())
-                group->UnbindInstance(RIFT_MAP);
-        SendLayout(player, *layout);
-        ChatHandler(player).PSendSysMessage("|cffffd100Elwynn Rift:|r the forest is torn open. A rare guards the way out.");
-        if (!player->TeleportTo(RIFT_MAP, layout->startX, layout->startY, layout->startZ + 1.0f, 0.0f))
+        // Binds change on the world thread (the instances' records are its), before the maps
+        // update: the old binds go, or the party member's instance is bound, then the way in.
+        ObjectGuid const guid = player->GetObjectGuid();
+        sWorld.GetMessager().AddMessage([guid, joinGuid, layout](World* /*world*/)
         {
-            std::lock_guard<std::mutex> guard(sLock);
-            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
-            pr.pending = nullptr;
-            pr.sentId = 0;
-        }
+            Player* player = sObjectMgr.GetPlayer(guid);
+            if (!player || !player->IsInWorld() || player->IsBeingTeleported())
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                auto it = sPlayers.find(guid);
+                if (it != sPlayers.end() && it->second.pending == layout)
+                    it->second.pending = nullptr;
+                return;
+            }
+            player->UnbindInstance(RIFT_MAP);
+            Player* member = joinGuid.IsEmpty() ? nullptr : sObjectMgr.GetPlayer(joinGuid);
+            if (member && member->IsInWorld() && member->GetMapId() == RIFT_MAP)
+            {
+                if (DungeonPersistentState* state = dynamic_cast<DungeonPersistentState*>(member->GetMap()->GetPersistentState()))
+                    player->BindToInstance(state, false);
+            }
+            else if (Group* group = player->GetGroup())
+                group->UnbindInstance(RIFT_MAP);
+            SendLayout(player, *layout);
+            ChatHandler(player).PSendSysMessage("|cffffd100Elwynn Rift:|r the forest is torn open. A rare guards the way out.");
+            if (!player->TeleportTo(RIFT_MAP, layout->startX, layout->startY, layout->startZ + 1.0f, 0.0f))
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+                pr.pending = nullptr;
+                pr.sentId = 0;
+            }
+        });
     }
 
     // On a continent: the stones near, shown and stepped on.
@@ -829,8 +857,8 @@ namespace
                 layout = it->second;
                 send = pr.sentId != layout->id;
                 pr.sentId = layout->id;
-                populate = sPopulated.insert(instance).second;
-                stone = pr.returnStone;
+                if (pr.returnStone >= 0)
+                    stone = pr.returnStone;
             }
         }
         // No layout (the server restarted, or a stale instance): out to the stone.
@@ -845,6 +873,11 @@ namespace
         {
             player->NearTeleportTo(layout->startX, layout->startY, layout->startZ + 1.0f, 0.0f);
             return;
+        }
+        // Peopled once, by the first player standing in it.
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            populate = sPopulated.insert(instance).second;
         }
         if (populate)
             Populate(player, *layout);
@@ -889,6 +922,8 @@ namespace Arpg
         sRiftEntry.linked_zone = 0;
         sRiftEntry.multimap_id = 0;
         sMapStore.InsertEntry(&sRiftEntry, RIFT_MAP);
+        // Layout ids name the client's tile directory: never the same twice, restarts included.
+        sNextId = uint32(time(nullptr));
         // Its instance template: levels 1 to 60, five players, a ghost back to Goldshire.
         WorldDatabase.DirectPExecute("REPLACE INTO instance_template (map, parent, levelMin, levelMax, maxPlayers, reset_delay, "
                                      "ghostEntranceMap, ghostEntranceX, ghostEntranceY, ScriptName, mountAllowed) "
