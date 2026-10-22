@@ -24,6 +24,7 @@
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgActions.h"
 #include "Arpg/ArpgResources.h"
+#include "Arpg/ArpgStats.h"
 #include "Tools/Language.h"
 #include "Database/DatabaseEnv.h"
 #include "Log/Log.h"
@@ -2729,6 +2730,9 @@ void Player::GiveXP(uint32 xp, Creature* victim, float groupRate)
 
     // XP resting bonus for kill
     uint32 rested_bonus_xp = victim ? GetXPRestBonus(xp) : 0;
+
+    // ARPG: the play statistics' experience by source (Arpg/ArpgStats.h).
+    Arpg::OnStatsXp(this, xp + rested_bonus_xp, victim != nullptr);
 
     SendLogXPGain(xp, victim, rested_bonus_xp, groupRate);
 

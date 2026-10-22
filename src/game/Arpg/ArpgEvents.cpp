@@ -9,6 +9,7 @@
 #include "Arpg/ArpgDungeons.h"
 #include "Arpg/ArpgPacks.h"
 #include "Arpg/ArpgTree.h"
+#include "Arpg/ArpgStats.h"
 
 #include "Chat/Chat.h"
 #include "Database/DatabaseEnv.h"
@@ -65,7 +66,9 @@ namespace
     // Who shares in the end: fought in it, or stands this near.
     constexpr float SHARE_RANGE = 120.0f;
     // The XP of a finished event, in thousandths of the player's level: purge, hunt, siege.
-    constexpr uint32 EVENT_XP_PERMILLE[4] = { 0, 80, 100, 120 };
+    // A zone event's and a bounty's experience, in thousandths of the level (2026-10-22: a third
+    // of what they were; kills carry the levelling, ARPG-DECISIONS.md "Tuning from play").
+    constexpr uint32 EVENT_XP_PERMILLE[4] = { 0, 30, 35, 40 };
     // The cache: orbs, and the purple and unique chances (percent).
     constexpr uint32 CACHE_ORBS_MIN = 2, CACHE_ORBS_MAX = 4;
     constexpr uint32 CACHE_PURPLE_PCT = 20, CACHE_UNIQUE_PCT = 8;
@@ -408,7 +411,10 @@ namespace
             if (p->GetLevel() < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL))
             {
                 uint32 const xp = std::max<uint32>(1, p->GetUInt32Value(PLAYER_NEXT_LEVEL_XP) * EVENT_XP_PERMILLE[ev.type] / 1000);
-                p->GiveXP(xp, nullptr);
+                {
+                    StatsXpFrom const from("events");
+                    p->GiveXP(xp, nullptr);
+                }
                 chat.PSendSysMessage("|cffff8000%s complete! +%u experience.|r", ev.title.c_str(), xp);
             }
             else
@@ -483,7 +489,7 @@ namespace
     enum BountyKind : uint8 { BOUNTY_EVENTS = 1, BOUNTY_SLAY = 2, BOUNTY_CHAMPIONS = 3, BOUNTY_DUNGEON = 4 };
     constexpr uint8 BOUNTY_SLOTS = 3;
     // XP of a finished bounty, in thousandths of a level, by kind.
-    constexpr uint32 BOUNTY_XP_PERMILLE[5] = { 0, 300, 200, 250, 450 };
+    constexpr uint32 BOUNTY_XP_PERMILLE[5] = { 0, 100, 70, 80, 150 };
 
     struct ZoneRange { uint32 map, zone; uint8 low, high; };
     ZoneRange const ZONES[] =
@@ -732,7 +738,10 @@ namespace
         if (level < sWorld.getConfig(CONFIG_UINT32_MAX_PLAYER_LEVEL))
         {
             uint32 const xp = std::max<uint32>(1, player->GetUInt32Value(PLAYER_NEXT_LEVEL_XP) * BOUNTY_XP_PERMILLE[b.kind] / 1000);
-            player->GiveXP(xp, nullptr);
+            {
+                StatsXpFrom const from("bounties");
+                player->GiveXP(xp, nullptr);
+            }
             chat.PSendSysMessage("|cffffd200Bounty complete: %s. +%u experience.|r", title.c_str(), xp);
         }
         else

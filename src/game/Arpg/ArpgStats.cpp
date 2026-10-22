@@ -73,7 +73,10 @@ namespace
         uint32 combatSec = 0, lowManaSec = 0, lowHealthSec = 0;
         uint32 flasks = 0, rolls = 0;
         std::map<std::string, uint32> zoneSec;    // by zone name
+        std::map<std::string, uint32> xp;         // experience by source
     };
+
+    thread_local char const* sXpFrom = nullptr;
 
     std::mutex sLock;
     std::unordered_map<ObjectGuid, Session> sSessions;
@@ -252,7 +255,7 @@ namespace
           << ",\"combatSec\":" << s.combatSec << ",\"lowManaSec\":" << s.lowManaSec << ",\"lowHealthSec\":" << s.lowHealthSec
           << ",\"flasks\":" << s.flasks << ",\"rolls\":" << s.rolls << ",\"refusedForPower\":" << Counts(s.refused)
           << ",\"overdraws\":" << Counts(s.overdrew)
-          << ",\"zoneSec\":" << Counts(s.zoneSec) << ",\"dealt\":{";
+          << ",\"zoneSec\":" << Counts(s.zoneSec) << ",\"xp\":" << Counts(s.xp) << ",\"dealt\":{";
         bool first = true;
         for (auto const& [name, t] : s.dealt)
         {
@@ -466,6 +469,25 @@ namespace Arpg
         ++s.flasks;
         if (s.fight.on)
             ++s.fight.flasks;
+    }
+
+    StatsXpFrom::StatsXpFrom(char const* source) : previous(sXpFrom)
+    {
+        sXpFrom = source;
+    }
+
+    StatsXpFrom::~StatsXpFrom()
+    {
+        sXpFrom = previous;
+    }
+
+    void OnStatsXp(Player const* player, uint32 xp, bool kill)
+    {
+        if (!player || !xp || !On() || !Active(player))
+            return;
+        char const* source = kill ? "kills" : sXpFrom ? sXpFrom : "quests";
+        std::lock_guard<std::mutex> guard(sLock);
+        SessionOf(player, WorldTimer::getMSTime()).xp[source] += xp;
     }
 
     void OnStatsRoll(Player const* player)

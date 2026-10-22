@@ -17,7 +17,7 @@
  *     damage taken by source, seconds in combat, seconds in combat below 20% mana and below 35%
  *     health, casts refused for want of mana or rage or energy (by spell), casts that overdrew
  *     (cost more than was left, by spell), flasks drunk, rolls,
- *     minutes per zone. A later "session" line of the same id supersedes an earlier one.
+ *     minutes per zone, experience by source (kills, bounties, events, quests). A later "session" line of the same id supersedes an earlier one.
  * update-arpg-server.bat sends the folder to the repository's arpg-stats branch (send-arpg-stats.bat).
  */
 
@@ -62,6 +62,18 @@ namespace Arpg
     // A flask drunk, a roll made.
     void OnStatsFlask(Player const* player);
     void OnStatsRoll(Player const* player);
+    // `player` gained `xp` experience (with the rested bonus): from a kill when `kill`, else from
+    // the source a StatsXpFrom names (a bounty, an event), else a quest.
+    void OnStatsXp(Player const* player, uint32 xp, bool kill);
+    // While one lives, experience given on this thread counts as from `source`.
+    struct StatsXpFrom
+    {
+        explicit StatsXpFrom(char const* source);
+        ~StatsXpFrom();
+        StatsXpFrom(StatsXpFrom const&) = delete;
+        StatsXpFrom& operator=(StatsXpFrom const&) = delete;
+        char const* previous;
+    };
     // A pack fight ended.
     void OnStatsPack(char const* name, uint32 size, uint32 level, float seconds, uint32 damage);
     // Every player update: the samples and the periodic session line.
