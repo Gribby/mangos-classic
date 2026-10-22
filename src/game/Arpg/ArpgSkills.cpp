@@ -187,7 +187,7 @@ namespace
             { SKILL_STRIKE, CLASS_PALADIN, "Crusader", "Your held swing and your Seals, as one: the Seal is the swing's damage.", 20154, { "Seal of" },
               { "Reach", "Righteous", "Zeal" },
               {
-                  Key(101, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Wide Swing", "Your swings strike every other enemy in front of you for 55/70/85% of the hit, not 40%.", 845, KEY_WIDE_SWING),
+                  Key(101, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Wide Swing", "Your swings strike every other enemy in front of you for 70/85/100% of the hit, not 55%.", 845, KEY_WIDE_SWING),
                   Key(102, SKILL_NODE_MODIFIER, 0, 2, 101, 2, "Long Arm", "+1 yard melee reach per rank.", 12292, KEY_LONG_ARM),
                   Key(103, SKILL_NODE_MODIFIER, 0, 3, 102, 4, "Heavy Hand", "5% more Physical damage per rank while you wield a two-handed weapon.", 20111, KEY_HEAVY_HAND),
                   Ail(104, 0, 4, 103, 3, "Rending Strikes", "Your Crusader hits have an 8% chance per rank to cause Bleeding.", 772, TAG_PHYSICAL, 8),

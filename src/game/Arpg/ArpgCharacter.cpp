@@ -178,8 +178,11 @@ namespace
     // 1 / SWING_PACE as often as the weapon's own speed, never faster than SWING_FASTEST_MS, and
     // each white swing and Seal of Righteousness hit is as much less: the same damage in more,
     // smaller hits, with procs a minute kept to the weapon's speed (PacedWeaponSpeed).
-    constexpr uint32 SWING_ARC_PCT = 40;
-    constexpr uint32 WIDE_SWING_PCT[3] = { 55, 70, 85 };
+    constexpr uint32 SWING_ARC_PCT = 55;
+    constexpr uint32 WIDE_SWING_PCT[3] = { 70, 85, 100 };
+    // A paladin's Consecration, the class's area spell, deals this much more (2026-10-22: its
+    // ticks were a twentieth of a swing).
+    constexpr int32 CONSECRATION_MORE_PCT = 150;
     constexpr uint32 FORTIFY_MS = 4000;
     constexpr int32 FORTIFY_PCT = 15;
     constexpr uint32 LIFE_ON_HIT_PERMILLE = 10, LIFE_ON_HIT_MAX = 5;
@@ -955,7 +958,11 @@ namespace
         if (skill == SKILL_JUDGEMENT)
             more(8 * t.Rank(KEY_RADIANCE), "Radiance");
         if (skill == SKILL_CONSECRATION)
+        {
             more(8 * t.Rank(KEY_BURNING_GROUND), "Burning Ground");
+            if (player->getClass() == CLASS_PALADIN)
+                more(CONSECRATION_MORE_PCT, "hallowed ground");
+        }
         if (skill == SKILL_IMMOLATE && player->getClass() == CLASS_WARLOCK)
             more(6 * t.Rank(KEY_EMBERSTORM), "Emberstorm");
         // The skill trees' "more" nodes (Arpg/ArpgSkills.h).
