@@ -8,6 +8,7 @@
 #include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgSynergy.h"
 #include "Arpg/ArpgSkills.h"
+#include "Arpg/ArpgStates.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgTree.h"
 #include "Arpg/ArpgCharacter.h"
@@ -57,6 +58,7 @@ namespace
     constexpr uint32 HOLY_SHOCK_DAMAGE = 25912;
     // Martyr's Ward pulses this often, in ms, this far round the player, in yards.
     constexpr uint32 MARTYRS_WARD_TICK = 1000;
+    constexpr uint32 MARTYRS_WARD_TIMES = 5;
     constexpr float MARTYRS_WARD_RANGE = 10.0f;
     // Each player's last Martyr's Ward pulse, by guid.
     std::unordered_map<ObjectGuid, uint32> sWardTicks;
@@ -1007,6 +1009,9 @@ namespace Arpg
         SpellEntry const* spellInfo = spell->m_spellInfo;
         // The skill trees' on-land nodes (Hammer of Justice).
         OnSkillSpellLanded(spell, caster, target);
+        // A set-up spell makes its target Vulnerable (Arpg/ArpgStates.h).
+        if (caster->CanAttack(target))
+            OnVulnerableSetup(player, target, spellInfo);
         // Spread on landing (F, `n` > 0).
         UniqueMechanic const* row = WornMechanic(player, KIT_SPREAD, spellInfo);
         if (!row || !row->n || !caster->CanAttack(target))
@@ -1128,14 +1133,14 @@ namespace Arpg
         if (WorldTimer::getMSTimeDiff(last, now) < MARTYRS_WARD_TICK)
             return;
         last = now;
-        // The player's own Retribution Aura: its damage, doubled, to every enemy around.
+        // The player's own Retribution Aura: five times its damage, to every enemy around.
         for (Aura* aura : player->GetAurasByType(SPELL_AURA_DAMAGE_SHIELD))
         {
             SpellEntry const* proto = aura->GetSpellProto();
             if (aura->GetCasterGuid() != player->GetObjectGuid() || !proto->SpellName[0] ||
                     std::strncmp(proto->SpellName[0], "Retribution Aura", 16) != 0)
                 continue;
-            uint32 const flat = uint32(std::max(0, aura->GetModifier()->m_amount)) * 2;
+            uint32 const flat = uint32(std::max(0, aura->GetModifier()->m_amount)) * MARTYRS_WARD_TIMES;
             uint32 const damage = ToDamage(player, nullptr, flat);
             if (!damage)
                 return;
@@ -1148,6 +1153,12 @@ namespace Arpg
                            uint32(foes.size()), Plural(foes.size(), "enemy", "enemies"), damage);
             return;
         }
+    }
+
+    void ShowImpactOn(Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask)
+    {
+        if (unit && spellInfo && unit->IsInWorld())
+            ShowImpact(unit, spellInfo, SpellSchoolMask(schoolMask));
     }
 
     std::vector<Unit*> NearestFoes(Unit* caster, Unit* center, float radius, size_t count)

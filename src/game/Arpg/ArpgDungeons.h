@@ -98,6 +98,28 @@ namespace Arpg
     // `creature` entered combat with `enemy`: re-scale it if the players present changed.
     void OnScaledAggro(Creature* creature, Unit* enemy);
 
+    // Nightmares (Diablo IV's nightmare dungeons, seeded per run): from Brutal up, each dungeon
+    // run rolls banes on its monsters (one on Brutal, two on Torment I, three above) and one
+    // blessing for its players, shown as standing boons on the HUD. Each bane gives the run 10%
+    // more experience and the Cache and the Warden 5% more chance at a purple and a unique.
+    enum NightmareAffix : uint8
+    {
+        NM_BURSTING = 0,        // the dead burst into flame a moment later
+        NM_FRENZIED,            // enemies attack 25% faster
+        NM_STALWART,            // enemies have 30% more health
+        NM_VENGEFUL,            // enemies deal 20% more damage
+        NM_BANES,
+        NM_SHRINES = NM_BANES,  // more shrines stand here
+        NM_BLOODLUST,           // kills heal 3% of your health
+        NM_FORTUNE,             // the Cache holds a blue more each, and a better unique chance
+        NM_THRIFT,              // skills cost 25% less mana
+        NM_ALL
+    };
+    bool NightmareHas(Map* map, NightmareAffix affix);
+    uint32 NightmareBanes(Map* map);
+    // Every player update: the dungeon's nightmare as standing boons (cleared outside one).
+    void UpdateNightmareBoons(Player* player);
+
     // The most one hit of `attacker`'s may deal `victim` (0: no cap). `spell` for spell damage.
     uint32 DamageCap(Unit const* attacker, Unit const* victim, bool spell);
 
@@ -121,6 +143,10 @@ namespace Arpg
 
     // `creature` is leaving the world: forget its scaling.
     void ForgetScaled(Creature const* creature);
+
+    // Whether `creature` is a dungeon's foe as the scaling counts them: hostile, not a critter,
+    // nobody's pet.
+    bool DungeonFoe(Creature const* creature);
 }
 
 #endif

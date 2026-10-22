@@ -52,6 +52,7 @@
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
 #include "Arpg/ArpgWarlock.h"
+#include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDruid.h"
 #include "Arpg/ArpgLoot.h"
@@ -2678,6 +2679,11 @@ void Unit::CalculateDamageAbsorbAndResist(Unit* caster, SpellSchoolMask schoolMa
     }
 
     // Apply death prevention spells effects
+    // ARPG: an ARPG player's Barrier takes what is left before health does (Arpg/ArpgBoons.h); never
+    // the player's own (Hellfire's burn).
+    if (remainingDamage > 0 && caster != this)
+        remainingDamage -= int32(Arpg::BarrierAbsorb(this, uint32(remainingDamage)));
+
     if (preventDeathAura && remainingDamage >= (int32)GetHealth())
     {
         preventDeathAura->OnAuraDeathPrevention(remainingDamage);

@@ -22,6 +22,7 @@
 
 #include "World/World.h"
 #include "Arpg/ArpgCodex.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgBases.h"
@@ -985,6 +986,8 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading String Ids...");
     sScriptMgr.LoadStringIds(); // must be before LoadCreatureSpawnDataTemplates
 
+    // ARPG: the shrines' templates, written before the templates load (Arpg/ArpgShrines.h).
+    Arpg::EnsureShrineObjects();
     sLog.outString("Loading Game Object Templates...");     // must be after LoadPageTexts
     std::vector<uint32> transportDisplayIds = sObjectMgr.LoadGameobjectInfo();
     MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(GetDataPath(), transportDisplayIds);

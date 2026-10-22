@@ -33,13 +33,13 @@ namespace
     char const* const STATE_NAMES[MAX_STATE] = {
         "Chilled", "Frozen", "Ignited", "Bleeding", "Poisoned", "Withered", "Overloaded", "Judged",
         "Dazed", "Stunned", "Consecrated", "Scorched Ground", "Frozen Ground",
-        "Storm Ground",
+        "Storm Ground", "Vulnerable",
     };
 
     // The ailment (a damage tag) behind each state, or 0xFF.
     uint8 const STATE_TAG[MAX_STATE] = {
         TAG_FROST, TAG_FROST, TAG_FIRE, TAG_PHYSICAL, TAG_NATURE, TAG_SHADOW, TAG_ARCANE, TAG_HOLY,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     };
 
     constexpr uint32 SPELL_CHILLED = 12484, SPELL_FROSTBITE = 12494, SPELL_DAZED = 1604;
@@ -52,6 +52,17 @@ namespace
     constexpr uint32 DAZED_MS = 4000;
     // Dazed enemies take this much more damage.
     constexpr float DAZED_TAKEN = 1.10f;
+    // Vulnerable (Diablo IV's): this much more from everything, this long after its set-up.
+    constexpr float VULNERABLE_TAKEN = 1.20f;
+    constexpr uint32 VULNERABLE_MS = 6000;
+    // The set-ups: each class's debuffs and controls, by name, make their target Vulnerable; so
+    // does each free filler, so filler then spender beats either alone (Arpg/ArpgResources.h).
+    char const* const VULNERABLE_SPELLS[] = {
+        "Faerie Fire", "Curse of Weakness", "Curse of Recklessness", "Curse of the Elements",
+        "Curse of Shadow", "Hammer of Justice", "Frost Nova", "Judgement of the Crusader",
+        "Frost Shock", "Earthbind",
+        "Frostbolt", "Wrath", "Searing Pain",
+    };
     // A Consecration's tick builds this much Daze.
     constexpr float CONSECRATION_DAZE = 8.0f;
 
@@ -64,6 +75,7 @@ namespace
         float daze = 0.0f;
         uint32 lastBuild = 0;
         uint32 dazedUntil = 0;
+        uint32 vulnerableUntil = 0;
     };
 
     // By map copy and guid: guids repeat between copies of a dungeon.
@@ -183,6 +195,8 @@ namespace Arpg
         auto it = sRecords.find(KeyOf(victim));
         if (it != sRecords.end() && int32(it->second.dazedUntil - now) > 0)
             mask |= StateBit(STATE_DAZED);
+        if (it != sRecords.end() && int32(it->second.vulnerableUntil - now) > 0)
+            mask |= StateBit(STATE_VULNERABLE);
         return mask;
     }
 
@@ -272,6 +286,16 @@ namespace Arpg
                 Chill(by, victim, false);
                 OnStateApplied(by, victim, state);
                 return true;
+            case STATE_VULNERABLE:
+            {
+                uint32 const now = WorldTimer::getMSTime();
+                {
+                    std::lock_guard<std::mutex> guard(sLock);
+                    sRecords[KeyOf(victim)].vulnerableUntil = now + VULNERABLE_MS;
+                }
+                OnStateApplied(by, victim, state);
+                return true;
+            }
             case STATE_FROZEN:
                 Chill(by, victim, true);
                 OnStateApplied(by, victim, state);
@@ -310,7 +334,8 @@ namespace Arpg
             case STATE_SCORCHED_GROUND:
             case STATE_FROZEN_GROUND:
             case STATE_STORM_GROUND:
-                return false;                   // a stun or a ground is read, never consumed
+            case STATE_VULNERABLE:
+                return false;                   // a stun, a ground or Vulnerable is read, never consumed
             default:
                 worth = TakeAffliction(victim, STATE_TAG[state]);
                 break;
@@ -335,7 +360,27 @@ namespace Arpg
         uint32 const now = WorldTimer::getMSTime();
         std::lock_guard<std::mutex> guard(sLock);
         auto it = sRecords.find(KeyOf(victim));
-        return it != sRecords.end() && int32(it->second.dazedUntil - now) > 0 ? DAZED_TAKEN : 1.0f;
+        if (it == sRecords.end())
+            return 1.0f;
+        float mod = 1.0f;
+        if (int32(it->second.dazedUntil - now) > 0)
+            mod *= DAZED_TAKEN;
+        if (int32(it->second.vulnerableUntil - now) > 0)
+            mod *= VULNERABLE_TAKEN;
+        return mod;
+    }
+
+    void OnVulnerableSetup(Player* by, Unit* target, SpellEntry const* spellInfo)
+    {
+        if (!by || !target || !spellInfo || !spellInfo->SpellName[0] || target == by || !Active(by))
+            return;
+        char const* name = spellInfo->SpellName[0];
+        for (char const* setup : VULNERABLE_SPELLS)
+            if (std::strncmp(name, setup, std::strlen(setup)) == 0)
+            {
+                ApplyState(by, target, STATE_VULNERABLE);
+                return;
+            }
     }
 
     void UpdateStates(Player* player)

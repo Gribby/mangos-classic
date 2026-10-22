@@ -162,6 +162,8 @@ namespace Arpg
     // The kit's pieces, for the web's keystones (ArpgCharacter.h):
     // The `count` fair enemies nearest `center` within `radius` yards, in sight, nearest first.
     std::vector<Unit*> NearestFoes(Unit* caster, Unit* center, float radius, size_t count);
+    // `spellInfo`'s impact visual on `unit`, for the ARPG clients near it (SMSG_ARPG_IMPACT).
+    void ShowImpactOn(Unit* unit, SpellEntry const* spellInfo, uint32 schoolMask);
     // `amount` of `spellInfo`'s school `schoolMask` to `unit` as `caster`'s, through the spell damage path.
     // `look`: another spell whose hit visual plays instead of `spellInfo`'s (nullptr: its own),
     // e.g. a paladin's extra swings, which deal Cleave's physical damage but look holy.

@@ -212,6 +212,7 @@ namespace Arpg
         KEY_LORD_OF_FLAME,     // Inferno calls two Infernals
         KEY_DOOMBRINGER,       // the Doomguard deals 15% more per rank
         KEY_PIT_LORD,          // the Doomguard stays 10 min
+        KEY_EMBERSTORM,        // the Immolate skill, its burns and Rain of Fire too: 6% more per rank
         MAX_KEYSTONE
     };
 

@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgBoons.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgDamage.h"
@@ -86,10 +88,13 @@ namespace
         float pct = 0.0f;       // the modifier applied, in percent
         uint32 players = 0;     // the player count it was set for
         uint8 tier = 0;         // and the tier
+        bool frenzied = false;  // a Frenzied nightmare's attack speed is on it
     };
 
     // The difficulty tier of `map`'s instance (below, with the tiers).
     uint8 TierOf(Map* map);
+    // The nightmare of `map`'s run: its affixes as bits (below, with the tiers).
+    uint32 NightmareMask(Map* map);
     float TierHealth(uint8 tier);
 
     std::mutex sScaledLock;
@@ -163,6 +168,8 @@ namespace
         factor = std::max(0.01f, std::min(1.0f, factor));
         if (kind == KIND_INSTANCE)
             factor *= TierHealth(TierOf(creature->GetMap()));
+        if (kind == KIND_INSTANCE && (NightmareMask(creature->GetMap()) & (1u << NM_STALWART)))
+            factor *= 1.3f;
         // A raid's creatures grow with the gear it drops, as a character's damage does: a third
         // more in Molten Core, about twice in Temple of Ahn'Qiraj, two and a half in Naxxramas.
         if (kind == KIND_INSTANCE && map->IsRaid())
@@ -193,18 +200,26 @@ namespace
     {
         float const pct = (HealthFactor(creature, kind, players) - 1.0f) * 100.0f;
         uint8 const tier = TierOf(creature->GetMap());
+        // A Frenzied nightmare: every creature of the run attacks a quarter faster. Set here, with
+        // the health, so a tier chosen late (OnScaledAggro) brings it too, and it is on only once.
+        bool const frenzied = kind == KIND_INSTANCE && (NightmareMask(creature->GetMap()) & (1u << NM_FRENZIED));
         bool had;
         float previous;
+        bool wasFrenzied;
         {
             std::lock_guard<std::mutex> guard(sScaledLock);
             auto it = sScaled.find(creature->GetObjectGuid());
             had = it != sScaled.end();
             previous = had ? it->second.pct : 0.0f;
+            wasFrenzied = had && it->second.frenzied;
             Scaled& s = sScaled[creature->GetObjectGuid()];
             s.pct = pct;
             s.players = players;
             s.tier = tier;
+            s.frenzied = frenzied;
         }
+        if (frenzied != wasFrenzied)
+            creature->ApplyAttackTimePercentMod(BASE_ATTACK, 25.0f, frenzied);
         if (had && previous == pct)
             return;
         uint32 const before = creature->GetMaxHealth();
@@ -405,6 +420,69 @@ namespace
     std::mutex sTierLock;
     std::unordered_map<ObjectGuid, PlayerTiers> sPlayerTiers;
     std::map<uint32, uint8> sTierOf;        // by instance id
+    std::map<uint32, uint32> sNightmareOf;  // by instance id: its affixes, a bit each (NightmareAffix)
+
+    struct NightmareDef
+    {
+        char const* name;
+        char const* text;
+    };
+    NightmareDef const NIGHTMARES[NM_ALL] =
+    {
+        { "Bursting", "the dead burst into flame a moment later" },
+        { "Frenzied", "enemies attack 25% faster" },
+        { "Stalwart", "enemies have 30% more health" },
+        { "Vengeful", "enemies deal 20% more damage" },
+        { "Shrines", "more shrines stand here" },
+        { "Bloodlust", "kills heal 3% of your health" },
+        { "Fortune", "the Cache holds more" },
+        { "Thrift", "skills cost 25% less mana" },
+    };
+    constexpr uint8 NIGHTMARE_FROM_TIER = 2;    // Brutal
+    constexpr uint32 NIGHTMARE_XP_PER_BANE = 10, NIGHTMARE_EPIC_PER_BANE = 5;
+
+    uint32 NightmareMask(Map* map)
+    {
+        if (!DungeonsOn() || !map || !map->IsDungeon())
+            return 0;
+        TierOf(map);    // the tier, and with it the nightmare, are chosen at the first ask
+        std::lock_guard<std::mutex> guard(sTierLock);
+        auto it = sNightmareOf.find(map->GetInstanceId());
+        return it == sNightmareOf.end() ? 0 : it->second;
+    }
+
+    // A run's nightmare at `tier`: its banes (more with the tier) and one blessing; sTierLock held.
+    uint32 RollNightmare(uint8 tier)
+    {
+        if (tier < NIGHTMARE_FROM_TIER)
+            return 0;
+        uint32 const banes = std::min<uint32>(3, uint32(tier) - 1);
+        std::vector<uint8> pool;
+        for (uint8 a = 0; a < NM_BANES; ++a)
+            pool.push_back(a);
+        uint32 mask = 0;
+        for (uint32 i = 0; i < banes && !pool.empty(); ++i)
+        {
+            size_t const pick = urand(0, uint32(pool.size() - 1));
+            mask |= 1u << pool[pick];
+            pool.erase(pool.begin() + pick);
+        }
+        mask |= 1u << urand(NM_BANES, NM_ALL - 1);
+        return mask;
+    }
+
+    std::string NightmareText(uint32 mask)
+    {
+        std::string banes, blessing;
+        for (uint8 a = 0; a < NM_ALL; ++a)
+        {
+            if (!(mask & (1u << a)))
+                continue;
+            std::string& into = a < NM_BANES ? banes : blessing;
+            into += (into.empty() ? "" : ", ") + std::string(NIGHTMARES[a].name) + " (" + NIGHTMARES[a].text + ")";
+        }
+        return "Nightmare: " + banes + ". Blessing: " + blessing + ".";
+    }
 
     void EnsureTierTable()
     {
@@ -473,9 +551,12 @@ namespace
             if (!chooser)
                 return 0;
             sTierOf[instance] = tier;
+            sNightmareOf[instance] = RollNightmare(tier);
         }
         std::string text = std::string(map->GetMapName()) + ": " + TIER_NAME[tier] + ".";
         TellMap(map, text.c_str());
+        if (uint32 const nightmare = NightmareMask(map))
+            TellMap(map, NightmareText(nightmare).c_str());
         if (wanted > tier)
             ChatHandler(chooser).PSendSysMessage("|cffffd100%s isn't open here yet: clear it on %s first.|r",
                                                  TIER_NAME[tier + 1], TIER_NAME[tier]);
@@ -620,6 +701,8 @@ namespace
         Apply(creature, kind, PlayersFor(creature, kind, nullptr));
         if (kind != KIND_INSTANCE || !MayRollChampion(creature))
             return;
+        // A shrine beside it, sometimes (Arpg/ArpgShrines.h).
+        OnShrineDungeonSettle(creature);
         uint8 const tier = TierOf(creature->GetMap());
         if (IsChosenWarden(creature))
         {
@@ -738,6 +821,11 @@ namespace Arpg
         return std::max<uint32>(1, uint32(float(victim->GetMaxHealth()) * pct / 100.0f));
     }
 
+    bool DungeonFoe(Creature const* creature)
+    {
+        return KindOf(creature) == KIND_INSTANCE;
+    }
+
     bool IsDungeonBoss(Creature const* creature)
     {
         if (!creature)
@@ -814,6 +902,8 @@ namespace Arpg
         Map const* map = attacker->GetMap();
         if (map && map->IsDungeon() && !map->IsRaid())
             mod *= std::max(0.1f, sWorld.getConfig(CONFIG_FLOAT_ARPG_DIFFICULTY_DUNGEON_DAMAGE));
+        if (map && map->IsDungeon() && (NightmareMask(const_cast<Map*>(map)) & (1u << NM_VENGEFUL)))
+            mod *= 1.2f;
         return mod;
     }
 
@@ -821,7 +911,8 @@ namespace Arpg
     {
         if (!DungeonsOn() || !victim || victim->GetTypeId() != TYPEID_UNIT || !victim->GetMap()->IsDungeon())
             return 1.0f;
-        return TIER_XP[TierOf(victim->GetMap())];
+        float const banes = float(NightmareBanes(victim->GetMap()));
+        return TIER_XP[TierOf(victim->GetMap())] * (1.0f + banes * NIGHTMARE_XP_PER_BANE / 100.0f);
     }
 
     void ForgetTiers(Player* player)
@@ -852,7 +943,9 @@ namespace Arpg
         Loot* loot = victim->m_loot;
         uint8 const tier = TierOf(victim->GetMap());
         uint32 const level = victim->GetLevel() + tier * TIER_ITEM_LEVELS;
-        uint32 const epicBonus = tier * TIER_EPIC_PCT;
+        uint32 const nightmare = NightmareMask(victim->GetMap());
+        uint32 const epicBonus = tier * TIER_EPIC_PCT + NightmareBanes(victim->GetMap()) * NIGHTMARE_EPIC_PER_BANE;
+        bool const fortune = (nightmare & (1u << NM_FORTUNE)) != 0;
         uint32 const extraBlues = tier / 2;
         bool warden;
         {
@@ -887,12 +980,12 @@ namespace Arpg
         loot->AddArpgDevGold(level * level * 2 * players * (1 + tier));
         for (uint32 i = 0; i < players; ++i)
         {
-            for (uint32 j = 0; j < 1 + extraBlues; ++j)
+            for (uint32 j = 0; j < 1 + extraBlues + (fortune ? 1 : 0); ++j)
                 AddPick(loot, RARITY_BLUE, level + CACHE_ITEM_LEVELS);
             AddPick(loot, RARITY_GREEN, level + CACHE_ITEM_LEVELS);
             if (roll_chance_i(int32(CACHE_EPIC_PCT + epicBonus)))
                 AddPick(loot, RARITY_PURPLE, level + CACHE_ITEM_LEVELS);
-            if (roll_chance_i(int32(CACHE_UNIQUE_PCT + epicBonus)))
+            if (roll_chance_i(int32(CACHE_UNIQUE_PCT + epicBonus + (fortune ? 15 : 0))))
                 AddPick(loot, RARITY_UNIQUE, level + CACHE_ITEM_LEVELS);
         }
         // The Codex drops after the Cache's gear, so a full corpse keeps the gear.
@@ -916,5 +1009,37 @@ namespace Arpg
         }
         std::lock_guard<std::mutex> guard(sWardenLock);
         sWardens.erase(creature->GetObjectGuid());
+    }
+
+    bool NightmareHas(Map* map, NightmareAffix affix)
+    {
+        return affix < NM_ALL && (NightmareMask(map) & (1u << affix)) != 0;
+    }
+
+    uint32 NightmareBanes(Map* map)
+    {
+        uint32 const mask = NightmareMask(map);
+        uint32 n = 0;
+        for (uint8 a = 0; a < NM_BANES; ++a)
+            if (mask & (1u << a))
+                ++n;
+        return n;
+    }
+
+    void UpdateNightmareBoons(Player* player)
+    {
+        if (!player || !player->IsInWorld())
+            return;
+        std::vector<std::pair<uint8, std::string>> standing;
+        Map* map = player->GetMap();
+        if (DungeonsOn() && map->IsDungeon())
+        {
+            uint32 const mask = NightmareMask(map);
+            for (uint8 a = 0; a < NM_ALL; ++a)
+                if (mask & (1u << a))
+                    standing.emplace_back(uint8(BOON_STANDING_FIRST + a),
+                                          std::string(a < NM_BANES ? "Nightmare: " : "Blessing: ") + NIGHTMARES[a].name);
+        }
+        SetStandingBoons(player, standing);
     }
 }

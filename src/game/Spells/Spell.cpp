@@ -5084,7 +5084,11 @@ SpellCastResult Spell::CheckCast(bool strict)
             sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK) &&
             VMAP::VMapFactory::createOrGetVMapManager()->isLineOfSightCalcEnabled())
         {
-            if (m_spellInfo->HasAttribute(SPELL_ATTR_ONLY_OUTDOORS) &&
+            // ARPG: an ARPG character's spells work in dungeons and caves too (Entangling Roots is
+            // the druid's Rejuvenation tree); a mount still needs the open sky.
+            bool const arpgAnywhere = m_spellInfo->HasAttribute(SPELL_ATTR_ONLY_OUTDOORS) && Arpg::Active(m_caster) &&
+                                      !IsSpellHaveAura(m_spellInfo, SPELL_AURA_MOUNTED);
+            if (m_spellInfo->HasAttribute(SPELL_ATTR_ONLY_OUTDOORS) && !arpgAnywhere &&
                 !m_caster->GetTerrain()->IsOutdoors(m_caster->GetPositionX(), m_caster->GetPositionY(), m_caster->GetPositionZ()))
                 return SPELL_FAILED_ONLY_OUTDOORS; // TODO: If at least one effect is SPELL_AURA_MOUNTED return mounts not allowed
 

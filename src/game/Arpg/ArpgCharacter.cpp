@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgCharacter.h"
+#include "Arpg/ArpgBoons.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgActs.h"
@@ -633,9 +635,13 @@ namespace
         if (t.Has(KEY_ZEALOT))
             haste += ZEALOT_HASTE;
         haste += 4.0f * t.Rank(KEY_QUICKENED);
-        if (t.Has(KEY_ZEAL) && AuraNamed(player, "Seal of the Crusader", player->GetObjectGuid()))
-            haste += 10.0f * t.Rank(KEY_ZEAL);
+        // Zeal: under any Seal, doubled under the Crusader's (which has no Seal hit of its own, so
+        // the Righteous nodes beside it still work under Righteousness or Command).
+        if (t.Has(KEY_ZEAL) && SealOn(player))
+            haste += (AuraNamed(player, "Seal of the Crusader", player->GetObjectGuid()) ? 10.0f : 5.0f) * t.Rank(KEY_ZEAL);
         haste += float(std::clamp(t.attackSpeedPct, 0, ATTACK_SPEED_CAP));
+        // A Shrine of Celerity's (Arpg/ArpgShrines.h).
+        haste += ShrineHastePct(player);
         return haste;
     }
 
@@ -950,6 +956,8 @@ namespace
             more(8 * t.Rank(KEY_RADIANCE), "Radiance");
         if (skill == SKILL_CONSECRATION)
             more(8 * t.Rank(KEY_BURNING_GROUND), "Burning Ground");
+        if (skill == SKILL_IMMOLATE && player->getClass() == CLASS_WARLOCK)
+            more(6 * t.Rank(KEY_EMBERSTORM), "Emberstorm");
         // The enemy's states (Arpg/ArpgStates.h): the affixes against each, and the stun payoffs,
         // which count a Daze as a stun.
         uint32 const states = victim ? StateMask(victim) : 0;
@@ -967,6 +975,9 @@ namespace
             more(5 * t.Rank(KEY_SEARING_LIGHT), "Searing Light");
         // A unique's power's fury (Arpg/ArpgProcs.h).
         more(UniqueFuryPct(player), "a unique's power");
+        // A Shrine of Wrath's, on the player's own hits (Arpg/ArpgShrines.h).
+        if (!(tags & TagBit(TAG_MINION)))
+            more(ShrineDamagePct(player), "Shrine of Wrath");
         // Avenging Light: healing yourself, more damage a while.
         if (t.Has(KEY_AVENGING_LIGHT) && int32(R(player).avengeUntil - now) > 0)
             more(AVENGING_LIGHT_PCT * t.Rank(KEY_AVENGING_LIGHT), "Avenging Light");
@@ -1073,6 +1084,8 @@ namespace Arpg
         ForgetDruid(player);
         ForgetWarlock(player);
         ForgetMinions(player);
+        ForgetBoons(player);
+        ForgetShrines(player);
         FlushStats(player);
         ForgetCosts(player);
         ForgetActs(player);
@@ -1093,6 +1106,12 @@ namespace Arpg
         // The minions' leash and targets, and the warlock's Fel Domination (Arpg/ArpgMinions.h).
         UpdateMinions(player);
         UpdateWarlock(player);
+        // A shrine stepped on, and the shrines' pulses (Arpg/ArpgShrines.h).
+        UpdateShrines(player);
+        // A dungeon's nightmare, as standing boons (Arpg/ArpgDungeons.h).
+        UpdateNightmareBoons(player);
+        // Barrier and the timed boons, and the HUD's line of them (Arpg/ArpgBoons.h).
+        UpdateBoons(player);
         // The ailments this player inflicted tick and burst (Arpg/ArpgDamage.h).
         UpdateAilments(player);
         // The druid's pulse (Living Thorns, Arpg/ArpgDruid.h).
@@ -1791,6 +1810,9 @@ namespace Arpg
             return;
         if (static_cast<Creature*>(victim)->GetCreatureInfo()->CreatureType == CREATURE_TYPE_CRITTER)
             return;
+        // A Bloodlust nightmare's blessing: each kill heals (Arpg/ArpgDungeons.h).
+        if (victim->GetMap()->IsDungeon() && NightmareHas(victim->GetMap(), NM_BLOODLUST))
+            ProcHeal(killer, "Bloodlust", std::max<uint32>(1, killer->GetMaxHealth() * 3 / 100));
         // A kill may ready another skill (Arpg/ArpgProcs.h), and set off a synergy (Arpg/ArpgSynergy.h).
         OnProcKill(killer, victim);
         OnSynergyKill(killer, victim);

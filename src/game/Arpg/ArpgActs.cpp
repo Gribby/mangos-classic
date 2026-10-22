@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgActs.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgBases.h"
 #include "Arpg/ArpgCombat.h"
@@ -810,6 +811,8 @@ namespace Arpg
                 continue;
             run.packs.push_back(leader->GetObjectGuid());
             FormRoadPack(leader);
+            // A shrine beside it, sometimes (Arpg/ArpgShrines.h).
+            OnShrinePackPlaced(leader);
             break;
         }
         // Placed or not, the next try is another stretch on: a spot that would not take a pack now

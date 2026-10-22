@@ -1115,13 +1115,18 @@ namespace Arpg
     {
         if (!victim || victim->GetTypeId() != TYPEID_UNIT)
             return;
-        // Fire Enchanted bursts a moment after it dies: stand clear of the corpse.
-        if (ChampionOf(victim).Has(AFFIX_FIRE_ENCHANTED))
+        // Fire Enchanted bursts a moment after it dies: stand clear of the corpse. In a Bursting
+        // nightmare (Arpg/ArpgDungeons.h) every dead dungeon creature does, for half.
+        bool const enchanted = ChampionOf(victim).Has(AFFIX_FIRE_ENCHANTED);
+        bool const bursting = !enchanted && DungeonFoe(static_cast<Creature*>(victim)) &&
+                              NightmareHas(victim->GetMap(), NM_BURSTING);
+        if (enchanted || bursting)
         {
+            uint32 const burstPct = enchanted ? FIRE_BURST_PCT : FIRE_BURST_PCT / 2;
             float const x = victim->GetPositionX(), y = victim->GetPositionY();
             ShowTelegraph(victim, TELEGRAPH_SHAPE_BLAST, ChampionTier(victim) == 2 ? TELEGRAPH_GRADE_RARE : TELEGRAPH_GRADE_CHAMPION,
                           x, y, victim->GetPositionZ(), 0.0f, FIRE_BURST_RANGE, FIRE_BURST_MS);
-            victim->m_events.AddEvent(new UnitLambdaEvent(*victim, [x, y](Unit& corpse)
+            victim->m_events.AddEvent(new UnitLambdaEvent(*victim, [x, y, burstPct](Unit& corpse)
             {
                 SpellEntry const* fire = sSpellTemplate.LookupEntry<SpellEntry>(SPELL_FIRE_BLAST);
                 if (!fire || !corpse.IsInWorld())
@@ -1131,7 +1136,7 @@ namespace Arpg
                         if (player->IsAlive() && !Dodging(player) &&
                                 std::hypot(player->GetPositionX() - x, player->GetPositionY() - y) <= FIRE_BURST_RANGE)
                             StrikeFoe(&corpse, player, fire, SPELL_SCHOOL_MASK_FIRE,
-                                      std::max<uint32>(1, player->GetMaxHealth() * FIRE_BURST_PCT / 100));
+                                      std::max<uint32>(1, player->GetMaxHealth() * burstPct / 100));
             }), victim->m_events.CalculateTime(FIRE_BURST_MS));
         }
         ObjectGuid leader;

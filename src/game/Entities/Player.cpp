@@ -6255,7 +6255,13 @@ void Player::CheckAreaExploreAndOutdoor()
         }
     }
     else if (sWorld.getConfig(CONFIG_BOOL_VMAP_INDOOR_CHECK) && !IsGameMaster())
-        RemoveAurasWithAttribute(SPELL_ATTR_ONLY_OUTDOORS);
+    {
+        // ARPG: an outdoor spell works anywhere (Spell::CheckCast), so indoors only the mount goes.
+        if (Arpg::Active(this))
+            RemoveSpellsCausingAura(SPELL_AURA_MOUNTED);
+        else
+            RemoveAurasWithAttribute(SPELL_ATTR_ONLY_OUTDOORS);
+    }
 
     if (areaFlag == 0xffff)
         return;

@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgWarlock.h"
+#include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDamage.h"
 #include "Arpg/ArpgMinions.h"
@@ -126,9 +127,45 @@ namespace
         return false;
     }
 
+    // Fel Ward (the class's own): every kill, the warlock's or a minion's, gives Barrier of a share
+    // of maximum health, more under Demon Skin or Demon Armor (Arpg/ArpgBoons.h). A caster in the
+    // middle of packs needs a layer that grows with the killing (2026-10-19: 11.8 deaths an hour at
+    // levels 10-14, all attrition from melee packs).
+    constexpr uint32 FEL_WARD_PCT = 5, FEL_WARD_ARMOR_PCT = 8;
+
+    void FelWard(Player* player)
+    {
+        if (!player || !player->IsAlive())
+            return;
+        bool const armored = HasOwnAura(player, player, "Demon Skin") || HasOwnAura(player, player, "Demon Armor");
+        GainBarrier(player, std::max<uint32>(1, player->GetMaxHealth() * (armored ? FEL_WARD_ARMOR_PCT : FEL_WARD_PCT) / 100));
+    }
+
     void RaiseImp(Player* player, Unit* at)
     {
         SummonHorde(player, ENTRY_IMP, MINION_IMP, at->GetPositionX(), at->GetPositionY(), at->GetPositionZ(), IMP_LIFE_MS);
+    }
+
+    // Hellstorm's stun on `victim`, once every HELLSTORM_EVERY an enemy.
+    void Hellstorm(Player* player, Unit* victim, uint32 now)
+    {
+        bool stun = false;
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            auto& stunned = sWarlocks[player->GetObjectGuid()].stunnedAt;
+            // Old enemies go, so the map stays small.
+            if (stunned.size() > 64)
+                for (auto it = stunned.begin(); it != stunned.end();)
+                    it = WorldTimer::getMSTimeDiff(it->second, now) >= HELLSTORM_EVERY ? stunned.erase(it) : std::next(it);
+            uint32& at = stunned[victim->GetObjectGuid()];
+            if (!at || WorldTimer::getMSTimeDiff(at, now) >= HELLSTORM_EVERY)
+            {
+                at = now ? now : 1;
+                stun = true;
+            }
+        }
+        if (stun)
+            player->CastSpell(victim, STUN, TRIGGERED_OLD_TRIGGERED);
     }
 }
 
@@ -160,38 +197,15 @@ namespace Arpg
             w.lastSpell = spellInfo->Id;
             w.lastHitAt = now;
         }
-        bool const rain = Prefixed(spellInfo, "Rain of Fire");
         bool const hellfire = Prefixed(spellInfo, "Hellfire");
         if (hellfire && t.Has(KEY_INFERNAL_HEAT))
             HeatMinions(player, INFERNAL_HEAT_MS);
         if (!victim->IsAlive())
             return;
-        // Hellstorm: a critical Rain of Fire or Hellfire stuns, once every 4 sec an enemy.
-        if (crit && (rain || hellfire) && t.Has(KEY_HELLSTORM))
-        {
-            bool stun = false;
-            {
-                std::lock_guard<std::mutex> guard(sLock);
-                auto& stunned = sWarlocks[player->GetObjectGuid()].stunnedAt;
-                // Old enemies go, so the map stays small.
-                if (stunned.size() > 64)
-                    for (auto it = stunned.begin(); it != stunned.end();)
-                        it = WorldTimer::getMSTimeDiff(it->second, now) >= HELLSTORM_EVERY ? stunned.erase(it) : std::next(it);
-                uint32& at = stunned[victim->GetObjectGuid()];
-                if (!at || WorldTimer::getMSTimeDiff(at, now) >= HELLSTORM_EVERY)
-                {
-                    at = now ? now : 1;
-                    stun = true;
-                }
-            }
-            if (stun)
-                player->CastSpell(victim, STUN, TRIGGERED_OLD_TRIGGERED);
-        }
-        if (rain && t.Has(KEY_BURNING_RAIN) && roll_chance_i(int32(BURNING_RAIN_PER_RANK * t.Rank(KEY_BURNING_RAIN))))
-            InflictAilment(player, victim, TAG_FIRE, dealt, false);
-        // Firestorm: Rain of Fire strikes an Ignited enemy twice.
-        if (rain && t.Has(KEY_FIRESTORM) && HasState(victim, STATE_IGNITED))
-            StrikeFoe(player, victim, spellInfo, spellInfo->GetSchoolMask(), dealt);
+        // Hellstorm: a critical Hellfire stuns, once every 4 sec an enemy (Rain of Fire's ticks,
+        // which can't crit, stun an Ignited enemy instead: OnWarlockTick).
+        if (crit && hellfire && t.Has(KEY_HELLSTORM))
+            Hellstorm(player, victim, now);
     }
 
     void OnWarlockTick(Unit* caster, Unit* target, SpellEntry const* spellInfo, uint32 damage)
@@ -215,6 +229,18 @@ namespace Arpg
         if (agony && target->IsAlive() && t.Has(KEY_TORMENTED_SOUL) &&
                 roll_chance_i(int32(TORMENTED_PER_RANK * t.Rank(KEY_TORMENTED_SOUL))))
             InflictAilment(player, target, TAG_SHADOW, damage, false);
+        // Rain of Fire's nodes, on its ticks (it is an area aura: it never lands as a direct hit).
+        if (Prefixed(spellInfo, "Rain of Fire") && target->IsAlive())
+        {
+            if (t.Has(KEY_BURNING_RAIN) && roll_chance_i(int32(BURNING_RAIN_PER_RANK * t.Rank(KEY_BURNING_RAIN))))
+                InflictAilment(player, target, TAG_FIRE, damage, false);
+            bool const ignited = HasState(target, STATE_IGNITED);
+            // Firestorm: a tick on an Ignited enemy falls twice.
+            if (ignited && t.Has(KEY_FIRESTORM))
+                StrikeTick(player, target, spellInfo, spellInfo->GetSchoolMask(), damage);
+            if (ignited && t.Has(KEY_HELLSTORM) && target->IsAlive())
+                Hellstorm(player, target, WorldTimer::getMSTime());
+        }
         bool const drainLife = Named(spellInfo, "Drain Life");
         uint32 const size = FromDamage(player, target, damage);
         if (drainLife && t.Has(KEY_LIFE_LINK))
@@ -257,6 +283,7 @@ namespace Arpg
         if (!killer || killer->getClass() != CLASS_WARLOCK || !Active(killer) || !victim ||
                 victim->GetTypeId() != TYPEID_UNIT)
             return;
+        FelWard(killer);
         std::shared_ptr<WebTotals const> totals = TotalsOf(killer);
         if (!totals)
             return;
@@ -265,6 +292,9 @@ namespace Arpg
         bool const drained = HasOwnAura(victim, killer, "Drain Soul");
         if (t.Has(KEY_LEGION) || (t.Has(KEY_IMP_GATE) && roll_chance_i(int32(IMP_GATE_PER_RANK * t.Rank(KEY_IMP_GATE)))) ||
                 (drained && t.Has(KEY_REAPING)))
+            RaiseImp(killer, victim);
+        // Imp Gate under Legion (which raises one always): its chance raises a second.
+        if (t.Has(KEY_LEGION) && t.Has(KEY_IMP_GATE) && roll_chance_i(int32(IMP_GATE_PER_RANK * t.Rank(KEY_IMP_GATE))))
             RaiseImp(killer, victim);
         if (drained && t.Has(KEY_REAPING) && killer->GetPowerType() == POWER_MANA)
             killer->ModifyPower(POWER_MANA, int32(killer->GetMaxPower(POWER_MANA) * REAPING_MANA_PCT / 100));

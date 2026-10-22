@@ -38,6 +38,7 @@
 #include "VMapFactory.h"
 #include "MotionGenerators/MoveMap.h"
 #include "Chat/Chat.h"
+#include "Arpg/ArpgShrines.h"
 #include "Weather/Weather.h"
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
 #include "BattleGround/BattleGroundMgr.h"
@@ -55,6 +56,7 @@
 Map::~Map()
 {
     UnloadAll(true);
+    Arpg::ForgetShrineMap(this);
 
     if (m_persistentState)
         m_persistentState->SetUsedByMapState(nullptr);         // field pointer can be deleted after this

@@ -3,6 +3,8 @@
  */
 
 #include "Arpg/ArpgResources.h"
+#include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgCombat.h"
 
 #include "Entities/Player.h"
@@ -28,7 +30,7 @@ namespace
     constexpr float REGEN_PCT = 1.0f;
     // A filler's mana back on a hit, and a sealed swing's, as shares of maximum mana (a swing
     // comes twice as often since the melee pace, ArpgCharacter.cpp, so its share is half).
-    constexpr uint32 FILLER_PCT = 3;
+    constexpr uint32 FILLER_PCT = 4;
     constexpr uint32 SEALED_SWING_PCT = 1;
     // A spell not in the table costs its vanilla share of base mana, this much of it, of maximum
     // mana; at least 1% and at most MISC_MAX_PCT.
@@ -40,7 +42,7 @@ namespace
     CostRow const COSTS[] =
     {
         // Mage: Frostbolt is the free filler.
-        { "Frostbolt", 0.0f }, { "Fireball", 11.0f }, { "Fire Blast", 0.0f }, { "Scorch", 6.0f },
+        { "Frostbolt", 0.0f }, { "Fireball", 15.0f }, { "Fire Blast", 0.0f }, { "Scorch", 6.0f },
         { "Pyroblast", 20.0f }, { "Arcane Missiles", 18.0f }, { "Arcane Explosion", 12.0f },
         { "Blizzard", 25.0f }, { "Flamestrike", 20.0f }, { "Cone of Cold", 12.0f },
         { "Frost Nova", 0.0f }, { "Blink", 0.0f }, { "Ice Barrier", 10.0f }, { "Mana Shield", 0.0f },
@@ -97,8 +99,8 @@ namespace
     // A filler refunds at most once in this long (one cast's hits).
     constexpr uint32 FILLER_REFUND_GAP_MS = 600;
 
-    // What the client was last told, as one signature: maximum mana, the spells known, and the
-    // cost fields gear and auras move.
+    // What the client was last told, as one signature: maximum mana, the spells known, the cost
+    // fields gear and auras move, and the costs' while-effects (Channeling, Thrift).
     std::mutex sLock;
     std::unordered_map<ObjectGuid, uint64> sTold;
     std::unordered_map<ObjectGuid, uint32> sLastRefund;
@@ -121,6 +123,9 @@ namespace
             std::memcpy(&bits, &mult, sizeof(bits));
             mix(bits);
         }
+        mix(ShrineFreeCasting(player) ? 1 : 0);
+        Map* map = player->GetMap();
+        mix(map && map->IsDungeon() && NightmareHas(map, NM_THRIFT) ? 1 : 0);
         return sig;
     }
 }
@@ -131,6 +136,9 @@ namespace Arpg
     {
         if (!caster || !spellInfo || spellInfo->powerType != POWER_MANA || !Active(caster))
             return vanilla;
+        // A Shrine of Channeling: no cost at all for its while (Arpg/ArpgShrines.h).
+        if (caster->GetTypeId() == TYPEID_PLAYER && ShrineFreeCasting(static_cast<Player const*>(caster)))
+            return 0;
         uint32 const most = caster->GetMaxPower(POWER_MANA);
         if (!most)
             return vanilla;
@@ -144,6 +152,9 @@ namespace Arpg
             uint32 const base = std::max<uint32>(1, caster->GetCreateMana());
             pct = std::clamp(float(vanilla) * 100.0f / float(base) * MISC_SHARE, 1.0f, MISC_MAX_PCT);
         }
+        // A Thrift nightmare's blessing: a quarter off (Arpg/ArpgDungeons.h).
+        if (caster->GetMap() && caster->GetMap()->IsDungeon() && NightmareHas(caster->GetMap(), NM_THRIFT))
+            pct *= 0.75f;
         return int32(float(most) * pct / 100.0f + 0.5f);
     }
 

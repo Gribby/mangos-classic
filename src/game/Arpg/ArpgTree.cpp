@@ -481,7 +481,7 @@ namespace
               {
                   { { "Cinders", "+4% Fire damage", { TagFx(TAG_FIRE, 4) } },
                     { "Emberstorm", "+10% Fire damage.", {}, 0, "Emberstorm", 5 },
-                    { "Hellstorm", "Your Rain of Fire and Hellfire stun on a critical strike (once every 4 sec for each enemy). Your damage over time deals 20% less.", {}, 5740, nullptr, 0, KEY_HELLSTORM },
+                    { "Hellstorm", "Your critical Hellfire, and your Rain of Fire on an Ignited enemy, stun (once every 4 sec for each enemy). Your damage over time deals 20% less.", {}, 5740, nullptr, 0, KEY_HELLSTORM },
                     true },
                   { { "Bolts", "+4% Projectile damage", { TagFx(TAG_PROJECTILE, 4) } },
                     { "Improved Shadow Bolt", "A critical Shadow Bolt makes its target take more Shadow damage.", {}, 0, "Improved Shadow Bolt", 5 },
@@ -840,10 +840,17 @@ namespace
 
     EarlySpell const EARLY_SPELLS[] =
     {
+        // The paladin: its throw and its nova in reach of its trees' Execute and Nova branches
+        // (2026-10-21: until 44 and 50, 22 ranks of the Hammers and Wrath trees did nothing).
+        { CLASS_PALADIN, 24275, 20 },  // Hammer of Wrath, rank 1 (44)
+        { CLASS_PALADIN, 2812, 30 },   // Holy Wrath, rank 1 (50)
         { CLASS_DRUID, 5487, 10 },     // Bear Form (a quest in vanilla)
         { CLASS_DRUID, 779, 10 },      // Swipe, rank 1 (16)
         { CLASS_DRUID, 16914, 20 },    // Hurricane, rank 1 (40)
-        // The warlock: its area spells and its demons sooner, and without their quests.
+        // The warlock: its free filler from the start (2026-10-21: without it, levels 1-9 spent
+        // 30% of combat under 20% mana), its area spells and its demons sooner, and without their
+        // quests.
+        { CLASS_WARLOCK, 5676, 1 },    // Searing Pain, rank 1 (18)
         { CLASS_WARLOCK, 697, 10 },    // Summon Voidwalker (a quest at 10)
         { CLASS_WARLOCK, 5740, 10 },   // Rain of Fire, rank 1 (20)
         { CLASS_WARLOCK, 712, 20 },    // Summon Succubus (a quest at 20)

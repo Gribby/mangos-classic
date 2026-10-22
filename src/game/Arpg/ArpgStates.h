@@ -47,12 +47,17 @@ namespace Arpg
         STATE_SCORCHED_GROUND,
         STATE_FROZEN_GROUND,
         STATE_STORM_GROUND,
+        STATE_VULNERABLE,       // Diablo IV's: 20% more damage taken from everything, a few seconds
         MAX_STATE
     };
 
     constexpr uint32 StateBit(State s) { return 1u << s; }
 
     char const* StateName(uint8 state);
+
+    // `by`'s `spellInfo` landed on `target`: a set-up spell (a curse, Faerie Fire, a stun, a
+    // root) makes it Vulnerable.
+    void OnVulnerableSetup(Player* by, Unit* target, SpellEntry const* spellInfo);
 
     // The states `victim` is in now, as StateBit()s.
     // `evenDead`: a dying enemy's too, for a kill: its ailments, those whose last tick or burst

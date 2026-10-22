@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgAffixes.h"
+#include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgStates.h"
@@ -727,9 +728,15 @@ namespace Arpg
         if (!loot || !looter || !Active(looter))
             return;
         tier = std::min<uint8>(tier, MAX_TIER);
+        // A Shrine of Greed's luck: the rarities roll as tiers higher, and sometimes an item more
+        // (Arpg/ArpgShrines.h). The items' own tier (their affixes) stays the drop's.
+        uint8 const greed = ShrineLootTiers(looter);
+        uint8 const rarityTier = std::min<uint8>(uint8(tier + greed), MAX_TIER);
+        if (greed && source && roll_chance_i(30))
+            AddRolledItem(loot, RollRarity(source, rarityTier), source->GetLevel());
         // A piece of the looter's class's set, sometimes (Arpg/ArpgSets.h).
         MaybeAddSetPiece(loot, looter, source);
-        loot->ForEachArpgItem([tier, source](LootItem* item)
+        loot->ForEachArpgItem([tier, rarityTier, source](LootItem* item)
         {
             if (item->arpgSeed || !Takes(item->itemProto))
                 return;
@@ -762,8 +769,10 @@ namespace Arpg
             if (UniqueBase(item->itemProto))
                 item->arpgRarity = RARITY_UNIQUE;
             else if (!item->arpgRarity)
-                item->arpgRarity = RollRarity(source, tier);
+                item->arpgRarity = RollRarity(source, rarityTier);
         });
+        if (greed && loot->GetGoldAmount())
+            loot->AddArpgDevGold(loot->GetGoldAmount() * 2);
         // Gold find: the looter's affixes add to the corpse's gold.
         if (std::shared_ptr<WebTotals const> totals = goldFind ? TotalsOf(looter) : nullptr)
             if (totals->goldFindPct > 0 && loot->GetGoldAmount())

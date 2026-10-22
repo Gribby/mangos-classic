@@ -62,7 +62,16 @@ namespace
         int8 ailTag = -1;         // an ailment node: its damage tag, and the chance per rank
         uint8 ailPerRank = 0;
         int8 convertTag = -1;     // a conversion node: the damage tag the skill's hits count as
+        uint8 choice = 0;         // a choice group: of a skill's nodes sharing one, only one may hold ranks
     };
+
+    // `node`, one side of choice group `group` (Diablo IV's mutually exclusive upgrades): its
+    // alternatives share the group, and only one of them may hold ranks.
+    SkillNode Choice(SkillNode node, uint8 group)
+    {
+        node.choice = group;
+        return node;
+    }
 
     struct SkillDef
     {
@@ -179,7 +188,7 @@ namespace
                   Key(110, SKILL_NODE_CAPSTONE, 1, 5, 109, 1, "Twin Seals", "Two different Seals can be on you at once.", 20164, KEY_TWIN_SEALS),
                   Key(111, SKILL_NODE_MODIFIER, 2, 1, 0, 4, "Quickened", "+4% attack speed per rank.", 19740, KEY_QUICKENED),
                   Key(112, SKILL_NODE_MODIFIER, 2, 2, 111, 3, "Momentum", "Each Crusader hit within 3 sec of the last gives 1% more Crusader damage per rank, up to 5 hits.", 12294, KEY_MOMENTUM),
-                  Key(113, SKILL_NODE_MODIFIER, 2, 3, 112, 3, "Zeal", "+10% attack speed per rank while Seal of the Crusader is on you.", 21082, KEY_ZEAL),
+                  Key(113, SKILL_NODE_MODIFIER, 2, 3, 112, 3, "Zeal", "+5% attack speed per rank under any Seal, +10% under Seal of the Crusader.", 21082, KEY_ZEAL),
                   Key(114, SKILL_NODE_SYNERGY, 2, 4, 113, 1, "Light of the Crusader", "Your Seal hits heal you for 10% of their damage.", 19977, KEY_LIGHT_OF_THE_CRUSADER),
                   Key(115, SKILL_NODE_CAPSTONE, 2, 5, 114, 1, "Shockwave", "Your critical swings send a shockwave 10 yards ahead, for 40% of the hit.", 20549, KEY_SHOCKWAVE_STRIKE),
                   // Synergy (Arpg/ArpgSynergy.h, ArpgStates.h).
@@ -227,11 +236,11 @@ namespace
                   Key(403, SKILL_NODE_MODIFIER, 0, 3, 402, 4, "Burning Ground", "8% more Consecration damage per rank.", 26573, KEY_BURNING_GROUND),
                   Key(404, SKILL_NODE_CAPSTONE, 0, 4, 403, 1, "Walking Consecration", "Your Consecration follows you.", 1044, KEY_WALKING_CONSECRATION),
                   Key(405, SKILL_NODE_SYNERGY, 1, 1, 0, 2, "Searing Light", "Your Holy damage is 5% more per rank on enemies standing in your Consecration.", 20218, KEY_SEARING_LIGHT),
-                  Key(406, SKILL_NODE_SYNERGY, 1, 2, 405, 1, "Hallowed Strike", "A Judgement that hits ends Consecration's cooldown (once every 10 sec).", 26573, KEY_NONE),
+                  Key(406, SKILL_NODE_SYNERGY, 1, 2, 405, 1, "Hallowed Strike", "A Judgement that hits ends Consecration's cooldown (once every 4 sec).", 26573, KEY_NONE),
                   Key(407, SKILL_NODE_CAPSTONE, 1, 3, 406, 1, "Sacred Seal", "Your Seals strike twice on enemies in your Consecration.", 20154, KEY_SACRED_SEAL),
                   Key(408, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hallowed Ground", "While you stand in your Consecration, you regain 1% of your health a second per rank.", 633, KEY_HALLOWED_GROUND),
                   Key(409, SKILL_NODE_SYNERGY, 2, 2, 408, 1, "Steadfast", "While you stand in your Consecration, you can't be stunned.", 498, KEY_STEADFAST),
-                  Key(410, SKILL_NODE_CAPSTONE, 2, 3, 409, 1, "Martyr's Ward", "Your Retribution Aura burns every enemy within 10 yards each second, doubled.", 7294, KEY_MARTYRS_WARD),
+                  Key(410, SKILL_NODE_CAPSTONE, 2, 3, 409, 1, "Martyr's Ward", "Your Retribution Aura burns every enemy within 10 yards each second, for five times its damage.", 7294, KEY_MARTYRS_WARD),
               } },
             { SKILL_HAMMER, CLASS_PALADIN, "Hammers", "Hammer of Justice, the stun, and Hammer of Wrath, the throw, as one.", 853, { "Hammer of Justice", "Hammer of Wrath" },
               { "Thrown", "Stun", "Execute" },
@@ -243,7 +252,7 @@ namespace
                   Kit(505, 1, 1, 0, 2, "Shockwave Hammer", "Hammer of Justice also stuns 1/2 more enemies within 8 yards of its target.", 20549,
                       KIT_SPREAD, 853, { 1, 2 }, { 8, 8 }, { 100, 100 }),
                   Mod(506, 1, 2, 505, 3, "Long Stun", "+0.5 sec stun per rank.", 5588, SPELLMOD_DURATION, SPELLMOD_FLAT, 500, "Hammer of Justice"),
-                  Mod(507, 1, 3, 506, 3, "Quick Hammer", "-10 sec Hammer of Justice cooldown per rank.", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000, "Hammer of Justice"),
+                  Mod(507, 1, 3, 506, 3, "Quick Hammer", "-2 sec Hammer of Justice cooldown per rank (it is 15 sec while Hammers is slotted).", 5589, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -2000, "Hammer of Justice"),
                   Key(508, SKILL_NODE_CAPSTONE, 1, 4, 507, 1, "Sentence Passed", "Your damage is 15% more on stunned or Dazed enemies.", 879, KEY_SENTENCE_PASSED),
                   Key(514, SKILL_NODE_SYNERGY, 1, 5, 508, 1, "Aftershock", "When you consume Daze, the 2 nearest enemies within 10 yards are Dazed (once every 2 sec).", 20549, KEY_NONE),
                   Kit(509, 2, 1, 0, 2, "Hammer Volley", "Hammer of Wrath throws 1/2 more hammers, fanned 15 degrees apart, at 60%.", 24275,
@@ -358,7 +367,7 @@ namespace
                   Mod(523, 0, 3, 522, 3, "Thrifty Storm", "10% less Blizzard mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10, "Blizzard"),
                   Key(524, SKILL_NODE_CAPSTONE, 0, 4, 523, 1, "Glacial Storm", "Blizzard chills every enemy it strikes, and each strike has a 15% chance to freeze one chilled already.", 12484, KEY_GLACIAL_STORM),
                   Key(533, SKILL_NODE_SYNERGY, 0, 5, 524, 1, "Rime Field", "Your Frost hits Freeze an enemy standing in a Blizzard (once every 3 sec).", 10, KEY_NONE),
-                  Key(525, SKILL_NODE_SYNERGY, 1, 1, 0, 1, "Firestorm", "A critical Fire Blast or Scorch lets your next Flamestrike skip its recovery (once every 6 sec).", 2120, KEY_NONE),
+                  Key(525, SKILL_NODE_SYNERGY, 1, 1, 0, 1, "Firestorm", "A critical Fire Blast or Scorch makes your next Blizzard or Flamestrike 50% wider (once every 6 sec).", 2120, KEY_NONE),
                   Mod(526, 1, 2, 525, 3, "Storm Surge", "+8% radius per rank.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 8),
                   Mod(527, 1, 3, 526, 3, "Raging Storm", "Blizzard's strikes and Flamestrike's burn deal 6% more per rank.", 2120, SPELLMOD_DOT, SPELLMOD_PCT, 6),
                   ModCap(528, 1, 4, 527, "Eye of the Storm", "Blizzard and Flamestrike are 30% wider.", 10, SPELLMOD_RADIUS, SPELLMOD_PCT, 30),
@@ -524,7 +533,7 @@ namespace
               {
                   Kit(361, 0, 1, 0, 2, "Spreading Flame", "Immolate also lands on 1/2 more enemies within 8 yards.", 348,
                       KIT_SPREAD, 348, { 1, 2 }, { 8, 8 }, { 100, 100 }),
-                  Mod(362, 0, 2, 361, 4, "Emberstorm", "6% more Immolate skill damage per rank.", 17954, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
+                  Key(362, SKILL_NODE_MODIFIER, 0, 2, 361, 4, "Emberstorm", "6% more Immolate skill damage per rank, its burns and Rain of Fire's waves too.", 17954, KEY_EMBERSTORM),
                   Key(363, SKILL_NODE_SYNERGY, 0, 3, 362, 1, "Conflagration", "Conflagrate consumes Ignite to burst onto every enemy within 8 yards for the hit and the burn left.", 17962, KEY_NONE),
                   Mod(364, 1, 1, 0, 3, "Wide Rain", "+12% Rain of Fire radius per rank.", 5740, SPELLMOD_RADIUS, SPELLMOD_PCT, 12, "Rain of Fire"),
                   Key(365, SKILL_NODE_TRANSFORMER, 1, 2, 364, 3, "Burning Rain", "Each Rain of Fire wave has a 10% chance per rank to Ignite the enemy it strikes.", 5740, KEY_BURNING_RAIN),
@@ -561,15 +570,17 @@ namespace
                   Key(566, SKILL_NODE_MODIFIER, 1, 2, 565, 3, "Demonic Mastery", "While your demon lives, you deal 4% more damage per rank.", 23825, KEY_DEMONIC_MASTERY),
                   Key(567, SKILL_NODE_CAPSTONE, 1, 3, 566, 1, "Grand Pact", "Your demon has 40% more life and deals 25% more damage.", 18788, KEY_GRAND_PACT),
                   Key(568, SKILL_NODE_SYNERGY, 2, 1, 0, 1, "Torment", "Your curses command: every minion turns on the cursed enemy and deals it 20% more for 4 sec.", 3716, KEY_TORMENT_COMMAND),
-                  Key(569, SKILL_NODE_SYNERGY, 2, 2, 568, 1, "Sacrifice", "Life Tap detonates your oldest horde minion: every enemy within 8 yards takes Fire damage of a quarter of its life.", 7812, KEY_SACRIFICE_COMMAND),
+                  // A choice under Torment: command the horde and lean on your demon, or give the
+                  // demon up for power of your own (the Destroyer's way, no demon nodes bought).
+                  Choice(Key(569, SKILL_NODE_SYNERGY, 2, 2, 568, 1, "Sacrifice", "Life Tap detonates your oldest horde minion: every enemy within 8 yards takes Fire damage of a quarter of its life.", 7812, KEY_SACRIFICE_COMMAND), 1),
                   Key(570, SKILL_NODE_MODIFIER, 2, 3, 569, 3, "Soul Link", "10% of the damage you take per rank is taken by your demon instead.", 19028, KEY_SOUL_LINK),
-                  Key(571, SKILL_NODE_CAPSTONE, 2, 4, 570, 1, "Demonic Sacrifice", "With no demon at your side, you deal 30% more damage.", 18788, KEY_DEMONIC_SACRIFICE),
+                  Choice(Key(571, SKILL_NODE_CAPSTONE, 2, 2, 568, 1, "Demonic Sacrifice", "With no demon at your side, you deal 30% more damage.", 18788, KEY_DEMONIC_SACRIFICE), 1),
               } },
             { SKILL_LEGION, CLASS_WARLOCK, "Legion", "Inferno and Ritual of Doom, and the horde: imps, Infernals and the Doomguard. An ARPG warlock has Inferno at 20 and the Doomguard at 40, with no stone, party or ritual.", 1122,
               { "Inferno", "Ritual of Doom" },
               { "Imps", "Infernal", "Doom" },
               {
-                  Key(661, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Imp Gate", "Your kills have a 25% chance per rank to raise an imp that fights for you for 20 sec.", 688, KEY_IMP_GATE),
+                  Key(661, SKILL_NODE_TRANSFORMER, 0, 1, 0, 3, "Imp Gate", "Your kills have a 25% chance per rank to raise an imp that fights for you for 20 sec. Under Legion, each kill has that chance to raise a second.", 688, KEY_IMP_GATE),
                   Key(662, SKILL_NODE_MODIFIER, 0, 2, 661, 2, "Imp Swarm", "The horde holds 2 more minions per rank.", 688, KEY_IMP_SWARM),
                   Key(663, SKILL_NODE_SYNERGY, 0, 3, 662, 3, "Fiery Swarm", "Your horde imps' Firebolts have a 10% chance per rank to Ignite.", 3110, KEY_FIERY_SWARM),
                   Key(664, SKILL_NODE_CAPSTONE, 0, 4, 663, 1, "Burning Legion", "A horde minion's kill raises another imp.", 1122, KEY_BURNING_LEGION),
@@ -1360,6 +1371,34 @@ namespace Arpg
             }
             while (result->NextRow());
         }
+        // A tree reshaped since the ranks were saved: a node whose parent holds no rank, or the
+        // second side of a choice, goes (its points come back), lowest node numbers kept first.
+        std::vector<uint16> dropped;
+        for (bool changed = true; changed;)
+        {
+            changed = false;
+            for (auto it = s.ranks.begin(); it != s.ranks.end();)
+            {
+                SkillDef const* owner = nullptr;
+                SkillNode const* node = FindNode(classId, it->first, &owner);
+                bool orphan = !node || (node->parent && !s.ranks.count(node->parent));
+                if (node && !orphan && node->choice)
+                    for (SkillNode const& other : owner->nodes)
+                        if (other.id < node->id && other.choice == node->choice && s.ranks.count(other.id))
+                            orphan = true;
+                if (orphan)
+                {
+                    dropped.push_back(it->first);
+                    it = s.ranks.erase(it);
+                    changed = true;
+                }
+                else
+                    ++it;
+            }
+        }
+        for (uint16 id : dropped)
+            CharacterDatabase.PExecute("DELETE FROM character_arpg_skill_node WHERE guid = %u AND node = %u",
+                                       player->GetGUIDLow(), uint32(id));
         if (auto result = CharacterDatabase.PQuery("SELECT page FROM character_arpg_codex WHERE guid = %u", player->GetGUIDLow()))
         {
             do
@@ -1459,7 +1498,7 @@ namespace Arpg
         // A class with no skills is sent none: the client empties its Skills tab.
 
         WorldPacket data(SMSG_ARPG_SKILLS, 512 + mine.size() * 1600);
-        data << uint8(2);
+        data << uint8(3);
         // Gear's skill levels add points, each spendable in its own skill alone.
         std::map<uint8, uint8> gear;
         uint32 gearPoints = 0;
@@ -1508,6 +1547,7 @@ namespace Arpg
                 PageHome const* page = node.kind == SKILL_NODE_CAPSTONE ? PageOf(node.id) : nullptr;
                 data << uint8(page && !s.pages.count(node.id) ? 1 : 0);
                 data << (page ? page->where : "");
+                data << uint8(node.choice);
             }
         }
         data << uint16(std::min<uint32>(s.fragments, 65535));
@@ -1602,6 +1642,10 @@ namespace Arpg
             return refuse("sealed: its Codex page is unread");
         if (node->parent && !s.ranks.count(node->parent))
             return refuse("the node above it has no rank");
+        if (node->choice)
+            for (SkillNode const& other : skill->nodes)
+                if (other.id != id && other.choice == node->choice && s.ranks.count(other.id))
+                    return refuse("its alternative in the choice is taken");
         // Gear's levels raise the cap, and are spent first in their own skill.
         uint8 const levels = GearSkillLevels(player, skill->id);
         uint32 const spent = SpentIn(s, skill->id);
@@ -1992,6 +2036,20 @@ namespace Arpg
 
     void AddClassSpellMods(Player const* player, std::vector<SkillSpellMod>& mods)
     {
+        // The paladin's Hammers slotted: Hammer of Justice comes back in 15 sec, not a minute, so the
+        // Thrown branch's hammers (which fly with it) are a build, not a once-a-minute flourish.
+        if (player->getClass() == CLASS_PALADIN)
+        {
+            PlayerSkills const s = SkillsFor(player);
+            if (std::find(std::begin(s.slots), std::end(s.slots), uint8(SKILL_HAMMER)) != std::end(s.slots))
+            {
+                constexpr int32 STOCK = 60000, SLOTTED = 15000;
+                NamedSpells const hoj = NamesMask(CLASS_PALADIN, { "Hammer of Justice" }, "Hammer of Justice");
+                if (hoj.spells)
+                    mods.push_back({ uint8(SPELLMOD_COOLDOWN), uint8(SPELLMOD_FLAT), SLOTTED - STOCK, hoj.mask, hoj.spells });
+            }
+            return;
+        }
         if (player->getClass() != CLASS_WARLOCK)
             return;
         // Their stock cooldown is an hour: these bring it to INFERNO_COOLDOWN and RITUAL_COOLDOWN.
