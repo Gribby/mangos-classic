@@ -23,6 +23,7 @@
 #include "World/World.h"
 #include "Arpg/ArpgCodex.h"
 #include "Arpg/ArpgShrines.h"
+#include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgCraft.h"
 #include "Arpg/ArpgBases.h"
@@ -957,6 +958,9 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading WorldTemplate...");
     sObjectMgr.LoadWorldTemplate();
 
+    // ARPG: the rifts' map, defined in no DBC, and its instance template (Arpg/ArpgRift.h).
+    Arpg::RegisterRiftMap();
+
     sLog.outString("Loading InstanceTemplate...");
     sObjectMgr.LoadInstanceTemplate();
 
@@ -988,6 +992,7 @@ void World::SetInitialWorldSettings()
 
     // ARPG: the shrines' templates, written before the templates load (Arpg/ArpgShrines.h).
     Arpg::EnsureShrineObjects();
+    Arpg::EnsureRiftObjects();
     sLog.outString("Loading Game Object Templates...");     // must be after LoadPageTexts
     std::vector<uint32> transportDisplayIds = sObjectMgr.LoadGameobjectInfo();
     MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(GetDataPath(), transportDisplayIds);

@@ -108,6 +108,15 @@ class GridMap
         bool IsFullyLoaded() const { return m_fullyLoaded; }
         void SetFullyLoaded() { m_fullyLoaded = true; }
 
+        // ARPG rifts (Arpg/ArpgRift.h): a grid filled in memory, not from a file (129*129 outer
+        // and 128*128 inner heights, one area flag, no liquid or holes); and a loaded grid's
+        // parts, read: its outer heights as floats, and a chunk's area flag, liquid and holes.
+        void loadSynthetic(float const* v9, float const* v8, uint16 areaFlag);
+        bool copyOuterHeights(float* v9) const;
+        uint16 chunkAreaFlag(int ca, int cb) const;
+        bool chunkHasLiquid(int ca, int cb) const;
+        bool chunkHasHoles(int ca, int cb) const { return m_holes[ca][cb] != 0; }
+
         static bool ExistMap(uint32 mapid, int gx, int gy);
         static bool ExistVMap(uint32 mapid, int gx, int gy);
 

@@ -879,4 +879,5 @@ OpcodeHandler opcodeTable[NUM_MSG_TYPES] =
     /*0x353*/ { "SMSG_ARPG_STATES",                 STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x354*/ { "SMSG_ARPG_MINIONS",                STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
     /*0x355*/ { "SMSG_ARPG_BOONS",                  STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
+    /*0x356*/ { "SMSG_ARPG_RIFT",                   STATUS_NEVER,     PROCESS_INPLACE,      &WorldSession::Handle_ServerSide},
 };

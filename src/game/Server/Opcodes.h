@@ -911,10 +911,12 @@ enum Opcodes
     // ARPG: the player's demon and horde, for the HUD (Arpg/ArpgMinions.h)
     SMSG_ARPG_MINIONS                               = 0x354,
     SMSG_ARPG_BOONS                                 = 0x355,
+    // ARPG: a rift's layout and heights (Arpg/ArpgRift.h)
+    SMSG_ARPG_RIFT                                  = 0x356,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x356
+#define NUM_MSG_TYPES 0x357
 
 /// Player state
 enum SessionStatus

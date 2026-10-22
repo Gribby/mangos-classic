@@ -1,0 +1,1006 @@
+/*
+ * ARPG rifts (Arpg/ArpgRift.h).
+ */
+
+#include "Arpg/ArpgRift.h"
+#include "Arpg/ArpgActs.h"
+#include "Arpg/ArpgCombat.h"
+#include "Arpg/ArpgPacks.h"
+#include "Arpg/ArpgShrines.h"
+
+#include "Chat/Chat.h"
+#include "Database/DatabaseEnv.h"
+#include "Entities/Creature.h"
+#include "Entities/GameObject.h"
+#include "Entities/Player.h"
+#include "Groups/Group.h"
+#include "Log/Log.h"
+#include "Maps/GridMap.h"
+#include "Maps/Map.h"
+#include "Server/DBCStores.h"
+#include "Server/Opcodes.h"
+#include "Server/SQLStorages.h"
+#include "Server/WorldPacket.h"
+#include "Server/WorldSession.h"
+#include "Util/Timer.h"
+#include "World/World.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <deque>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <random>
+#include <set>
+#include <unordered_map>
+#include <vector>
+
+namespace
+{
+    using namespace Arpg;
+
+    constexpr float TILE = SIZE_OF_GRIDS;
+    constexpr float UNIT = TILE / 128.0f;           // a cell's side
+    constexpr int NODES = 257;                      // a layout's outer heights a side (2 grids)
+    constexpr int CHUNKS = 32;                      // its chunks a side
+    constexpr int PIECES = 16;                      // its pieces a side, 2x2 chunks each
+    constexpr int PIECE_NODES = 17;
+    constexpr int BLOCK_SIDE = 16;                  // layouts' blocks a side on the rift map
+    constexpr int BLOCKS = BLOCK_SIDE * BLOCK_SIDE;
+    constexpr int BLOCK_FIRST = 8;                  // the first block's first grid
+    constexpr int BLOCK_STEP = 3;                   // 2 grids a block, an empty one between
+
+    // The source: Elwynn Forest's grids on map 0, outside Northshire, Goldshire and Stormwind.
+    constexpr uint32 SRC_MAP = 0;
+    constexpr uint32 SRC_ZONE = 12;
+    constexpr int SRC_GX_FROM = 46, SRC_GX_TO = 51, SRC_GY_FROM = 28, SRC_GY_TO = 37;
+    uint32 const SRC_EXCLUDED[] = { 9, 24, 87, 1519 };
+    constexpr float FLAT_RANGE = 10.0f;             // a flat piece's rise at most
+
+    // The layout.
+    constexpr float BASE = 60.0f;                   // the open ground's height
+    constexpr float HILLS = 42.0f;                  // the walls' rise round the open region
+    constexpr float OPEN_FILL = 0.52f;              // a chunk's first chance to be open
+    constexpr int CA_PASSES = 5;
+    constexpr int MIN_OPEN = 200;                   // the open region's chunks, at least
+    constexpr int TRIES = 24;
+    constexpr int SEAM_BAND = 3;                    // nodes either side of a seam blended
+    constexpr int SEAM_PASSES = 3;
+    constexpr int WALL_BLUR = 3;                    // nodes: how steep the walls are
+    constexpr float HEIGHT_STEP = 8.0f;             // heights sent in eighths of a yard
+    constexpr int ROWS_PER_PACKET = 32;
+
+    // Its creatures.
+    constexpr uint32 PACKS = 20;
+    constexpr int PACK_FROM_START = 6;              // chunks' walk from the start, at least
+    constexpr int PACK_APART = 3;                   // chunks between packs, at least
+    constexpr float NATIVE_MIN_X = -10200.0f, NATIVE_MAX_X = -8600.0f;
+    constexpr float NATIVE_MIN_Y = -1400.0f, NATIVE_MAX_Y = 700.0f;
+    constexpr uint32 NATIVE_MIN_SPAWNS = 4;
+    constexpr uint32 PACK_CORPSE_MS = MINUTE * IN_MILLISECONDS;
+
+    // The stones and the exit.
+    struct StoneAt
+    {
+        uint32 map;
+        float x, y, z;                              // z: a guess, the ground's once placed
+    };
+    StoneAt const STONES[] =
+    {
+        { 0, -9447.0f, 62.0f, 56.0f },              // Goldshire
+        { 1, 300.0f, -4700.0f, 10.0f },             // Razor Hill
+    };
+    constexpr int STONE_COUNT = int(sizeof(STONES) / sizeof(STONES[0]));
+    constexpr float STONE_SHOW = 150.0f;            // placed when an ARPG player is this close
+    constexpr float STONE_REACH = 3.0f;
+    constexpr float EXIT_REACH = 3.0f;
+    constexpr float STONE_RETURN = 7.0f;            // back from a rift this far from the stone
+    constexpr uint32 STONE_SECS = HOUR;
+    constexpr uint32 EXIT_SECS = 6 * HOUR;
+    constexpr uint32 CHECK_MS = 300;
+    constexpr uint32 STONE_COOLDOWN_MS = 5000;
+
+    struct Piece
+    {
+        uint8 gx, gy, ca, cb;                       // source grid, first chunk (a along X)
+        bool flat;
+        float h[PIECE_NODES * PIECE_NODES];         // heights less the piece's mean
+    };
+
+    struct Layout
+    {
+        uint32 id = 0;
+        int block = 0;
+        uint8 gx0 = 0, gy0 = 0;
+        std::vector<int16> q;                       // NODES * NODES: (height - BASE) * 8
+        std::array<uint32, PIECES * PIECES> pieces{};
+        float startX = 0, startY = 0, startZ = 0;
+        float exitX = 0, exitY = 0, exitZ = 0;
+        std::vector<std::array<float, 3>> spots;    // packs' places
+
+        float X(float i) const { return (32 - gx0) * TILE - i * UNIT; }
+        float Y(float j) const { return (32 - gy0) * TILE - j * UNIT; }
+        float H(int i, int j) const { return BASE + q[i * NODES + j] / HEIGHT_STEP; }
+        bool Inside(float x, float y) const
+        {
+            float const i = ((32 - gx0) * TILE - x) / UNIT, j = ((32 - gy0) * TILE - y) / UNIT;
+            return i >= 0 && j >= 0 && i <= NODES - 1 && j <= NODES - 1;
+        }
+    };
+    using LayoutPtr = std::shared_ptr<Layout const>;
+
+    struct PlayerRift
+    {
+        LayoutPtr pending;                          // made at the stone, not yet arrived
+        uint32 sentId = 0;                          // the layout the client has
+        uint32 checkedAt = 0;
+        uint32 stoneAt = 0;                         // when it last left by a stone or exit
+        int returnStone = 0;                        // the stone it came by
+    };
+
+    std::mutex sLock;
+    std::vector<Piece> sLibrary;
+    std::vector<uint32> sFlat;                      // the flat pieces' indexes
+    bool sLibraryBuilt = false;
+    bool sRegistered = false;
+    bool sStoneReady = false, sExitReady = false;
+    LayoutPtr sBlocks[BLOCKS];
+    int sNextBlock = 0;
+    uint32 sNextId = 1;
+    std::unordered_map<uint32, LayoutPtr> sInstances;           // by instance id
+    std::set<uint32> sPopulated;                                 // instances whose creatures stand
+    std::unordered_map<ObjectGuid, PlayerRift> sPlayers;
+    ObjectGuid sStones[STONE_COUNT];
+    float sStoneZ[STONE_COUNT] = { STONES[0].z, STONES[1].z };
+    MapEntry sRiftEntry;
+    char sRiftName[] = "Elwynn Rift";
+
+    bool RiftsOn()
+    {
+        return sRegistered && sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE);
+    }
+
+    uint16 ElwynnFlag()
+    {
+        AreaTableEntry const* area = sAreaStore.LookupEntry(SRC_ZONE);
+        return area ? uint16(area->exploreFlag) : 0;
+    }
+
+    // --- The piece library ---
+
+    void BuildLibrary()
+    {
+        // Under sLock.
+        if (sLibraryBuilt)
+            return;
+        sLibraryBuilt = true;
+        std::map<uint16, bool> flagOk;
+        auto elwynn = [&flagOk](uint16 flag)
+        {
+            auto it = flagOk.find(flag);
+            if (it != flagOk.end())
+                return it->second;
+            AreaTableEntry const* area = GetAreaEntryByAreaFlagAndMap(flag, SRC_MAP);
+            bool ok = area && (area->ID == SRC_ZONE || area->zone == SRC_ZONE);
+            if (ok)
+                for (uint32 excluded : SRC_EXCLUDED)
+                    if (area->ID == excluded || area->zone == excluded)
+                        ok = false;
+            flagOk[flag] = ok;
+            return ok;
+        };
+        std::vector<float> v9(129 * 129);
+        for (int gx = SRC_GX_FROM; gx <= SRC_GX_TO; ++gx)
+        {
+            for (int gy = SRC_GY_FROM; gy <= SRC_GY_TO; ++gy)
+            {
+                char path[1024];
+                snprintf(path, sizeof(path), "%smaps/%03u%02u%02u.map", sWorld.GetDataPath().c_str(), SRC_MAP, gx, gy);
+                GridMap grid;
+                if (!grid.loadData(path) || !grid.copyOuterHeights(v9.data()))
+                    continue;
+                for (int ca = 0; ca + 1 < 16; ++ca)
+                {
+                    for (int cb = 0; cb + 1 < 16; ++cb)
+                    {
+                        bool ok = true;
+                        for (int da = 0; da < 2 && ok; ++da)
+                            for (int db = 0; db < 2 && ok; ++db)
+                                ok = elwynn(grid.chunkAreaFlag(ca + da, cb + db)) && !grid.chunkHasLiquid(ca + da, cb + db) &&
+                                     !grid.chunkHasHoles(ca + da, cb + db);
+                        if (!ok)
+                            continue;
+                        Piece piece;
+                        piece.gx = uint8(gx);
+                        piece.gy = uint8(gy);
+                        piece.ca = uint8(ca);
+                        piece.cb = uint8(cb);
+                        float sum = 0.0f, lo = 1e9f, hi = -1e9f;
+                        for (int i = 0; i < PIECE_NODES && ok; ++i)
+                        {
+                            for (int j = 0; j < PIECE_NODES; ++j)
+                            {
+                                float const h = v9[(ca * 8 + i) * 129 + cb * 8 + j];
+                                if (h <= INVALID_HEIGHT || !std::isfinite(h))
+                                {
+                                    ok = false;
+                                    break;
+                                }
+                                piece.h[i * PIECE_NODES + j] = h;
+                                sum += h;
+                                lo = std::min(lo, h);
+                                hi = std::max(hi, h);
+                            }
+                        }
+                        if (!ok)
+                            continue;
+                        float const mean = sum / float(PIECE_NODES * PIECE_NODES);
+                        for (float& h : piece.h)
+                            h -= mean;
+                        piece.flat = hi - lo <= FLAT_RANGE;
+                        if (piece.flat)
+                            sFlat.push_back(uint32(sLibrary.size()));
+                        sLibrary.push_back(piece);
+                    }
+                }
+            }
+        }
+        sLog.outString("ARPG rifts: %u pieces of Elwynn Forest, %u of them flat", uint32(sLibrary.size()), uint32(sFlat.size()));
+    }
+
+    // --- The layout ---
+
+    // The open region: chunks, 1 open; the largest region of a cellular automaton's caves.
+    std::vector<uint8> OpenRegion(std::mt19937& rng)
+    {
+        std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+        std::vector<uint8> open(CHUNKS * CHUNKS);
+        for (int attempt = 0; attempt < TRIES; ++attempt)
+        {
+            for (int i = 0; i < CHUNKS; ++i)
+                for (int j = 0; j < CHUNKS; ++j)
+                    open[i * CHUNKS + j] = i >= 2 && j >= 2 && i < CHUNKS - 2 && j < CHUNKS - 2 && unit(rng) < OPEN_FILL;
+            for (int pass = 0; pass < CA_PASSES; ++pass)
+            {
+                std::vector<uint8> next(open.size());
+                for (int i = 2; i < CHUNKS - 2; ++i)
+                {
+                    for (int j = 2; j < CHUNKS - 2; ++j)
+                    {
+                        int count = 0;
+                        for (int di = -1; di <= 1; ++di)
+                            for (int dj = -1; dj <= 1; ++dj)
+                                count += open[(i + di) * CHUNKS + j + dj];
+                        next[i * CHUNKS + j] = count >= 5;
+                    }
+                }
+                open.swap(next);
+            }
+            // The largest region (4-connected) is kept.
+            std::vector<int> region(open.size(), -1);
+            int best = -1, bestSize = 0, regions = 0;
+            for (int start = 0; start < CHUNKS * CHUNKS; ++start)
+            {
+                if (!open[start] || region[start] >= 0)
+                    continue;
+                int size = 0;
+                std::deque<int> queue{ start };
+                region[start] = regions;
+                while (!queue.empty())
+                {
+                    int const c = queue.front();
+                    queue.pop_front();
+                    ++size;
+                    int const ci = c / CHUNKS, cj = c % CHUNKS;
+                    int const nb[4][2] = { { ci + 1, cj }, { ci - 1, cj }, { ci, cj + 1 }, { ci, cj - 1 } };
+                    for (auto const& n : nb)
+                    {
+                        if (n[0] < 0 || n[1] < 0 || n[0] >= CHUNKS || n[1] >= CHUNKS)
+                            continue;
+                        int const k = n[0] * CHUNKS + n[1];
+                        if (open[k] && region[k] < 0)
+                        {
+                            region[k] = regions;
+                            queue.push_back(k);
+                        }
+                    }
+                }
+                if (size > bestSize)
+                {
+                    bestSize = size;
+                    best = regions;
+                }
+                ++regions;
+            }
+            for (int c = 0; c < CHUNKS * CHUNKS; ++c)
+                open[c] = region[c] == best && best >= 0;
+            if (bestSize >= MIN_OPEN)
+                return open;
+        }
+        return open;
+    }
+
+    // Walking distances (chunks) from `from` through the open region; -1 where it can't reach.
+    std::vector<int> Walk(std::vector<uint8> const& open, int from)
+    {
+        std::vector<int> dist(open.size(), -1);
+        std::deque<int> queue{ from };
+        dist[from] = 0;
+        while (!queue.empty())
+        {
+            int const c = queue.front();
+            queue.pop_front();
+            int const ci = c / CHUNKS, cj = c % CHUNKS;
+            int const nb[4][2] = { { ci + 1, cj }, { ci - 1, cj }, { ci, cj + 1 }, { ci, cj - 1 } };
+            for (auto const& n : nb)
+            {
+                if (n[0] < 0 || n[1] < 0 || n[0] >= CHUNKS || n[1] >= CHUNKS)
+                    continue;
+                int const k = n[0] * CHUNKS + n[1];
+                if (open[k] && dist[k] < 0)
+                {
+                    dist[k] = dist[c] + 1;
+                    queue.push_back(k);
+                }
+            }
+        }
+        return dist;
+    }
+
+    // A box blur of `radius` over a NODES x NODES field, `passes` times.
+    void Blur(std::vector<float>& field, int radius, int passes)
+    {
+        std::vector<float> tmp(field.size());
+        for (int pass = 0; pass < passes; ++pass)
+        {
+            // Rows, then columns.
+            for (int i = 0; i < NODES; ++i)
+            {
+                for (int j = 0; j < NODES; ++j)
+                {
+                    float sum = 0.0f;
+                    int n = 0;
+                    for (int d = -radius; d <= radius; ++d)
+                    {
+                        int const jj = j + d;
+                        if (jj >= 0 && jj < NODES)
+                        {
+                            sum += field[i * NODES + jj];
+                            ++n;
+                        }
+                    }
+                    tmp[i * NODES + j] = sum / float(n);
+                }
+            }
+            for (int i = 0; i < NODES; ++i)
+            {
+                for (int j = 0; j < NODES; ++j)
+                {
+                    float sum = 0.0f;
+                    int n = 0;
+                    for (int d = -radius; d <= radius; ++d)
+                    {
+                        int const ii = i + d;
+                        if (ii >= 0 && ii < NODES)
+                        {
+                            sum += tmp[ii * NODES + j];
+                            ++n;
+                        }
+                    }
+                    field[i * NODES + j] = sum / float(n);
+                }
+            }
+        }
+    }
+
+    // A new layout in `block`; null when there are no pieces. Under sLock (the library).
+    std::shared_ptr<Layout> MakeLayout(int block, uint32 seed)
+    {
+        if (sLibrary.empty())
+            return nullptr;
+        std::mt19937 rng(seed);
+        auto layout = std::make_shared<Layout>();
+        layout->id = sNextId++;
+        layout->block = block;
+        layout->gx0 = uint8(BLOCK_FIRST + BLOCK_STEP * (block % BLOCK_SIDE));
+        layout->gy0 = uint8(BLOCK_FIRST + BLOCK_STEP * (block / BLOCK_SIDE));
+
+        std::vector<uint8> const open = OpenRegion(rng);
+        // The start: the open chunk farthest west (Y grows westward: the lowest j), nearest the
+        // middle; the exit: the farthest walk from it.
+        int start = -1;
+        for (int c = 0; c < CHUNKS * CHUNKS; ++c)
+        {
+            if (!open[c])
+                continue;
+            if (start < 0 || c % CHUNKS < start % CHUNKS ||
+                    (c % CHUNKS == start % CHUNKS && std::abs(c / CHUNKS - CHUNKS / 2) < std::abs(start / CHUNKS - CHUNKS / 2)))
+                start = c;
+        }
+        if (start < 0)
+            return nullptr;
+        std::vector<int> const dist = Walk(open, start);
+        int exit = start;
+        for (int c = 0; c < CHUNKS * CHUNKS; ++c)
+            if (dist[c] > dist[exit])
+                exit = c;
+
+        // The pieces: flat ones where any of their chunks is open.
+        std::uniform_int_distribution<uint32> anyPiece(0, uint32(sLibrary.size() - 1));
+        for (int pi = 0; pi < PIECES; ++pi)
+        {
+            for (int pj = 0; pj < PIECES; ++pj)
+            {
+                bool anyOpen = false;
+                for (int d = 0; d < 4; ++d)
+                    anyOpen = anyOpen || open[(pi * 2 + d / 2) * CHUNKS + pj * 2 + d % 2];
+                uint32 index = anyPiece(rng);
+                if (anyOpen && !sFlat.empty())
+                    index = sFlat[std::uniform_int_distribution<size_t>(0, sFlat.size() - 1)(rng)];
+                layout->pieces[pi * PIECES + pj] = index;
+            }
+        }
+
+        // The relief: each piece's own, its shared edges averaged, blended near the seams.
+        std::vector<float> relief(NODES * NODES, 0.0f), count(NODES * NODES, 0.0f);
+        for (int pi = 0; pi < PIECES; ++pi)
+        {
+            for (int pj = 0; pj < PIECES; ++pj)
+            {
+                Piece const& piece = sLibrary[layout->pieces[pi * PIECES + pj]];
+                for (int i = 0; i < PIECE_NODES; ++i)
+                {
+                    for (int j = 0; j < PIECE_NODES; ++j)
+                    {
+                        int const n = (pi * 16 + i) * NODES + pj * 16 + j;
+                        relief[n] += piece.h[i * PIECE_NODES + j];
+                        count[n] += 1.0f;
+                    }
+                }
+            }
+        }
+        for (int n = 0; n < NODES * NODES; ++n)
+            relief[n] /= count[n];
+        auto seamDistance = [](int k)
+        {
+            int const m = k % 16;
+            return std::min(m, 16 - m);
+        };
+        for (int pass = 0; pass < SEAM_PASSES; ++pass)
+        {
+            std::vector<float> next = relief;
+            for (int i = 1; i < NODES - 1; ++i)
+            {
+                for (int j = 1; j < NODES - 1; ++j)
+                {
+                    if (std::min(seamDistance(i), seamDistance(j)) > SEAM_BAND)
+                        continue;
+                    float sum = 0.0f;
+                    for (int di = -1; di <= 1; ++di)
+                        for (int dj = -1; dj <= 1; ++dj)
+                            sum += relief[(i + di) * NODES + j + dj];
+                    next[i * NODES + j] = sum / 9.0f;
+                }
+            }
+            relief.swap(next);
+        }
+
+        // The walls: hills rising round the open region, steeply, uneven along their length.
+        std::vector<float> openness(NODES * NODES, 0.0f);
+        for (int i = 0; i < NODES; ++i)
+        {
+            for (int j = 0; j < NODES; ++j)
+            {
+                bool o = false;
+                for (int di = -1; di <= 0 && !o; ++di)
+                {
+                    for (int dj = -1; dj <= 0 && !o; ++dj)
+                    {
+                        // A node on a chunk's edge touches the chunks either side.
+                        int const a = std::min(std::max(i + di, 0) / 8, CHUNKS - 1);
+                        int const b = std::min(std::max(j + dj, 0) / 8, CHUNKS - 1);
+                        o = open[a * CHUNKS + b] != 0;
+                    }
+                }
+                openness[i * NODES + j] = o ? 1.0f : 0.0f;
+            }
+        }
+        Blur(openness, WALL_BLUR, 2);
+        constexpr int NOISE = 9;
+        std::uniform_real_distribution<float> unevenness(0.7f, 1.3f);
+        float noise[NOISE][NOISE];
+        for (auto& row : noise)
+            for (float& v : row)
+                v = unevenness(rng);
+        layout->q.resize(NODES * NODES);
+        for (int i = 0; i < NODES; ++i)
+        {
+            for (int j = 0; j < NODES; ++j)
+            {
+                float const fi = float(i) / 32.0f, fj = float(j) / 32.0f;
+                int const ni = std::min(int(fi), NOISE - 2), nj = std::min(int(fj), NOISE - 2);
+                float const ti = fi - ni, tj = fj - nj;
+                float const uneven = (noise[ni][nj] * (1 - tj) + noise[ni][nj + 1] * tj) * (1 - ti) +
+                                     (noise[ni + 1][nj] * (1 - tj) + noise[ni + 1][nj + 1] * tj) * ti;
+                float const closed = 1.0f - openness[i * NODES + j];
+                float const h = relief[i * NODES + j] + HILLS * std::pow(closed, 1.5f) * uneven;
+                float const steps = std::round(h * HEIGHT_STEP);
+                layout->q[i * NODES + j] = int16(std::min(32767.0f, std::max(-32767.0f, steps)));
+            }
+        }
+
+        auto centre = [&layout](int c, float& x, float& y, float& z)
+        {
+            int const i = (c / CHUNKS) * 8 + 4, j = (c % CHUNKS) * 8 + 4;
+            x = layout->X(float(i));
+            y = layout->Y(float(j));
+            z = layout->H(i, j);
+        };
+        centre(start, layout->startX, layout->startY, layout->startZ);
+        centre(exit, layout->exitX, layout->exitY, layout->exitZ);
+
+        // Packs: on open chunks a walk from the start, apart, not at the exit.
+        std::vector<int> candidates;
+        for (int c = 0; c < CHUNKS * CHUNKS; ++c)
+            if (open[c] && dist[c] >= PACK_FROM_START && c != exit)
+                candidates.push_back(c);
+        std::shuffle(candidates.begin(), candidates.end(), rng);
+        std::vector<int> chosen;
+        for (int c : candidates)
+        {
+            if (chosen.size() >= PACKS)
+                break;
+            bool apart = true;
+            for (int other : chosen)
+                if (std::abs(c / CHUNKS - other / CHUNKS) + std::abs(c % CHUNKS - other % CHUNKS) < PACK_APART)
+                    apart = false;
+            if (std::abs(c / CHUNKS - exit / CHUNKS) + std::abs(c % CHUNKS - exit % CHUNKS) < PACK_APART)
+                apart = false;
+            if (!apart)
+                continue;
+            chosen.push_back(c);
+            std::array<float, 3> spot;
+            centre(c, spot[0], spot[1], spot[2]);
+            layout->spots.push_back(spot);
+        }
+        return layout;
+    }
+
+    // A free block: not a live instance's, nor a layout's on its way.
+    int FreeBlock()
+    {
+        // Under sLock.
+        std::set<int> used;
+        for (auto const& [instance, layout] : sInstances)
+            used.insert(layout->block);
+        for (auto const& [guid, pr] : sPlayers)
+            if (pr.pending)
+                used.insert(pr.pending->block);
+        for (int step = 0; step < BLOCKS; ++step)
+        {
+            int const block = (sNextBlock + step) % BLOCKS;
+            if (!used.count(block))
+            {
+                sNextBlock = (block + 1) % BLOCKS;
+                return block;
+            }
+        }
+        return -1;
+    }
+
+    void SendLayout(Player* player, Layout const& layout)
+    {
+        WorldPacket data(SMSG_ARPG_RIFT, 1 + 4 + 2 + 2 + 2 + 4 + PIECES * PIECES * 4);
+        data << uint8(1) << uint32(layout.id) << uint8(layout.gx0) << uint8(layout.gy0) << uint16(NODES) << uint16(SRC_ZONE)
+             << float(BASE);
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            for (uint32 index : layout.pieces)
+            {
+                Piece const& piece = sLibrary[index];
+                data << uint8(piece.gx) << uint8(piece.gy) << uint8(piece.ca) << uint8(piece.cb);
+            }
+        }
+        player->GetSession()->SendPacket(data);
+        for (int row = 0; row < NODES; row += ROWS_PER_PACKET)
+        {
+            int const rows = std::min(ROWS_PER_PACKET, NODES - row);
+            WorldPacket heights(SMSG_ARPG_RIFT, 9 + rows * NODES * 2);
+            heights << uint8(2) << uint32(layout.id) << uint16(row) << uint16(rows);
+            for (int n = row * NODES; n < (row + rows) * NODES; ++n)
+                heights << int16(layout.q[n]);
+            player->GetSession()->SendPacket(heights);
+        }
+    }
+
+    GameObject* PlaceObject(Map* map, uint32 entry, float x, float y, float z, uint32 secs)
+    {
+        if (!sGOStorage.LookupEntry<GameObjectInfo>(entry))
+            return nullptr;
+        GameObject* go = new GameObject;
+        uint32 const low = map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT);
+        if (!go->Create(low, low, entry, map, x, y, z, frand(0.0f, 2.0f * float(M_PI))))
+        {
+            delete go;
+            return nullptr;
+        }
+        go->SetSpellId(0);
+        go->SetRespawnTime(secs);
+        go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
+        map->Add(go);
+        go->AIM_Initialize();
+        return go;
+    }
+
+    // The rift's creatures and its exit: once an instance.
+    void Populate(Player* player, Layout const& layout)
+    {
+        Map* map = player->GetMap();
+        // Its grids stay loaded while it lasts, so the packs far off stay too.
+        for (int g = 0; g < 4; ++g)
+            map->ForceLoadGrid(layout.X(float((g / 2) * 128 + 64)), layout.Y(float((g % 2) * 128 + 64)));
+        if (sExitReady)
+            PlaceObject(map, RIFT_EXIT_ENTRY, layout.exitX, layout.exitY, layout.exitZ, EXIT_SECS);
+
+        std::vector<uint32> const natives = NativesWithin(SRC_MAP, NATIVE_MIN_X, NATIVE_MAX_X, NATIVE_MIN_Y, NATIVE_MAX_Y,
+                                                          NATIVE_MIN_SPAWNS);
+        if (natives.empty())
+        {
+            sLog.outError("ARPG rifts: no hostile natives of Elwynn Forest found; an empty rift");
+            return;
+        }
+        uint32 const level = player->GetLevel();
+        auto summon = [&](float x, float y, float z, uint32 atLevel) -> Creature*
+        {
+            TempSpawnSettings settings;
+            settings.entry = natives[urand(0, uint32(natives.size() - 1))];
+            settings.x = x;
+            settings.y = y;
+            settings.z = z + 0.5f;
+            settings.ori = frand(0.0f, 2.0f * float(M_PI));
+            settings.spawnType = TEMPSPAWN_CORPSE_TIMED_DESPAWN;
+            settings.corpseDespawnTime = PACK_CORPSE_MS;
+            settings.despawnTime = PACK_CORPSE_MS;
+            settings.level = atLevel;
+            return WorldObject::SummonCreature(settings, map);
+        };
+        for (auto const& spot : layout.spots)
+        {
+            float const x = spot[0] + frand(-6.0f, 6.0f), y = spot[1] + frand(-6.0f, 6.0f);
+            float const z = map->GetHeight(x, y, spot[2] + 30.0f);
+            if (Creature* leader = summon(x, y, z > INVALID_HEIGHT ? z : spot[2], level))
+            {
+                FormRoadPack(leader);
+                OnShrinePackPlaced(leader);
+            }
+        }
+        // The exit's guard: a rare, a level up.
+        float const angle = frand(0.0f, 2.0f * float(M_PI));
+        float const bx = layout.exitX + std::cos(angle) * 8.0f, by = layout.exitY + std::sin(angle) * 8.0f;
+        float const bz = map->GetHeight(bx, by, layout.exitZ + 30.0f);
+        if (Creature* rare = summon(bx, by, bz > INVALID_HEIGHT ? bz : layout.exitZ, std::min<uint32>(level + 1, 63)))
+            MakeChampion(rare, 2, ChampionAffixCount(rare->GetLevel(), true));
+    }
+
+    void LeaveTo(Player* player, int stone)
+    {
+        StoneAt const& at = STONES[stone];
+        float const angle = frand(0.0f, 2.0f * float(M_PI));
+        float z;
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            z = sStoneZ[stone];
+        }
+        player->TeleportTo(at.map, at.x + std::cos(angle) * STONE_RETURN, at.y + std::sin(angle) * STONE_RETURN, z + 1.0f,
+                           angle);
+    }
+
+    int HomeStone(Player const* player)
+    {
+        return player->GetTeam() == HORDE ? 1 : 0;
+    }
+
+    void EnterRift(Player* player, int stone)
+    {
+        LayoutPtr join;
+        // A party member in a rift: that one.
+        if (Group* group = player->GetGroup())
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            for (GroupReference* ref = group->GetFirstMember(); ref && !join; ref = ref->next())
+            {
+                Player* member = ref->getSource();
+                if (!member || member == player || !member->IsInWorld() || member->GetMapId() != RIFT_MAP)
+                    continue;
+                auto it = sInstances.find(member->GetInstanceId());
+                if (it != sInstances.end())
+                    join = it->second;
+            }
+        }
+        LayoutPtr layout = join;
+        if (!layout)
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            BuildLibrary();
+            int const block = FreeBlock();
+            if (block < 0)
+                return;
+            std::shared_ptr<Layout> made = MakeLayout(block, urand(1, 0x7fffffff));
+            if (!made)
+            {
+                sLog.outError("ARPG rifts: no pieces to make a rift of (are map 0's .map files there?)");
+                return;
+            }
+            sBlocks[block] = made;
+            layout = made;
+        }
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+            pr.pending = join ? nullptr : layout;
+            pr.returnStone = stone;
+            pr.sentId = layout->id;
+        }
+        // A new rift is a new instance: the old binds go.
+        player->UnbindInstance(RIFT_MAP);
+        if (!join)
+            if (Group* group = player->GetGroup())
+                group->UnbindInstance(RIFT_MAP);
+        SendLayout(player, *layout);
+        ChatHandler(player).PSendSysMessage("|cffffd100Elwynn Rift:|r the forest is torn open. A rare guards the way out.");
+        if (!player->TeleportTo(RIFT_MAP, layout->startX, layout->startY, layout->startZ + 1.0f, 0.0f))
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+            pr.pending = nullptr;
+            pr.sentId = 0;
+        }
+    }
+
+    // On a continent: the stones near, shown and stepped on.
+    void UpdateStones(Player* player, uint32 now)
+    {
+        Map* map = player->GetMap();
+        if (map->Instanceable() || player->GetMapId() > 1)
+            return;
+        for (int stone = 0; stone < STONE_COUNT; ++stone)
+        {
+            StoneAt const& at = STONES[stone];
+            if (at.map != player->GetMapId())
+                continue;
+            float const dx = player->GetPositionX() - at.x, dy = player->GetPositionY() - at.y;
+            float const d2 = dx * dx + dy * dy;
+            if (d2 > STONE_SHOW * STONE_SHOW)
+                continue;
+            ObjectGuid guid;
+            float z;
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                guid = sStones[stone];
+                z = sStoneZ[stone];
+            }
+            if (sStoneReady && (guid.IsEmpty() || !map->GetGameObject(guid)))
+            {
+                float const ground = map->GetHeight(at.x, at.y, at.z + 40.0f);
+                if (ground > INVALID_HEIGHT)
+                    z = ground;
+                if (GameObject* go = PlaceObject(map, RIFT_STONE_ENTRY, at.x, at.y, z, STONE_SECS))
+                {
+                    std::lock_guard<std::mutex> guard(sLock);
+                    sStones[stone] = go->GetObjectGuid();
+                    sStoneZ[stone] = z;
+                }
+            }
+            if (d2 <= STONE_REACH * STONE_REACH && std::fabs(player->GetPositionZ() - z) < 5.0f && player->IsAlive() &&
+                    !player->IsInCombat() && !player->IsTaxiFlying())
+            {
+                {
+                    std::lock_guard<std::mutex> guard(sLock);
+                    PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+                    if (pr.stoneAt && WorldTimer::getMSTimeDiff(pr.stoneAt, now) < STONE_COOLDOWN_MS)
+                        return;
+                    pr.stoneAt = now ? now : 1;
+                }
+                EnterRift(player, stone);
+                return;
+            }
+        }
+    }
+
+    // In a rift: its layout bound, sent, populated; its exit.
+    void UpdateInRift(Player* player, uint32 now)
+    {
+        Map* map = player->GetMap();
+        uint32 const instance = map->GetInstanceId();
+        LayoutPtr layout;
+        bool send = false, populate = false;
+        int stone = HomeStone(player);
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+            auto it = sInstances.find(instance);
+            if (it == sInstances.end() && pr.pending)
+                it = sInstances.emplace(instance, pr.pending).first;
+            pr.pending = nullptr;
+            if (it != sInstances.end())
+            {
+                layout = it->second;
+                send = pr.sentId != layout->id;
+                pr.sentId = layout->id;
+                populate = sPopulated.insert(instance).second;
+                stone = pr.returnStone;
+            }
+        }
+        // No layout (the server restarted, or a stale instance): out to the stone.
+        if (!layout)
+        {
+            LeaveTo(player, stone);
+            return;
+        }
+        if (send)
+            SendLayout(player, *layout);
+        if (!layout->Inside(player->GetPositionX(), player->GetPositionY()))
+        {
+            player->NearTeleportTo(layout->startX, layout->startY, layout->startZ + 1.0f, 0.0f);
+            return;
+        }
+        if (populate)
+            Populate(player, *layout);
+        float const dx = player->GetPositionX() - layout->exitX, dy = player->GetPositionY() - layout->exitY;
+        if (player->IsAlive() && dx * dx + dy * dy <= EXIT_REACH * EXIT_REACH && std::fabs(player->GetPositionZ() - layout->exitZ) < 5.0f)
+        {
+            {
+                std::lock_guard<std::mutex> guard(sLock);
+                sPlayers[player->GetObjectGuid()].stoneAt = now ? now : 1;
+            }
+            LeaveTo(player, stone);
+        }
+    }
+}
+
+namespace Arpg
+{
+    bool IsRiftMap(uint32 mapId)
+    {
+        return mapId == RIFT_MAP && sRegistered;
+    }
+
+    void RegisterRiftMap()
+    {
+        if (!sWorld.getConfig(CONFIG_BOOL_ARPG_ENABLE))
+            return;
+        if (RIFT_MAP >= sMapStore.GetNumRows())
+        {
+            sLog.outError("ARPG rifts: Map.dbc has no room for map %u; no rifts", RIFT_MAP);
+            return;
+        }
+        if (sMapStore.LookupEntry(RIFT_MAP))
+        {
+            sLog.outError("ARPG rifts: map %u is in Map.dbc already; no rifts", RIFT_MAP);
+            return;
+        }
+        sRiftEntry = MapEntry();
+        sRiftEntry.MapID = RIFT_MAP;
+        sRiftEntry.map_type = MAP_INSTANCE;
+        for (char*& name : sRiftEntry.name)
+            name = sRiftName;
+        sRiftEntry.linked_zone = 0;
+        sRiftEntry.multimap_id = 0;
+        sMapStore.InsertEntry(&sRiftEntry, RIFT_MAP);
+        // Its instance template: levels 1 to 60, five players, a ghost back to Goldshire.
+        WorldDatabase.DirectPExecute("REPLACE INTO instance_template (map, parent, levelMin, levelMax, maxPlayers, reset_delay, "
+                                     "ghostEntranceMap, ghostEntranceX, ghostEntranceY, ScriptName, mountAllowed) "
+                                     "VALUES (%u, 0, 1, 60, 5, 0, %u, %f, %f, '', 1)",
+                                     RIFT_MAP, STONES[0].map, STONES[0].x, STONES[0].y);
+        sRegistered = true;
+    }
+
+    void EnsureRiftObjects()
+    {
+        if (!sRegistered)
+            return;
+        // The look: a vanilla portal's.
+        std::vector<uint32> looks;
+        if (auto result = WorldDatabase.PQuery("SELECT displayId FROM gameobject_template WHERE displayId > 0 AND entry < %u AND "
+                                               "name LIKE '%%Portal%%' GROUP BY displayId ORDER BY MIN(entry) LIMIT 2",
+                                               SHRINE_ENTRY_FROM))
+        {
+            do
+                looks.push_back(result->Fetch()[0].GetUInt32());
+            while (result->NextRow());
+        }
+        if (looks.empty())
+        {
+            sLog.outError("ARPG rifts: no portal look in gameobject_template; no Rift Stones");
+            return;
+        }
+        struct Def
+        {
+            uint32 entry;
+            char const* name;
+            bool* ready;
+        };
+        Def const defs[] = { { RIFT_STONE_ENTRY, "Elwynn Rift", &sStoneReady }, { RIFT_EXIT_ENTRY, "Rift Exit", &sExitReady } };
+        for (size_t k = 0; k < 2; ++k)
+        {
+            Def const& def = defs[k];
+            if (auto result = WorldDatabase.PQuery("SELECT name FROM gameobject_template WHERE entry = %u", def.entry))
+            {
+                std::string const name = result->Fetch()[0].GetCppString();
+                if (name != def.name)
+                {
+                    sLog.outError("ARPG rifts: gameobject_template %u is '%s', not the rift's; left be", def.entry, name.c_str());
+                    continue;
+                }
+            }
+            WorldDatabase.DirectPExecute("DELETE FROM gameobject_template WHERE entry = %u", def.entry);
+            WorldDatabase.DirectPExecute("INSERT INTO gameobject_template (entry, type, displayId, name, flags, size) "
+                                         "VALUES (%u, 5, %u, '%s', %u, 1)",
+                                         def.entry, looks[k % looks.size()], def.name, uint32(GO_FLAG_NO_INTERACT));
+            *def.ready = true;
+        }
+    }
+
+    void FillRiftGrid(uint32 gx, uint32 gy, GridMap& grid)
+    {
+        if (int(gx) < BLOCK_FIRST || int(gy) < BLOCK_FIRST)
+            return;
+        int const bx = (int(gx) - BLOCK_FIRST) / BLOCK_STEP, by = (int(gy) - BLOCK_FIRST) / BLOCK_STEP;
+        int const ox = (int(gx) - BLOCK_FIRST) % BLOCK_STEP, oy = (int(gy) - BLOCK_FIRST) % BLOCK_STEP;
+        if (ox > 1 || oy > 1 || bx >= BLOCK_SIDE || by >= BLOCK_SIDE)
+            return;
+        LayoutPtr layout;
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            layout = sBlocks[by * BLOCK_SIDE + bx];
+        }
+        if (!layout)
+            return;
+        std::vector<float> v9(129 * 129), v8(128 * 128);
+        int const offA = ox * 128, offB = oy * 128;
+        for (int a = 0; a < 129; ++a)
+            for (int b = 0; b < 129; ++b)
+                v9[a * 129 + b] = layout->H(offA + a, offB + b);
+        for (int a = 0; a < 128; ++a)
+            for (int b = 0; b < 128; ++b)
+                v8[a * 128 + b] = (v9[a * 129 + b] + v9[(a + 1) * 129 + b] + v9[a * 129 + b + 1] + v9[(a + 1) * 129 + b + 1]) / 4.0f;
+        grid.loadSynthetic(v9.data(), v8.data(), ElwynnFlag());
+    }
+
+    void UpdateRift(Player* player)
+    {
+        if (!RiftsOn() || !player || !player->IsInWorld() || !Active(player) || player->IsBeingTeleported())
+            return;
+        uint32 const now = WorldTimer::getMSTime();
+        {
+            std::lock_guard<std::mutex> guard(sLock);
+            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
+            if (pr.checkedAt && WorldTimer::getMSTimeDiff(pr.checkedAt, now) < CHECK_MS)
+                return;
+            pr.checkedAt = now ? now : 1;
+        }
+        if (player->GetMapId() == RIFT_MAP)
+            UpdateInRift(player, now);
+        else
+            UpdateStones(player, now);
+    }
+
+    void ForgetRift(Player* player)
+    {
+        if (!player)
+            return;
+        std::lock_guard<std::mutex> guard(sLock);
+        sPlayers.erase(player->GetObjectGuid());
+    }
+
+    void ForgetRiftMap(Map const* map)
+    {
+        if (!map || map->GetId() != RIFT_MAP)
+            return;
+        std::lock_guard<std::mutex> guard(sLock);
+        sInstances.erase(map->GetInstanceId());
+        sPopulated.erase(map->GetInstanceId());
+    }
+}

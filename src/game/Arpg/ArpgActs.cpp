@@ -832,6 +832,27 @@ namespace Arpg
         sRuns.erase(it);
     }
 
+    std::vector<uint32> NativesWithin(uint32 map, float minX, float maxX, float minY, float maxY, uint32 minSpawns)
+    {
+        std::vector<uint32> natives;
+        if (map > 1)
+            return natives;
+        BuildSpawns();
+        for (auto const& [entry, spawns] : sSpawns[map])
+        {
+            if (!Hostile(sCreatureStorage.LookupEntry<CreatureInfo>(entry)))
+                continue;
+            uint32 inside = 0;
+            for (Spot const& s : spawns)
+                if (s.x >= minX && s.x <= maxX && s.y >= minY && s.y <= maxY)
+                    ++inside;
+            if (inside >= minSpawns)
+                natives.push_back(entry);
+        }
+        std::sort(natives.begin(), natives.end());
+        return natives;
+    }
+
     bool OnActChat(Player* player, std::string const& text)
     {
         if (!player || !Active(player) || !sWorld.getConfig(CONFIG_BOOL_ARPG_DEV_TOOLS) || !sWorld.getConfig(CONFIG_BOOL_ARPG_STATS) ||

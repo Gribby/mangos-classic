@@ -33,6 +33,7 @@
 #include "Common.h"
 
 #include <string>
+#include <vector>
 
 class Creature;
 class Player;
@@ -65,6 +66,10 @@ namespace Arpg
 
     // A logged-out character's packs ahead go.
     void ForgetActs(Player* player);
+
+    // The hostile creatures that live on `map` (0 or 1) in the box, each with at least
+    // `minSpawns` spawns there: a rift's natives (Arpg/ArpgRift.h).
+    std::vector<uint32> NativesWithin(uint32 map, float minX, float maxX, float minY, float maxY, uint32 minSpawns);
 
     // A chat line: true when it was a dev note (written to the statistics, not said).
     bool OnActChat(Player* player, std::string const& text);

@@ -23,6 +23,7 @@
 #include "Server/DBCEnums.h"
 #include "Server/DBCStores.h"
 #include "Maps/GridMap.h"
+#include "Arpg/ArpgRift.h"
 #include "VMapFactory.h"
 #include "MotionGenerators/MoveMap.h"
 #include "World/World.h"
@@ -150,6 +151,58 @@ void GridMap::unloadData()
     m_liquidFlags = nullptr;
     m_liquid_map  = nullptr;
     m_gridGetHeight = &GridMap::getHeightFromFlat;
+}
+
+void GridMap::loadSynthetic(float const* v9, float const* v8, uint16 areaFlag)
+{
+    unloadData();
+    memset(m_holes, 0, sizeof(m_holes));
+    m_gridArea = areaFlag;
+    m_V9 = new float[129 * 129];
+    m_V8 = new float[128 * 128];
+    memcpy(m_V9, v9, sizeof(float) * 129 * 129);
+    memcpy(m_V8, v8, sizeof(float) * 128 * 128);
+    m_gridHeight = v9[0];
+    m_gridGetHeight = &GridMap::getHeightFromFloat;
+    m_liquidGlobalEntry = 0;
+    m_liquidGlobalFlags = 0;
+    m_liquidLevel = INVALID_HEIGHT_VALUE;
+}
+
+bool GridMap::copyOuterHeights(float* v9) const
+{
+    if (m_gridGetHeight == &GridMap::getHeightFromFloat && m_V9)
+        memcpy(v9, m_V9, sizeof(float) * 129 * 129);
+    else if (m_gridGetHeight == &GridMap::getHeightFromUint16 && m_uint16_V9)
+    {
+        for (int i = 0; i < 129 * 129; ++i)
+            v9[i] = m_uint16_V9[i] * m_gridIntHeightMultiplier + m_gridHeight;
+    }
+    else if (m_gridGetHeight == &GridMap::getHeightFromUint8 && m_uint8_V9)
+    {
+        for (int i = 0; i < 129 * 129; ++i)
+            v9[i] = m_uint8_V9[i] * m_gridIntHeightMultiplier + m_gridHeight;
+    }
+    else if (m_gridHeight > INVALID_HEIGHT)
+    {
+        for (int i = 0; i < 129 * 129; ++i)
+            v9[i] = m_gridHeight;
+    }
+    else
+        return false;
+    return true;
+}
+
+uint16 GridMap::chunkAreaFlag(int ca, int cb) const
+{
+    return m_area_map ? m_area_map[ca * 16 + cb] : m_gridArea;
+}
+
+bool GridMap::chunkHasLiquid(int ca, int cb) const
+{
+    uint8 const flags = m_liquidFlags ? m_liquidFlags[ca * 16 + cb] : m_liquidGlobalFlags;
+    uint16 const entry = m_liquidEntry ? m_liquidEntry[ca * 16 + cb] : m_liquidGlobalEntry;
+    return flags != 0 || entry != 0;
 }
 
 bool GridMap::loadAreaData(FILE* in, uint32 offset, uint32 /*size*/)
@@ -1250,7 +1303,14 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y, bool mapOnl
     {
         LOCK_GUARD lock(m_mutex);
         // double checked lock pattern
-        if (!m_GridMaps[x][y])
+        if (!m_GridMaps[x][y] && Arpg::IsRiftMap(m_mapId))
+        {
+            // An ARPG rift's ground is made, not read (Arpg/ArpgRift.h).
+            GridMap* map = new GridMap();
+            Arpg::FillRiftGrid(x, y, *map);
+            m_GridMaps[x][y] = map;
+        }
+        else if (!m_GridMaps[x][y])
         {
             GridMap* map = new GridMap();
 

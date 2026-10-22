@@ -6,6 +6,7 @@
 #include "Arpg/ArpgShaman.h"
 #include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgShrines.h"
+#include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgWarlock.h"
 #include "Arpg/ArpgActs.h"
@@ -1139,6 +1140,7 @@ namespace Arpg
         ForgetMinions(player);
         ForgetBoons(player);
         ForgetShrines(player);
+        ForgetRift(player);
         FlushStats(player);
         ForgetCosts(player);
         ForgetActs(player);
@@ -1162,6 +1164,8 @@ namespace Arpg
         UpdateShaman(player);
         // A shrine stepped on, and the shrines' pulses (Arpg/ArpgShrines.h).
         UpdateShrines(player);
+        // The Rift Stones, and a rift's layout, creatures and exit (Arpg/ArpgRift.h).
+        UpdateRift(player);
         // A dungeon's nightmare, as standing boons (Arpg/ArpgDungeons.h).
         UpdateNightmareBoons(player);
         // Barrier and the timed boons, and the HUD's line of them (Arpg/ArpgBoons.h).
