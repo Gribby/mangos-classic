@@ -958,6 +958,12 @@ namespace
             more(8 * t.Rank(KEY_BURNING_GROUND), "Burning Ground");
         if (skill == SKILL_IMMOLATE && player->getClass() == CLASS_WARLOCK)
             more(6 * t.Rank(KEY_EMBERSTORM), "Emberstorm");
+        // The skill trees' "more" nodes (Arpg/ArpgSkills.h).
+        if (skill != Arpg::SKILL_NONE)
+            for (SkillMore const& m : t.skillMores)
+                if (m.skill == skill && (!m.only || (spellInfo && spellInfo->SpellName[0] &&
+                                                    std::strncmp(spellInfo->SpellName[0], m.only, std::strlen(m.only)) == 0)))
+                    more(m.pct, m.name);
         // The enemy's states (Arpg/ArpgStates.h): the affixes against each, and the stun payoffs,
         // which count a Daze as a stun.
         uint32 const states = victim ? StateMask(victim) : 0;

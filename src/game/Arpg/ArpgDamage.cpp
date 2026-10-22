@@ -58,6 +58,7 @@ namespace
     constexpr float BURST_RANGE = 6.0f;
     // The mage's keystones on ailments: Wildfire's weaker Ignites; Arcane Flux's and Overcharge's
     // bigger Overload bursts, and Arcane Flux's mana from each.
+    constexpr uint32 LINGERING_FLAME_PCT = 15;
     constexpr uint32 WILDFIRE_LESS_PCT = 20, FLUX_MORE_PCT = 50, FLUX_MANA_PCT = 2, OVERCHARGE_MORE_PCT = 40;
     // The druid's: Nature's Bounty's Poisons, Predator's Bleeds.
     constexpr uint32 BOUNTY_MORE_PCT = 50, PREDATOR_MORE_PCT = 60;
@@ -213,6 +214,9 @@ namespace
                 uint32 share = AilmentShare(player, t, dealt, bleed ? BLEED_PCT : IGNITE_PCT);
                 if (!bleed && t.Has(KEY_WILDFIRE))
                     share = share * (100 - WILDFIRE_LESS_PCT) / 100;
+                // Lingering Flame (the Fireball tree): Ignites burn more.
+                if (!bleed && t.Has(KEY_LINGERING_FLAME))
+                    share = share * (100 + LINGERING_FLAME_PCT * t.Rank(KEY_LINGERING_FLAME)) / 100;
                 uint32 const perTick = std::max<uint32>(1, share / ticks);
                 Affliction* a = Find(list, guid, tag);
                 // The strongest counts: a weaker one leaves it be.
@@ -303,11 +307,24 @@ namespace
         for (uint8 tag = 0; tag < DAMAGE_TAGS; ++tag)
         {
             bool const own = (tags & TagBit(Tag(tag))) != 0;
+            if (own && crit)
+            {
+                Inflict(player, t, victim, tag, dealt, true);
+                continue;
+            }
+            int32 const nodeChance = skill && skill < 16 ? t.skillAilment[skill][tag] : 0;
+            // A skill tree's cold (Deep Chill) deepens: it freezes the Chilled, as a critical
+            // strike would, where the gear's chance only chills.
+            if (tag == TAG_FROST && nodeChance > 0 && roll_chance_i(std::clamp(nodeChance, 0, 100)))
+            {
+                Inflict(player, t, victim, tag, dealt, true);
+                continue;
+            }
             int32 chance = own ? t.ailmentChance[tag] : 0;
-            if (skill && skill < 16)
-                chance += t.skillAilment[skill][tag];
-            if ((own && crit) || (chance > 0 && roll_chance_i(std::clamp(chance, 0, 100))))
-                Inflict(player, t, victim, tag, dealt, own && crit);
+            if (tag != TAG_FROST)
+                chance += nodeChance;
+            if (chance > 0 && roll_chance_i(std::clamp(chance, 0, 100)))
+                Inflict(player, t, victim, tag, dealt, false);
         }
     }
 

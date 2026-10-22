@@ -35,7 +35,7 @@
  *     ACTION_TOWN_PORTAL  -: open a town portal, or go back through it (Arpg/ArpgActions.h)
  *     ACTION_GLOBE        uint32 globe: take a health globe the player walked onto
  *     ACTION_CRAFT        uint8 op, uint8 bag, uint8 slot, uint16 affix: an orb, a salvage or a
- *                         shard on an item (Arpg/ArpgCraft.h)
+ *                         shard on an item, or a gamble (Arpg/ArpgCraft.h)
  *     ACTION_BOUNTY_ABANDON uint8 slot: abandon a bounty for a new one (Arpg/ArpgEvents.h)
  *
  * The loot kinds run on the world thread, as the stock loot opcodes do (they are thread-unsafe:

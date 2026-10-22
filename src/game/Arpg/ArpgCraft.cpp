@@ -14,6 +14,7 @@
 #include "Entities/Creature.h"
 #include "Entities/Item.h"
 #include "Entities/Player.h"
+#include "Globals/ObjectMgr.h"
 #include "Log/Log.h"
 #include "Loot/LootMgr.h"
 #include "Server/Opcodes.h"
@@ -125,6 +126,103 @@ namespace
     {
         Say(player, "|cffff4040", text);
     }
+
+    // Gambling (Diablo IV's): gold for a random item of a slot the player names.
+    struct GambleKind
+    {
+        char const* name;
+        uint8 types[4];     // its inventory types (0: no more)
+    };
+
+    GambleKind const GAMBLE_KINDS[GAMBLE_KIND_COUNT] =
+    {
+        { "head",            { INVTYPE_HEAD } },
+        { "shoulders",       { INVTYPE_SHOULDERS } },
+        { "chest",           { INVTYPE_CHEST, INVTYPE_ROBE } },
+        { "hands",           { INVTYPE_HANDS } },
+        { "waist",           { INVTYPE_WAIST } },
+        { "legs",            { INVTYPE_LEGS } },
+        { "feet",            { INVTYPE_FEET } },
+        { "wrists",          { INVTYPE_WRISTS } },
+        { "back",            { INVTYPE_CLOAK } },
+        { "neck",            { INVTYPE_NECK } },
+        { "finger",          { INVTYPE_FINGER } },
+        { "trinket",         { INVTYPE_TRINKET } },
+        { "one-hand weapon", { INVTYPE_WEAPON, INVTYPE_WEAPONMAINHAND, INVTYPE_WEAPONOFFHAND } },
+        { "two-hand weapon", { INVTYPE_2HWEAPON } },
+        { "off hand",        { INVTYPE_SHIELD, INVTYPE_HOLDABLE } },
+        { "ranged weapon",   { INVTYPE_RANGED, INVTYPE_THROWN, INVTYPE_RANGEDRIGHT, INVTYPE_RELIC } },
+    };
+
+    // A gamble's rarity: better odds than a drop's, as Diablo IV's are.
+    uint8 GambleRarity()
+    {
+        uint32 const roll = urand(1, 100);
+        if (roll <= GAMBLE_UNIQUE_PCT)
+            return RARITY_UNIQUE;
+        if (roll <= GAMBLE_UNIQUE_PCT + GAMBLE_PURPLE_PCT)
+            return RARITY_PURPLE;
+        if (roll <= GAMBLE_UNIQUE_PCT + GAMBLE_PURPLE_PCT + GAMBLE_BLUE_PCT)
+            return RARITY_BLUE;
+        return RARITY_GREEN;
+    }
+
+    // "1g 8s", "30s".
+    std::string Money(uint32 copper)
+    {
+        std::string out;
+        if (copper >= 10000)
+            out = std::to_string(copper / 10000) + "g";
+        if (copper % 10000 >= 100 || out.empty())
+            out += (out.empty() ? "" : " ") + std::to_string(copper / 100 % 100) + "s";
+        return out;
+    }
+
+    char const* RarityWord(uint8 rarity)
+    {
+        switch (rarity)
+        {
+            case RARITY_UNIQUE: return "|cffe6cc80a unique|r";
+            case RARITY_PURPLE: return "|cffa335eea purple|r";
+            case RARITY_BLUE: return "|cff0070dda blue|r";
+            default: return "|cff1eff00a green|r";
+        }
+    }
+
+    void Gamble(Player* player, uint16 kind)
+    {
+        if (!kind || kind > GAMBLE_KIND_COUNT)
+            return;
+        GambleKind const& k = GAMBLE_KINDS[kind - 1];
+        if (player->IsInCombat())
+        {
+            Refused(player, "Not in combat.");
+            return;
+        }
+        uint32 const cost = GambleCost(player->GetLevel());
+        if (player->GetMoney() < cost)
+        {
+            Refused(player, "A gamble costs " + Money(cost) + "; you have too little gold.");
+            return;
+        }
+        uint8 const rarity = GambleRarity();
+        uint32 const id = GambleItem(player, rarity, player->GetLevel(), [&k](ItemPrototype const* proto)
+        {
+            for (uint8 type : k.types)
+                if (type && proto->InventoryType == type)
+                    return true;
+            return false;
+        });
+        if (!id)
+        {
+            Refused(player, std::string("Nothing to gamble for that slot at your level: ") + k.name + ".");
+            return;
+        }
+        player->ModifyMoney(-int32(cost));
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(id);
+        Say(player, "|cffe6cc80", "You gamble " + Money(cost) + " for your " + k.name + ": " + RarityWord(rarity) + ", " +
+                                  (proto && proto->Name1 ? proto->Name1 : "an item") + ".");
+    }
 }
 
 namespace Arpg
@@ -225,10 +323,20 @@ namespace Arpg
         AddOrbsToLoot(victim->m_loot, count);
     }
 
+    uint32 GambleCost(uint32 level)
+    {
+        return std::max<uint32>(GAMBLE_COST_MIN, GAMBLE_COST_PER_LEVEL_SQ * level * level);
+    }
+
     void Craft(Player* player, uint8 op, uint8 bag, uint8 slot, uint16 affix)
     {
         if (!player || !Active(player))
             return;
+        if (op == CRAFT_GAMBLE)
+        {
+            Gamble(player, affix);
+            return;
+        }
         uint8 posBag = 0, posSlot = 0;
         Item* item = ItemAt(player, bag, slot, posBag, posSlot);
         if (!item)

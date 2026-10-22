@@ -37,11 +37,13 @@
 #include "Common.h"
 #include "Arpg/ArpgTree.h"
 
+#include <functional>
 #include <string>
 #include <vector>
 
 class Creature;
 class Item;
+struct ItemPrototype;
 class Loot;
 class Player;
 struct LootItem;
@@ -95,6 +97,10 @@ namespace Arpg
     // Make a random base item (as AddRolledItem) and give it to `player`: into the bags, or by
     // mail when they are full.
     bool GiveRolledItem(Player* player, uint8 rarity, uint32 level);
+
+    // A gamble (Arpg/ArpgCraft.h): a random base item of `rarity` near item level `level` among
+    // those `fits` takes, given as GiveRolledItem gives; its entry, or 0 when none was found.
+    uint32 GambleItem(Player* player, uint8 rarity, uint32 level, std::function<bool(ItemPrototype const*)> const& fits);
 
     // --- Crafting (Arpg/ArpgCraft.h) ---
     // A crafted item keeps its affixes as a list (character_arpg_item.affixes) in place of its

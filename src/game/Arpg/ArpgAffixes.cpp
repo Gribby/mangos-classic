@@ -1253,21 +1253,10 @@ namespace Arpg
         return RarityOf(item->GetProto(), SeedOf(item).rarity);
     }
 
-    bool GiveRolledItem(Player* player, uint8 rarity, uint32 level)
+    // Put item `id`, rolled at `rarity`, in `player`'s bags with a fresh seed, or send it by mail
+    // (`subject`, `body`) when they are full.
+    bool StoreRolledItem(Player* player, uint32 id, uint8 rarity, char const* subject, char const* body)
     {
-        if (!player)
-            return false;
-        uint32 id = 0;
-        for (int tries = 0; tries < 8 && !id; ++tries)
-        {
-            uint32 const quality = rarity == RARITY_UNIQUE ? (roll_chance_i(30) ? ITEM_QUALITY_EPIC : ITEM_QUALITY_RARE)
-                                   : (roll_chance_i(50) ? ITEM_QUALITY_NORMAL : ITEM_QUALITY_UNCOMMON);
-            uint32 const pick = PickRandomItem(quality, level);
-            if (pick && Takes(sObjectMgr.GetItemPrototype(pick)))
-                id = pick;
-        }
-        if (!id)
-            return false;
         uint8 const stored = rarity == RARITY_UNIQUE ? uint8(RARITY_UNIQUE)
                              : std::max<uint8>(RARITY_WHITE, std::min<uint8>(rarity, RARITY_PURPLE));
         uint32 const seed = urand(1, 0x7FFFFFFF);
@@ -1281,7 +1270,6 @@ namespace Arpg
             OnAffixedItemStored(player, item, seed, 0, stored);
             return true;
         }
-        // The bags full: it comes by mail.
         Item* item = Item::CreateItem(id, 1, player);
         if (!item)
             return false;
@@ -1289,10 +1277,45 @@ namespace Arpg
             item->SetItemRandomProperties(random);
         item->SaveToDB();
         OnAffixedItemStored(player, item, seed, 0, stored);
-        MailDraft draft("Bounty reward", "Your bags were full, so your reward was sent here.");
+        MailDraft draft(subject, body);
         draft.AddItem(item);
         draft.SendMailTo(player, MailSender(player, MAIL_STATIONERY_GM), MAIL_CHECK_MASK_RETURNED);
-        ChatHandler(player).PSendSysMessage("|cffffd200Your bags are full: the reward was sent by mail.|r");
+        ChatHandler(player).PSendSysMessage("|cffffd200Your bags are full: it was sent by mail.|r");
         return true;
+    }
+
+    bool GiveRolledItem(Player* player, uint8 rarity, uint32 level)
+    {
+        if (!player)
+            return false;
+        uint32 id = 0;
+        for (int tries = 0; tries < 8 && !id; ++tries)
+        {
+            uint32 const quality = rarity == RARITY_UNIQUE ? (roll_chance_i(30) ? ITEM_QUALITY_EPIC : ITEM_QUALITY_RARE)
+                                   : (roll_chance_i(50) ? ITEM_QUALITY_NORMAL : ITEM_QUALITY_UNCOMMON);
+            uint32 const pick = PickRandomItem(quality, level);
+            if (pick && Takes(sObjectMgr.GetItemPrototype(pick)))
+                id = pick;
+        }
+        return id && StoreRolledItem(player, id, rarity, "Bounty reward", "Your bags were full, so your reward was sent here.");
+    }
+
+    uint32 GambleItem(Player* player, uint8 rarity, uint32 level, std::function<bool(ItemPrototype const*)> const& fits)
+    {
+        if (!player)
+            return 0;
+        auto const takes = [&fits](ItemPrototype const* proto) { return Takes(proto) && fits(proto); };
+        // A unique is a vanilla blue or purple of the slot; the rest a white or green base (as the
+        // drops), either way round when the slot has none of the first.
+        uint32 const first = rarity == RARITY_UNIQUE ? (roll_chance_i(30) ? ITEM_QUALITY_EPIC : ITEM_QUALITY_RARE)
+                             : (roll_chance_i(50) ? ITEM_QUALITY_NORMAL : ITEM_QUALITY_UNCOMMON);
+        uint32 const second = rarity == RARITY_UNIQUE ? (first == ITEM_QUALITY_EPIC ? ITEM_QUALITY_RARE : ITEM_QUALITY_EPIC)
+                              : (first == ITEM_QUALITY_NORMAL ? ITEM_QUALITY_UNCOMMON : ITEM_QUALITY_NORMAL);
+        uint32 id = PickRandomItemWhere(first, level, takes);
+        if (!id)
+            id = PickRandomItemWhere(second, level, takes);
+        if (!id || !StoreRolledItem(player, id, rarity, "Gamble", "Your bags were full, so your gamble was sent here."))
+            return 0;
+        return id;
     }
 }

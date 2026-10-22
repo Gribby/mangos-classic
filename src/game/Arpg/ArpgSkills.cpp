@@ -63,6 +63,7 @@ namespace
         uint8 ailPerRank = 0;
         int8 convertTag = -1;     // a conversion node: the damage tag the skill's hits count as
         uint8 choice = 0;         // a choice group: of a skill's nodes sharing one, only one may hold ranks
+        int16 morePerRank = 0;    // a "more" node: this much more of the skill's damage per rank (only `only`'s)
     };
 
     // `node`, one side of choice group `group` (Diablo IV's mutually exclusive upgrades): its
@@ -100,6 +101,17 @@ namespace
         n.modOp = int8(op);
         n.modType = uint8(type);
         n.modPerRank = perRank;
+        n.only = only;
+        return n;
+    }
+
+    // A "more" node: `perRank`% more damage per rank for the skill's hits, its ticks and its
+    // minions' too (only the spell named `only`, when set): Arpg::SkillMore.
+    SkillNode More(uint16 id, uint8 col, uint8 row, uint16 parent, uint8 max, char const* name, char const* text,
+                   uint32 icon, int16 perRank, char const* only = nullptr)
+    {
+        SkillNode n{ id, SKILL_NODE_MODIFIER, col, row, parent, max, name, text, icon };
+        n.morePerRank = perRank;
         n.only = only;
         return n;
     }
@@ -196,13 +208,15 @@ namespace
                   Conv(117, 1, 6, 110, "Sun Seal", "Your swings and Seals count as Fire: they Ignite instead of Judge (on a crit, or by your Ignite chances), and build no Daze.", 2136, TAG_FIRE),
               } },
             { SKILL_HOLY_LIGHT, CLASS_PALADIN, "Holy Light", "Holy Light and Flash of Light: heals, which its tree turns on your enemies too.", 635, { "Holy Light", "Flash of Light" },
-              { "Radiance", "", "Retribution" },
+              { "Radiance", "Grace", "Retribution" },
               {
                   Mod(201, 0, 1, 0, 4, "Healing Light", "6% more healing per rank.", 20237, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
                   Mod(202, 0, 2, 201, 3, "Light's Grace", "+4% critical strike chance per rank.", 20208, SPELLMOD_CRITICAL_CHANCE, SPELLMOD_FLAT, 4),
                   Mod(203, 0, 3, 202, 3, "Swift Light", "-0.2 sec recovery per rank.", 19750, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -200),
                   Key(204, SKILL_NODE_SYNERGY, 0, 4, 203, 1, "Crusader's Grace", "A critical Judgement, Exorcism or Hammer of Wrath lets your next Holy Light or Flash of Light skip its recovery (once every 8 sec).", 635, KEY_NONE),
                   Key(205, SKILL_NODE_CAPSTONE, 0, 5, 204, 1, "Dawnbringer", "Your heals on yourself also send half their amount at the nearest enemy as a Holy bolt.", 19977, KEY_DAWNBRINGER),
+                  Mod(210, 1, 1, 0, 3, "Pure Light", "10% less Holy Light and Flash of Light mana cost per rank.", 20237, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  Mod(211, 1, 2, 210, 3, "Radiant Light", "Critical heals heal 20% more of their bonus per rank.", 20208, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
                   Key(206, SKILL_NODE_SYNERGY, 2, 1, 0, 3, "Searing Radiance", "Your heals strike the nearest enemy within 20 yards for 15% of the heal per rank, as Holy damage.", 879, KEY_LIGHT_STRIKE),
                   Key(207, SKILL_NODE_SYNERGY, 2, 2, 206, 2, "Judging Light", "Your heals Judge every enemy within 8 yards, as a hit of 25% of the heal per rank (once every 3 sec).", 20271, KEY_JUDGING_LIGHT),
                   Key(208, SKILL_NODE_MODIFIER, 2, 3, 207, 3, "Avenging Light", "Healing yourself gives you 5% more damage per rank for 5 sec.", 20218, KEY_AVENGING_LIGHT),
@@ -241,6 +255,8 @@ namespace
                   Key(408, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hallowed Ground", "While you stand in your Consecration, you regain 1% of your health a second per rank.", 633, KEY_HALLOWED_GROUND),
                   Key(409, SKILL_NODE_SYNERGY, 2, 2, 408, 1, "Steadfast", "While you stand in your Consecration, you can't be stunned.", 498, KEY_STEADFAST),
                   Key(410, SKILL_NODE_CAPSTONE, 2, 3, 409, 1, "Martyr's Ward", "Your Retribution Aura burns every enemy within 10 yards each second, for five times its damage.", 7294, KEY_MARTYRS_WARD),
+                  Mod(411, 1, 4, 407, 3, "Devotion", "10% less Consecration mana cost per rank.", 20237, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  More(412, 2, 4, 410, 3, "Zealous Ground", "6% more Consecration damage per rank.", 26573, 6),
               } },
             { SKILL_HAMMER, CLASS_PALADIN, "Hammers", "Hammer of Justice, the stun, and Hammer of Wrath, the throw, as one.", 853, { "Hammer of Justice", "Hammer of Wrath" },
               { "Thrown", "Stun", "Execute" },
@@ -299,7 +315,7 @@ namespace
                   KitCap(124, 0, 4, 123, "Flame Echo", "Every 3rd Fireball is echoed for free, at 70%.", 11129, KIT_ECHO, 133, 3, 0.0f, 70),
                   Mod(125, 1, 1, 0, 4, "Searing Bolt", "6% more Fireball and Pyroblast damage per rank.", 11366, SPELLMOD_DAMAGE, SPELLMOD_PCT, 6),
                   Ail(126, 1, 2, 125, 3, "Kindle", "Your Fireball and Pyroblast hits have an 8% chance per rank to Ignite, beside their critical strikes.", 2120, TAG_FIRE, 8),
-                  Mod(127, 1, 3, 126, 3, "Lingering Flame", "Fireball's and Pyroblast's burn deals 15% more per rank.", 2948, SPELLMOD_DOT, SPELLMOD_PCT, 15),
+                  Key(127, SKILL_NODE_MODIFIER, 1, 3, 126, 3, "Lingering Flame", "Your Ignites burn 15% more per rank.", 2948, KEY_LINGERING_FLAME),
                   Key(128, SKILL_NODE_CAPSTONE, 1, 4, 127, 1, "Pyroclasm", "Critical Fireballs and Pyroblasts explode: every enemy within 8 yards of the target takes 60% of the hit.", 11113, KEY_PYROCLASM),
                   Mod(129, 2, 1, 0, 3, "Quick Pyre", "-0.5 sec Pyroblast recovery per rank.", 12043, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -500, "Pyroblast"),
                   Key(130, SKILL_NODE_SYNERGY, 2, 2, 129, 1, "Hot Streak", "A critical Fire Blast or Scorch lets your next Pyroblast skip its recovery (once every 8 sec).", 11366, KEY_NONE),
@@ -316,7 +332,7 @@ namespace
                   Kit(223, 0, 3, 222, 2, "Glacial Chain", "Frostbolt chains to 1/2 more enemies within 10 yards, at 50%.", 6143,
                       KIT_CHAIN, 116, { 1, 2 }, { 10, 10 }, { 50, 50 }),
                   KitCap(224, 0, 4, 223, "Echoing Frost", "Every 3rd Frostbolt is echoed for free, at 60%.", 12472, KIT_ECHO, 116, 3, 0.0f, 60),
-                  Ail(225, 1, 1, 0, 3, "Deep Chill", "Your Frostbolt and Cone of Cold hits have a 10% chance per rank to chill; a critical hit on the chilled freezes.", 12484, TAG_FROST, 10),
+                  Ail(225, 1, 1, 0, 3, "Deep Chill", "Your Frostbolt and Cone of Cold hits have a 10% chance per rank to deepen the cold: they Freeze the Chilled, and Chill the rest.", 12484, TAG_FROST, 10),
                   Key(226, SKILL_NODE_SYNERGY, 1, 2, 225, 1, "Winter's Grasp", "Frost Nova lets your next Frostbolt skip its recovery, and it shatters into 3 shards at the nearest enemies within 10 yards for 50%.", 122, KEY_NONE),
                   Mod(227, 1, 3, 226, 3, "Razor Ice", "Critical strikes deal 20% more of their bonus per rank.", 11958, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 20),
                   Key(228, SKILL_NODE_CAPSTONE, 1, 4, 227, 1, "Shatterstorm", "Frostbolt on a frozen enemy shatters: every enemy within 8 yards of it takes 80% of the hit.", 122, KEY_SHATTERSTORM),
@@ -340,7 +356,7 @@ namespace
                   Key(327, SKILL_NODE_SYNERGY, 1, 3, 326, 1, "Arcane Echoes", "A critical Arcane Explosion makes your next Arcane Missiles cost no mana, and each missile jumps to 1 more enemy within 8 yards for 50%.", 1449, KEY_NONE),
                   Key(328, SKILL_NODE_CAPSTONE, 1, 4, 327, 1, "Overcharge", "Your Overload bursts deal 40% more.", 12042, KEY_OVERCHARGE),
                   Mod(329, 2, 1, 0, 3, "Focused Mind", "Critical strikes deal 15% more of their bonus per rank.", 12043, SPELLMOD_CRIT_DAMAGE_BONUS, SPELLMOD_PCT, 15),
-                  Mod(330, 2, 2, 329, 2, "Long Reach", "+10% Arcane Missiles range per rank.", 1953, SPELLMOD_RANGE, SPELLMOD_PCT, 10),
+                  Mod(330, 2, 2, 329, 2, "Lingering Barrage", "+1 sec Arcane Missiles channel per rank: one more missile.", 1953, SPELLMOD_DURATION, SPELLMOD_FLAT, 1000, "Arcane Missiles"),
                   Key(331, SKILL_NODE_CAPSTONE, 2, 3, 330, 1, "Arcane Siphon", "Each missile that hits restores 0.5% of your maximum mana.", 12051, KEY_ARCANE_SIPHON),
                   Key(332, SKILL_NODE_SYNERGY, 2, 4, 331, 1, "Arcane Detonation", "Arcane Missiles consume Overload to burst onto every enemy within 8 yards for 50% of the hit and the stored damage (once a second).", 1449, KEY_NONE),
               } },
@@ -358,6 +374,7 @@ namespace
                   Mod(428, 2, 1, 0, 3, "Mana Efficiency", "10% less Arcane Explosion mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10),
                   Key(429, SKILL_NODE_SYNERGY, 2, 2, 428, 1, "Resonance", "A critical Arcane Missile makes your next Arcane Explosion 50% wider (once every 4 sec).", 5143, KEY_NONE),
                   Key(430, SKILL_NODE_CAPSTONE, 2, 3, 429, 1, "Mana Burst", "Each enemy Arcane Explosion hits restores 1% of your maximum mana, 5% at most a cast.", 12051, KEY_MANA_BURST),
+                  More(432, 2, 4, 430, 4, "Arcane Mastery", "6% more Arcane Explosion damage per rank.", 1449, 6),
               } },
             { SKILL_STORMS, CLASS_MAGE, "Storms", "Blizzard and Flamestrike: storms of ice and fire on the ground.", 10, { "Blizzard", "Flamestrike" },
               { "Blizzard", "Storm", "Flamestrike" },
@@ -400,7 +417,7 @@ namespace
               {
                   Kit(141, 0, 1, 0, 3, "Splitting Wrath", "Wrath launches 1/1/2 extra bolts, at 45/60/60%.", 5176,
                       KIT_EXTRA_PROJECTILES, 5176, { 1, 1, 2 }, { 14, 14, 14 }, { 45, 60, 60 }),
-                  Mod(142, 0, 2, 141, 3, "Quick Wrath", "-0.1 sec Wrath recovery per rank.", 16814, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -100, "Wrath"),
+                  Mod(142, 0, 2, 141, 3, "Quick Wrath", "-0.15 sec Wrath recovery per rank.", 16814, SPELLMOD_CASTING_TIME, SPELLMOD_FLAT, -150, "Wrath"),
                   Ail(143, 0, 3, 142, 3, "Thorned Wrath", "Your Wrath and Starfire hits have an 8% chance per rank to Poison.", 467, TAG_NATURE, 8),
                   KitCap(144, 0, 4, 143, "Wrath of Cenarius", "Wrath chains to 3 more enemies within 10 yards, at 60%.", 5176, KIT_CHAIN, 5176, 3, 10.0f, 60),
                   Key(153, SKILL_NODE_SYNERGY, 0, 5, 144, 1, "Thorns of Cenarius", "A critical Wrath on a Poisoned enemy spreads Poison to the 2 nearest enemies within 10 yards.", 467, KEY_NONE),
@@ -430,9 +447,10 @@ namespace
                   Mod(250, 2, 2, 249, 2, "Long Night", "+3 sec Moonfire and Insect Swarm duration per rank.", 16821, SPELLMOD_DURATION, SPELLMOD_FLAT, 3000),
                   Key(251, SKILL_NODE_CAPSTONE, 2, 3, 250, 1, "Lunar Tide", "Every tick of your Moonfire and Insect Swarm restores 0.5% of your maximum mana, 2% a second at most.", 16845, KEY_LUNAR_TIDE),
                   Conv(252, 2, 4, 251, "Solar Flare", "Moonfire's hit counts as Fire: a critical one Ignites instead of Overloading, and your Ignite chances apply.", 8921, TAG_FIRE),
+                  More(253, 0, 5, 244, 3, "Moonlit Wrath", "8% more Moonfire damage per rank.", 8921, 8, "Moonfire"),
               } },
             { SKILL_HURRICANE, CLASS_DRUID, "Hurricane", "A storm of wind and hail on the ground. An ARPG druid has it from level 20.", 16914, { "Hurricane" },
-              { "Gale", "", "Hail" },
+              { "Gale", "Squall", "Hail" },
               {
                   Mod(341, 0, 1, 0, 3, "Wide Hurricane", "+12% Hurricane radius per rank.", 16914, SPELLMOD_RADIUS, SPELLMOD_PCT, 12),
                   Mod(342, 0, 2, 341, 4, "Howling Gale", "8% more Hurricane damage per rank.", 16914, SPELLMOD_DOT, SPELLMOD_PCT, 8),
@@ -442,6 +460,9 @@ namespace
                   Key(346, SKILL_NODE_TRANSFORMER, 2, 2, 345, 3, "Biting Hail", "Each Hurricane strike has a 5% chance per rank to chill.", 12484, KEY_BITING_HAIL),
                   Key(347, SKILL_NODE_SYNERGY, 2, 3, 346, 3, "Eye of the Wild", "Each enemy your Hurricane strikes heals you for 0.3% of your maximum health per rank, 3% a second at most.", 740, KEY_EYE_OF_THE_WILD),
                   ModCap(348, 2, 4, 347, "Thunderhead", "Hurricane costs half the mana.", 16914, SPELLMOD_COST, SPELLMOD_PCT, -50),
+                  Ail(349, 1, 1, 0, 3, "Stinging Hail", "Your Hurricane strikes have a 6% chance per rank to Poison.", 16914, TAG_NATURE, 6),
+                  More(350, 1, 2, 349, 4, "Gale Force", "6% more Hurricane damage per rank.", 16914, 6),
+                  Mod(351, 1, 3, 350, 3, "Thrifty Gale", "10% less Hurricane mana cost per rank.", 12051, SPELLMOD_COST, SPELLMOD_PCT, -10),
               } },
             { SKILL_BEAR, CLASS_DRUID, "Bear", "Maul, Swipe and Demoralizing Roar: the bear. An ARPG druid has Bear Form and Swipe from level 10.", 5487, { "Maul", "Swipe", "Demoralizing Roar" },
               { "Maul", "Swipe", "Guardian" },
@@ -452,6 +473,7 @@ namespace
                   Ail(443, 0, 3, 442, 3, "Savage Maul", "Your Bear hits have a 10% chance per rank to cause Bleeding.", 16952, TAG_PHYSICAL, 10),
                   KitCap(444, 0, 4, 443, "Earthshaker", "Maul sends a shockwave 10 yards ahead, at 60%.", 16940, KIT_SHOCKWAVE, 6807, 0, 10.0f, 60),
                   Key(451, SKILL_NODE_SYNERGY, 0, 5, 444, 1, "Crushing Maul", "Maul consumes Daze for an extra hit of 80% of the hit.", 6807, KEY_NONE),
+                  More(452, 1, 4, 447, 4, "Ursine Might", "6% more Bear damage per rank.", 5487, 6),
                   Key(445, SKILL_NODE_SYNERGY, 1, 1, 0, 1, "Roaring Swipe", "Demoralizing Roar makes your next Swipe deal 60% more (once every 6 sec).", 99, KEY_NONE),
                   Mod(446, 1, 2, 445, 2, "Wide Swipe", "+15% Swipe area per rank.", 779, SPELLMOD_RADIUS, SPELLMOD_PCT, 15, "Swipe"),
                   ModCap(447, 1, 3, 446, "Ravaging Swipe", "Swipe strikes up to 10 enemies.", 779, SPELLMOD_JUMP_TARGETS, SPELLMOD_FLAT, 7, "Swipe"),
@@ -493,6 +515,8 @@ namespace
                       KIT_SPREAD, 339, { 1, 2 }, { 6, 6 }, { 100, 100 }),
                   Mod(649, 2, 2, 648, 3, "Grasping Vines", "20% more Entangling Roots damage per rank.", 16918, SPELLMOD_DOT, SPELLMOD_PCT, 20, "Entangling Roots"),
                   KitCap(650, 2, 3, 649, "Overgrowth", "Entangling Roots roots every enemy within 10 yards of its target.", 16689, KIT_SPREAD, 339, 10, 10.0f, 100),
+                  Mod(651, 1, 4, 647, 3, "Thrift of the Grove", "10% less Rejuvenation skill mana cost per rank.", 17116, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  More(652, 2, 4, 650, 3, "Thorny Vines", "10% more Entangling Roots damage per rank.", 339, 10, "Entangling Roots"),
               } },
             // --- The warlock's six, numbered 60-79 within each skill's hundred. ---
             { SKILL_SHADOW_BOLT, CLASS_WARLOCK, "Shadow Bolt", "Shadow Bolt, Searing Pain and Shadowburn: the warlock's bolts.", 686, { "Shadow Bolt", "Searing Pain", "Shadowburn" },
@@ -523,9 +547,12 @@ namespace
                       KIT_SPREAD, 980, { 1, 2 }, { 8, 8 }, { 100, 100 }),
                   Key(265, SKILL_NODE_SYNERGY, 1, 2, 264, 3, "Tormented Soul", "Each tick of your Curse of Agony has a 10% chance per rank to Wither its target.", 18827, KEY_TORMENTED_SOUL),
                   Key(266, SKILL_NODE_CAPSTONE, 1, 3, 265, 1, "Haunting Agony", "Curse of Agony deals 100% more to Withered enemies.", 18829, KEY_HAUNTING_AGONY),
-                  Mod(267, 2, 1, 0, 3, "Siphoning", "10% more Siphon Life damage per rank.", 18265, SPELLMOD_DOT, SPELLMOD_PCT, 10, "Siphon Life"),
+                  Mod(267, 2, 1, 0, 3, "Siphoning", "15% more Siphon Life damage (and healing) per rank.", 18265, SPELLMOD_DOT, SPELLMOD_PCT, 15, "Siphon Life"),
                   Mod(268, 2, 2, 267, 2, "Grim Reach", "+3 sec Corruption, Curse of Agony and Siphon Life duration per rank.", 18218, SPELLMOD_DURATION, SPELLMOD_FLAT, 3000),
                   Key(269, SKILL_NODE_CAPSTONE, 2, 3, 268, 1, "Soul Feast", "Every tick of your damage over time heals you for 0.3% of your maximum health, 3% a second at most.", 18265, KEY_SOUL_FEAST),
+                  More(270, 0, 4, 263, 4, "Blight", "6% more Corruption skill damage per rank.", 17810, 6),
+                  More(271, 1, 4, 266, 3, "Anguish", "10% more Curse of Agony damage per rank.", 980, 10, "Curse of Agony"),
+                  Mod(272, 2, 4, 269, 2, "Dark Thrift", "15% less Corruption skill mana cost per rank.", 18218, SPELLMOD_COST, SPELLMOD_PCT, -15),
               } },
             { SKILL_IMMOLATE, CLASS_WARLOCK, "Immolate", "Immolate, Conflagrate, Rain of Fire and Hellfire: the warlock's fire. An ARPG warlock has Rain of Fire from level 10 and Hellfire from 20.", 348,
               { "Immolate", "Conflagrate", "Rain of Fire", "Hellfire" },
@@ -541,6 +568,8 @@ namespace
                   Key(367, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Hellfire Ward", "25% less damage to yourself from Hellfire per rank.", 1949, KEY_HELLFIRE_WARD),
                   Key(368, SKILL_NODE_SYNERGY, 2, 2, 367, 3, "Infernal Heat", "Each tick of your Hellfire gives your minions 5% more damage per rank for 4 sec.", 11683, KEY_INFERNAL_HEAT),
                   Key(369, SKILL_NODE_CAPSTONE, 2, 3, 368, 1, "Backlash", "While you channel Hellfire, you take 20% less damage.", 11684, KEY_BACKLASH),
+                  Mod(370, 0, 4, 363, 3, "Fel Kindling", "10% less Immolate skill mana cost per rank.", 348, SPELLMOD_COST, SPELLMOD_PCT, -10),
+                  More(371, 1, 4, 366, 3, "Downpour", "10% more Rain of Fire damage per rank.", 5740, 10, "Rain of Fire"),
               } },
             { SKILL_DRAIN, CLASS_WARLOCK, "Drain", "Drain Life, Drain Soul, Death Coil and Life Tap: the warlock lives off its enemies, and off itself.", 689,
               { "Drain Life", "Drain Soul", "Death Coil", "Life Tap" },
@@ -555,6 +584,9 @@ namespace
                   Key(466, SKILL_NODE_MODIFIER, 2, 1, 0, 3, "Dark Pact", "Life Tap gives you 1% more of your maximum mana per rank.", 18220, KEY_DARK_PACT),
                   Mod(467, 2, 2, 466, 2, "Death's Grasp", "-10 sec Death Coil cooldown per rank.", 6789, SPELLMOD_COOLDOWN, SPELLMOD_FLAT, -10000, "Death Coil"),
                   Key(468, SKILL_NODE_CAPSTONE, 2, 3, 467, 1, "Demonic Pact", "Life Tap also heals you for 5% of your maximum health, taken from your demon.", 18220, KEY_DEMONIC_PACT),
+                  More(469, 0, 4, 463, 4, "Essence Drain", "6% more Drain skill damage per rank.", 17783, 6),
+                  More(470, 1, 3, 465, 3, "Soul Hunger", "10% more Drain Soul damage per rank.", 1120, 10, "Drain Soul"),
+                  Mod(471, 2, 4, 468, 3, "Dark Bargain", "10% less Drain skill mana cost per rank.", 18220, SPELLMOD_COST, SPELLMOD_PCT, -10),
               } },
             { SKILL_DEMON, CLASS_WARLOCK, "Demon", "Your demon: the Imp burns, the Voidwalker holds, the Succubus withers, the Felhunter eats spells. Summoning needs no Soul Shard and casts at once.", 688,
               { "Summon Imp", "Summon Voidwalker", "Summon Succubus", "Summon Felhunter", "Firebolt", "Blood Pact", "Fire Shield", "Phase Shift",
@@ -1734,6 +1766,8 @@ namespace Arpg
                 totals.skillAilment[skill->id][node->ailTag] += int32(node->ailPerRank) * rank;
             if (node->convertTag >= 0 && node->convertTag < 7 && skill->id < 16)
                 totals.convert[skill->id] = uint8(node->convertTag + 1);
+            if (node->morePerRank)
+                totals.skillMores.push_back({ uint8(skill->id), int32(node->morePerRank) * rank, node->only, node->name });
         }
         // Avenger: Judgement keeps the Seal, for a doubled cooldown.
         if (totals.rank[KEY_AVENGER])

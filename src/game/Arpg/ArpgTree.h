@@ -213,7 +213,18 @@ namespace Arpg
         KEY_DOOMBRINGER,       // the Doomguard deals 15% more per rank
         KEY_PIT_LORD,          // the Doomguard stays 10 min
         KEY_EMBERSTORM,        // the Immolate skill, its burns and Rain of Fire too: 6% more per rank
+        KEY_LINGERING_FLAME,   // your Ignites burn 15% more per rank
         MAX_KEYSTONE
+    };
+
+    // A skill tree's "more" node: `pct` more damage for the hits of skill `skill` (only its spell
+    // named `only`, when set), shown on the sheet as `name`.
+    struct SkillMore
+    {
+        uint8 skill;
+        int32 pct;
+        char const* only;
+        char const* name;
     };
 
     // A spell modifier a skill node gives: `op` (SpellModOp) of `type` (SpellModType) by `value`
@@ -295,6 +306,7 @@ namespace Arpg
         uint8 rank[MAX_KEYSTONE] = {}; // per Keystone: 0 not taken, else its rank
 
         std::vector<SkillSpellMod> mods; // the skill nodes' spell modifiers
+        std::vector<SkillMore> skillMores; // the skill nodes' "more" damage
 
         bool Has(Keystone key) const { return key < MAX_KEYSTONE && rank[key] != 0; }
         uint8 Rank(Keystone key) const { return key < MAX_KEYSTONE ? rank[key] : 0; }

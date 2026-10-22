@@ -3,18 +3,21 @@
  * "Skills and skill trees").
  *
  * A character specialises up to five skills, one per slot; the slots open at levels 1, 10, 20,
- * 30 and 40. Skill points come two a level from level 2 to 51 (100 in all) and go into any
- * specialised skill's tree, at most SKILL_CAP in one skill. Taking a skill out of its slot gives
- * its points back; respec is free, out of combat.
+ * 30 and 40. Skill points come one a level from level 2 (19 at 20, 59 at 60) and go into any
+ * specialised skill's tree, at most SKILL_CAP in one skill (gear's +levels raise it, and add
+ * points of their own). Taking a skill out of its slot gives its points back; respec is free,
+ * out of combat.
  *
- * Each skill's tree is a small graph rooted at the skill: three branches of three or four nodes,
- * each node needing a rank in the one above it. A node is one of:
+ * Each skill's tree is a small graph rooted at the skill: three branches of three to six nodes,
+ * 25-30 ranks in all (more than a skill can take, so a tree is a choice), each node needing a
+ * rank in the one above it. Nodes of a choice group exclude each other. A node is one of:
  *   SKILL_NODE_MODIFIER     numbers: a spell modifier (the client is sent it) or a damage bonus
  *   SKILL_NODE_TRANSFORMER  changes how the skill works: a uniques kit row, or a hook
  *   SKILL_NODE_SYNERGY      works with another skill or a state (stunned, consecrated)
  *   SKILL_NODE_CAPSTONE     a rule change at the end of a branch (Codex pages will seal them)
  * A node's effect is one of: a spell modifier over the skill's spells (SkillSpellMod), a kit
- * row (ArpgUniques.h), or a Keystone with a rank that a hook reads (ArpgCharacter.h). They add
+ * row (ArpgUniques.h), a Keystone with a rank that a hook reads (ArpgCharacter.h), an ailment
+ * chance, a conversion, or a share of "more" damage for the skill's hits (SkillMore). They add
  * into the player's WebTotals beside the passive web's.
  *
  * Which spells a skill covers is by name (Seals: every "Seal of …", their procs included;
@@ -38,14 +41,14 @@
  * skill empties its socket. Saved in character_arpg_codex (guid, page), character_arpg_held
  * (guid, thing: 0 fragments, else a rune; count) and character_arpg_socket (guid, skill, rune).
  *
- *   SMSG_ARPG_SKILLS (0x340): uint8 version (2), uint16 points total, uint16 points spent,
+ *   SMSG_ARPG_SKILLS (0x340): uint8 version (3), uint16 points total, uint16 points spent,
  *     uint8 level; uint8 slot count, per slot: uint8 level it opens at, uint8 skill (0: empty);
  *     uint8 skill count, per skill: uint8 id, uint32 icon spell, cstring name, cstring text,
  *     uint8 points in it, uint8 cap, uint8 socketed rune (0 none), uint8 points the socket opens
  *     at, uint8 branch count and a cstring each, uint8 node count, per node: uint16 id, uint8
  *     kind, uint8 column, uint8 row, uint16 parent (0: the root), uint8 max rank, uint8 rank,
  *     uint32 icon spell, cstring name, cstring text, uint8 sealed, cstring the page's home ("" for
- *     none); then uint16 fragments held, uint8 fragments a page takes, uint8 rune count, per rune:
+ *     none), uint8 choice group (0 none); then uint16 fragments held, uint8 fragments a page takes, uint8 rune count, per rune:
  *     uint8 id, uint32 icon spell, cstring name, cstring text, uint8 held, uint8 the skills it
  *     fits (bit per skill id).
  */

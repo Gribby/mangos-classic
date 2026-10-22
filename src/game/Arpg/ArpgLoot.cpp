@@ -89,7 +89,7 @@ namespace
 
     // A random droppable item of `quality` near item level `level`, widening the band until one is
     // found; 0 when the database has none of that quality.
-    uint32 PickDevItem(uint32 quality, uint32 level)
+    uint32 PickDevItem(uint32 quality, uint32 level, std::function<bool(ItemPrototype const*)> const& fits = nullptr)
     {
         for (uint32 band : { 3u, 8u, 20u, 100u })
         {
@@ -97,7 +97,7 @@ namespace
             for (uint32 id = 0; id < sItemStorage.GetMaxEntry(); ++id)
             {
                 ItemPrototype const* proto = sItemStorage.LookupEntry<ItemPrototype>(id);
-                if (!proto || proto->Quality != quality || !DevLootable(proto))
+                if (!proto || proto->Quality != quality || !DevLootable(proto) || (fits && !fits(proto)))
                     continue;
                 uint32 const ilvl = proto->ItemLevel;
                 if (ilvl + band >= level && ilvl <= level + band)
@@ -119,6 +119,11 @@ namespace Arpg
             if (uint32 const base = RandomBase(level))
                 return base;
         return PickDevItem(quality, level);
+    }
+
+    uint32 PickRandomItemWhere(uint32 quality, uint32 level, std::function<bool(ItemPrototype const*)> const& fits)
+    {
+        return PickDevItem(quality, level, fits);
     }
 
     void SendGroundLoot(Player* player, Creature* creature)

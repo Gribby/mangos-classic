@@ -27,9 +27,12 @@
 #include "Common.h"
 #include "Entities/ObjectGuid.h"
 
+#include <functional>
+
 class Creature;
 class Loot;
 class Player;
+struct ItemPrototype;
 
 namespace Arpg
 {
@@ -48,6 +51,8 @@ namespace Arpg
 
     // A random droppable item of `quality` near item level `level` (0: none of that quality).
     uint32 PickRandomItem(uint32 quality, uint32 level);
+    // The same, of the items `fits` takes (a gamble's slot); 0 when none fits.
+    uint32 PickRandomItemWhere(uint32 quality, uint32 level, std::function<bool(ItemPrototype const*)> const& fits);
 
     // `loot` changed for `player` (an item or the gold taken, by any route): resend their list.
     void OnLootChanged(Loot* loot, Player* player);
