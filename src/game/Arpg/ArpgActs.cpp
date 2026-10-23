@@ -107,10 +107,10 @@ namespace
 
             { ACT_QUEST_FIRST + 2, SIDE_ALLIANCE, 12, 7, "Act I: The Mines of Elwynn",
               "Marshal Dughan", "Marshal Dughan",
-              "The kobolds have taken Fargodeep Mine, out in the farmlands past the east gate, and they're led by a greedy brute the "
-              "miners call Goldtooth. Every day they dig deeper and every night they raid the farms.$B$BGo into "
-              "the farmlands, $N. Break their tunnellers and miners, and put an end to Goldtooth.",
-              "Slay the kobolds of Fargodeep Mine, and Goldtooth.",
+              "The kobolds have dug Fargodeep Mine into a pit, off the farmlands past the east gate, and they're led by a "
+              "greedy brute the miners call Goldtooth. Every day they dig deeper and every night they raid the farms.$B$BFind "
+              "Fargodeep Pit, $N; somewhere off the farm roads, at a dead end. Break their tunnellers and miners, and put an end to Goldtooth.",
+              "Slay the kobolds of Fargodeep Pit, off the farmlands, and Goldtooth.",
               "Fargodeep's still crawling with them.",
               "Goldtooth, dead. The miners will sing about this one. But the kobolds were never our real problem.",
               {{ {{ "Kobold Tunneler", nullptr, nullptr }, 8 }, {{ "Kobold Miner", nullptr, nullptr }, 8 }, {{ nullptr, nullptr, nullptr }, 0 } }},
@@ -119,10 +119,10 @@ namespace
 
             { ACT_QUEST_FIRST + 3, SIDE_ALLIANCE, 12, 8, "Act I: Fire on the Farms",
               "Marshal Dughan", "Marshal Dughan",
-              "There it is. The Defias Brotherhood is burning the farms past the east gate: the Brackwell pumpkin "
-              "patch, the Maclure vineyards. Good folk driven off their land so the Brotherhood can take it.$B$BDrive "
+              "There it is. The Defias Brotherhood is burning the farms past the east gate, and they've a hideout off the "
+              "roads out there, among the burnt ones. Good folk driven off their land so the Brotherhood can take it.$B$BDrive "
               "them out, $N, and find whoever is giving the orders.",
-              "Drive the Defias from the Brackwell Pumpkin Patch and the Maclure Vineyards, and slay their leader.",
+              "Drive the Defias from their hideout off the farmlands, and slay their leader.",
               "The farms are still burning.",
               "That's one less Defias captain. They're not bandits, $N; they're an army, and they answer to someone.",
               {{ {{ "Defias Bandit", "Defias Cutpurse", nullptr }, 10 }, {{ "Defias Rogue Wizard", nullptr, nullptr }, 4 }, {{ nullptr, nullptr, nullptr }, 0 } }},
@@ -131,9 +131,10 @@ namespace
 
             { ACT_QUEST_FIRST + 4, SIDE_ALLIANCE, 12, 9, "Act I: Jasperlode",
               "Marshal Dughan", "Marshal Dughan",
-              "More kobolds out of Jasperlode Mine, roaming the farmlands past the east gate, and these ones have their "
-              "geomancers with them. The Eastvale loggers won't go near the hills.$B$BClear Jasperlode, $N.",
-              "Slay the kobolds of Jasperlode Mine.",
+              "More kobolds, and these ones have their geomancers with them: they've hollowed out the hills off "
+              "Forest's Edge, past the south gate, and spiders have moved in with them. The Eastvale loggers won't go "
+              "near.$B$BFind Jasperlode Hollow and clear it, $N.",
+              "Slay the kobolds of Jasperlode Hollow, off Forest's Edge.",
               "The loggers are still too scared to work.",
               "The road east is open again. You've earned a rest, but I've one more job, and it's the worst of them.",
               {{ {{ "Kobold Geomancer", nullptr, nullptr }, 8 }, {{ "Kobold Laborer", "Kobold Miner", nullptr }, 8 }, {{ nullptr, nullptr, nullptr }, 0 } }},

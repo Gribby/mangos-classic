@@ -31,6 +31,7 @@
 #include <string>
 #include <unordered_map>
 #include "Arpg/ArpgSets.h"
+#include "Arpg/ArpgPerks.h"
 #include "Arpg/ArpgProcs.h"
 
 namespace
@@ -780,6 +781,7 @@ namespace
         WebTotals totals = Sum(*web, taken);
         AddSkillTotals(player, totals);
         AddItemTotals(player, totals);
+        AddPerkTotals(player, totals);
         Edit(player, [&](PlayerWeb& w)
         {
             w.totals = std::make_shared<WebTotals const>(std::move(totals));
@@ -1050,14 +1052,16 @@ namespace Arpg
 
     uint32 TreePointsFor(Player const* player)
     {
-        // One every second level (30 at 60) and one per final boss first killed.
+        // One every second level (30 at 60), one per final boss first killed, and perks'
+        // (Arpg/ArpgPerks.h).
         uint32 const level = player->GetLevel();
-        return level / 2 + uint32(WebFor(player).bosses.size());
+        return level / 2 + uint32(WebFor(player).bosses.size()) + PerkWebPoints(player);
     }
 
     void LoadTree(Player* player)
     {
         EnsureTables();
+        LoadPerks(player);
         PlayerWeb w;
         w.classId = player->getClass();
         ClassWeb const* web = WebOf(w.classId);
@@ -1091,6 +1095,7 @@ namespace Arpg
     void UnloadTree(Player* player)
     {
         ForgetCharacter(player);
+        ForgetPerks(player);
         ForgetActions(player);
         ForgetTiers(player);
         UnloadSkills(player);

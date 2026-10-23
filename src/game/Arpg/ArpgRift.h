@@ -45,7 +45,9 @@
 #include "Common.h"
 
 class GridMap;
+class Creature;
 class Map;
+class Unit;
 class Player;
 
 namespace Arpg
@@ -73,6 +75,10 @@ namespace Arpg
     // creatures placed, its exit.
     void UpdateRift(Player* player);
     void ForgetRift(Player* player);
+    // A kill in a rift: a side area's boss gives its perk (Arpg/ArpgPerks.h) to the party there.
+    void OnRiftKill(Player* killer, Unit* victim);
+    // A rift creature's corpse loot was made: a side area's boss's hoard. True when it was one.
+    bool OnRiftBossLoot(Creature* victim);
     // A map is going: a rift instance's layout record.
     void ForgetRiftMap(Map const* map);
 }

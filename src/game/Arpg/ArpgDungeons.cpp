@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgActs.h"
@@ -933,6 +934,15 @@ namespace Arpg
     {
         if (!victim || !victim->m_loot)
             return;
+        // A rift's creature: an act finale's blue and a side area's hoard (Arpg/ArpgRift.h), then
+        // as any dungeon's.
+        if (IsRiftMap(victim->GetMapId()))
+        {
+            OnRiftBossLoot(victim);
+            // Off, the branch below gives the finale's blue.
+            if (DungeonsOn())
+                OnActBossLoot(victim);
+        }
         if (!DungeonsOn() || !victim->GetMap()->IsDungeon())
         {
             // An act's last leader: its guaranteed blue (Arpg/ArpgActs.h).

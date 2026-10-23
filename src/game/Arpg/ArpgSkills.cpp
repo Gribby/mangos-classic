@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgSkills.h"
+#include "Arpg/ArpgPerks.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgCharacter.h"
 #include "Arpg/ArpgTags.h"
@@ -1409,7 +1410,7 @@ namespace Arpg
             return false;
         }
         uint8 const classId = player->getClass();
-        uint32 const points = SkillPointsFor(player->GetLevel());
+        uint32 const points = (SkillPointsFor(player->GetLevel()) + PerkSkillPoints(player));
         std::map<uint8, uint8> gear;
         for (SkillDef const& skill : Skills())
             if (skill.classId == classId)
@@ -1677,7 +1678,7 @@ namespace Arpg
                 gearPoints += gear[skill->id];
         }
         Edit(player, [&](PlayerSkills& e) { e.gearSent = gear; });
-        data << uint16(SkillPointsFor(player->GetLevel()) + gearPoints);
+        data << uint16((SkillPointsFor(player->GetLevel()) + PerkSkillPoints(player)) + gearPoints);
         data << uint16(SpentIn(s));
         data << uint8(std::min<uint32>(player->GetLevel(), 255));
         data << uint8(SKILL_SLOTS);
@@ -1829,7 +1830,7 @@ namespace Arpg
                     uint8 const theirs = GearSkillLevels(player, other.id);
                     own += in > theirs ? in - theirs : 0;
                 }
-            if (own >= SkillPointsFor(player->GetLevel()))
+            if (own >= (SkillPointsFor(player->GetLevel()) + PerkSkillPoints(player)))
                 return refuse("no skill points left");
         }
         Edit(player, [&](PlayerSkills& e) { e.ranks[id] = rank + 1; });

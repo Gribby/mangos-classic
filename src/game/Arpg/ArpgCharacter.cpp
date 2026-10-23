@@ -6,6 +6,7 @@
 #include "Arpg/ArpgShaman.h"
 #include "Arpg/ArpgBoons.h"
 #include "Arpg/ArpgShrines.h"
+#include "Arpg/ArpgPerks.h"
 #include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgMinions.h"
 #include "Arpg/ArpgWarlock.h"
@@ -495,6 +496,8 @@ namespace
             if (!res.empty())
                 lines.push_back(Format("%sResistances: %s|r", SHEET_ARPG, res.c_str()));
         }
+        for (std::string const& perk : PerkSheetLines(player))
+            lines.push_back(Format("%s%s|r", SHEET_ARPG, perk.c_str()));
         std::string damage;
         for (uint8 tag = 0; tag < MAX_TAG; ++tag)
             if (tag != TAG_HEAL && t.tag[tag])
@@ -1887,6 +1890,7 @@ namespace Arpg
         OnPackMemberDied(victim);
         OnMageDeath(victim);
         CreditBossKill(killer, victim);
+        OnRiftKill(killer, victim);
         if (!Active(killer) || !killer->IsAlive())
             return;
         if (static_cast<Creature*>(victim)->GetCreatureInfo()->CreatureType == CREATURE_TYPE_CRITTER)
