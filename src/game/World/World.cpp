@@ -1104,6 +1104,8 @@ void World::SetInitialWorldSettings()
     sLog.outString("Loading Creature Spawn Entry Data..."); // must be before LoadCreatures
     sObjectMgr.LoadCreatureSpawnEntry();
 
+    // ARPG: Marshal McBride moves to Goldshire, Act I's hub (Arpg/ArpgActs.h).
+    Arpg::PlaceActNpcs();
     sLog.outString("Loading Creature Data...");
     sObjectMgr.LoadCreatures();
 

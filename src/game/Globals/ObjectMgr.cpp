@@ -64,6 +64,7 @@
 #include <cstdarg>
 #include <cstring>
 #include "Arpg/ArpgRift.h"
+#include "Arpg/ArpgActs.h"
 #include "Arpg/ArpgSets.h"
 
 INSTANTIATE_SINGLETON_1(ObjectMgr);
@@ -3982,6 +3983,22 @@ void ObjectMgr::ArpgOneStartPerFaction()
     if (!human.displayId_m || !orc.displayId_m)
         return;
     uint32 moved = 0;
+    // The Alliance's start: six yards in front of Marshal Dughan, facing him, where his world
+    // database spawn says he stands (Goldshire, Act I's hub); else a fixed spot in the town.
+    float sx = Arpg::GOLDSHIRE_START[0], sy = Arpg::GOLDSHIRE_START[1], sz = Arpg::GOLDSHIRE_START[2];
+    float so = Arpg::GOLDSHIRE_START[3];
+    {
+        float dx, dy, dz, dor;
+        if (Arpg::ActNpcSpot("Marshal Dughan", dx, dy, dz, dor))
+        {
+            sx = dx + std::cos(dor) * 6.0f;
+            sy = dy + std::sin(dor) * 6.0f;
+            sz = dz + 0.5f;
+            so = MapManager::NormalizeOrientation(dor + float(M_PI));
+        }
+        else
+            sLog.outError("ARPG acts: no Marshal Dughan on map 0; the Alliance starts at Goldshire's fixed spot");
+    }
     for (uint32 race = 1; race < MAX_RACES; ++race)
     {
         if (!(convertEnumToFlag(race) & RACEMASK_ALL_PLAYABLE))
@@ -4003,10 +4020,10 @@ void ObjectMgr::ArpgOneStartPerFaction()
             {
                 info.mapId = 0;
                 info.areaId = Arpg::GOLDSHIRE_AREA;
-                info.positionX = Arpg::GOLDSHIRE_START[0];
-                info.positionY = Arpg::GOLDSHIRE_START[1];
-                info.positionZ = Arpg::GOLDSHIRE_START[2];
-                info.orientation = Arpg::GOLDSHIRE_START[3];
+                info.positionX = sx;
+                info.positionY = sy;
+                info.positionZ = sz;
+                info.orientation = so;
             }
             ++moved;
         }

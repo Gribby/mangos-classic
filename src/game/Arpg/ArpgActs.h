@@ -8,10 +8,11 @@
  * quest log is the journal; vanilla's own quests stay as side quests, but those an act quest tells
  * again are taken off their givers.
  *
- * Act I, chapter 1: Elwynn Forest for the Alliance (Marshal McBride, then Marshal Dughan in
- * Goldshire, ending with Hogger), Durotar for the Horde (Gornek, then Gar'Thok in Razor Hill,
- * ending with Zalazane). Every Alliance character starts in Northshire and every Horde one in the
- * Valley of Trials, whatever its race (ObjectMgr::ArpgOneStartPerFaction), so the act has one road.
+ * Act I, chapter 1: Elwynn Forest for the Alliance (Marshal McBride and Marshal Dughan, both in
+ * Goldshire, Act I's hub; its areas end with Hogger), Durotar for the Horde (Gornek, then Gar'Thok
+ * in Razor Hill, ending with Zalazane). Every Alliance character starts in Goldshire before Dughan
+ * and every Horde one in the Valley of Trials, whatever its race
+ * (ObjectMgr::ArpgOneStartPerFaction), so the act has one road.
  *
  * Names, not numbers: the NPCs, creatures and vanilla quests are found by name in the world
  * database, so a name it lacks drops that objective (logged) and the act still loads.
@@ -42,6 +43,12 @@ namespace Arpg
 {
     // The act quests' entries start here.
     constexpr uint32 ACT_QUEST_FIRST = 59000;
+
+    // Before creatures load: Marshal McBride stands in Goldshire beside Dughan (Northshire has
+    // fallen; Goldshire is Act I's hub, Arpg/ArpgRift.h). His world database spawn is moved.
+    void PlaceActNpcs();
+    // A named NPC's spawn on map 0 (the first), from the world database: false if none.
+    bool ActNpcSpot(char const* name, float& x, float& y, float& z, float& o);
 
     // Before quests load: write the act quests and their givers and takers into the database.
     void EnsureActQuests();

@@ -92,15 +92,16 @@ namespace
             // Goldshire is the hub (Arpg/ArpgRift.h): a palisade, and gates into the areas the quests
             // send the character to.
             { ACT_QUEST_FIRST + 0, SIDE_ALLIANCE, 12, 3, "Act I: The Northshire Watch",
-              "Marshal Dughan", "Marshal Dughan",
-              "You've arrived at a poor time, $N. Goldshire's palisade holds, but only just. North through the gate, "
-              "kobolds have crawled out of Echo Ridge into the fields, and the Defias Brotherhood camps on the road to "
-              "Northshire. Their leader, a cutthroat called Garrick Padfoot, thinks the fields are his for the taking."
-              "$B$BClear the vermin out, break the thugs, and bring me Padfoot's end.",
+              "Marshal McBride", "Marshal McBride",
+              "You've arrived at a poor time, $N. Northshire has fallen; what's left of my Watch held the abbey as long "
+              "as it could, and now we hold Goldshire's palisade with Dughan. North through the gate, kobolds have "
+              "crawled out of Echo Ridge into the fields, and the Defias Brotherhood camps on the road to Northshire. "
+              "Their leader, a cutthroat called Garrick Padfoot, thinks the fields are his for the taking.$B$BClear the "
+              "vermin out, break the thugs, and bring me Padfoot's end.",
               "Slay the kobolds and Defias thugs of the Northshire Fields, through Goldshire's north gate, and Garrick Padfoot.",
               "The fields aren't safe yet, $N.",
-              "Well fought. Padfoot was only one of them, though; the Brotherhood is everywhere now, and I've more work "
-              "for a fighter like you.",
+              "Well fought. Padfoot was only one of them, though; the Brotherhood is everywhere now. Marshal Dughan, "
+              "here beside me, will want a fighter like you.",
               {{ {{ "Kobold Vermin", nullptr, nullptr }, 8 }, {{ "Defias Thug", nullptr, nullptr }, 6 }, {{ nullptr, nullptr, nullptr }, 0 } }},
               "Garrick Padfoot", LEAD_CHAMPION, "Extra Strong", 450, 100,
               {{ "Garrick Padfoot", "Kobold Camp Cleanup", nullptr }} },
@@ -837,6 +838,49 @@ namespace Arpg
             return;
         LeaveAll(player, it->second, false);
         sRuns.erase(it);
+    }
+
+    bool ActNpcSpot(char const* name, float& x, float& y, float& z, float& o)
+    {
+        std::string escaped = name;
+        WorldDatabase.escape_string(escaped);
+        auto result = WorldDatabase.PQuery("SELECT c.position_x, c.position_y, c.position_z, c.orientation FROM creature c "
+                                           "JOIN creature_template t ON t.Entry = c.id WHERE t.Name = '%s' AND c.map = 0 "
+                                           "ORDER BY c.guid LIMIT 1", escaped.c_str());
+        if (!result)
+            return false;
+        Field* f = result->Fetch();
+        x = f[0].GetFloat();
+        y = f[1].GetFloat();
+        z = f[2].GetFloat();
+        o = f[3].GetFloat();
+        return true;
+    }
+
+    void PlaceActNpcs()
+    {
+        if (!ActsOn())
+            return;
+        float x, y, z, o;
+        if (!ActNpcSpot("Marshal Dughan", x, y, z, o))
+        {
+            sLog.outError("ARPG acts: no Marshal Dughan on map 0; Marshal McBride stays where he is");
+            return;
+        }
+        auto result = WorldDatabase.PQuery("SELECT c.guid FROM creature c JOIN creature_template t ON t.Entry = c.id "
+                                           "WHERE t.Name = 'Marshal McBride' AND c.map = 0 ORDER BY c.guid LIMIT 1");
+        if (!result)
+        {
+            sLog.outError("ARPG acts: no Marshal McBride on map 0; the Northshire Watch has no giver");
+            return;
+        }
+        uint32 const guid = result->Fetch()[0].GetUInt32();
+        // At Dughan's right hand, facing as he does.
+        float const side = o - float(M_PI) / 2.0f;
+        WorldDatabase.DirectPExecute("UPDATE creature SET position_x = %f, position_y = %f, position_z = %f, orientation = %f, "
+                                     "spawndist = 0, MovementType = 0 WHERE guid = %u",
+                                     x + std::cos(side) * 3.0f, y + std::sin(side) * 3.0f, z, o, guid);
+        sLog.outString("ARPG acts: Marshal McBride stands in Goldshire beside Marshal Dughan");
     }
 
     std::vector<uint32> NativesWithin(uint32 map, float minX, float maxX, float minY, float maxY, uint32 minSpawns)
