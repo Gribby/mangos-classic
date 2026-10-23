@@ -77,6 +77,8 @@ namespace
     constexpr float PORTAL_TOWN_AHEAD = 4.0f;
     constexpr float PORTAL_STEP = 1.8f;
     constexpr uint32 PORTAL_SETTLE_MS = 2500;
+    // The town end waits this long for the player to arrive in town (a far teleport's loading).
+    constexpr uint32 PORTAL_ARRIVE_MS = 60 * IN_MILLISECONDS;
     // A death's checkpoint gives back this share of health and mana.
     constexpr float CHECKPOINT_RESTORE = 0.5f;
 
@@ -107,6 +109,7 @@ namespace
         ObjectGuid fieldDoor, townDoor;
         std::pair<uint32, uint32> fieldDoorOn{ 0, 0 }, townDoorOn{ 0, 0 };
         bool placeTownDoor = false;
+        uint32 placeTownSince = 0;  // when the town end was asked for: it waits a while only
         bool closeFieldDoor = false;
         uint32 arrivedAt = 0;
         // Where the player came into each map (and instance) it has been in: a dungeon death rises
@@ -494,10 +497,16 @@ namespace Arpg
                 DungeonPersistentState* bound = player->GetBoundInstanceSaveForSelfOrGroup(back.map);
                 if (!bound || bound->GetInstanceId() != backInstance)
                 {
+                    ObjectGuid townDoor;
                     {
                         std::lock_guard<std::mutex> guard(sActionsLock);
-                        sStates[player->GetObjectGuid()].returnUntil = 0;
+                        State& s = sStates[player->GetObjectGuid()];
+                        s.returnUntil = 0;
+                        if (s.townDoorOn == std::make_pair(player->GetMapId(), player->GetInstanceId()))
+                            townDoor = s.townDoor;
+                        s.townDoor = ObjectGuid();
                     }
+                    TakeDownDoor(player, townDoor);
                     chat.SendSysMessage("|cffff8080Your portal has closed: that dungeon is not the one you left.|r");
                     return;
                 }
@@ -663,11 +672,20 @@ namespace Arpg
             ShowPortalSwirl(player, false, true);
             // The portal stands where it opened while the way back is open; its other end rises in
             // town as the player arrives.
+            ObjectGuid oldField;
+            {
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State const& s = sStates[player->GetObjectGuid()];
+                if (s.fieldDoorOn == std::make_pair(player->GetMapId(), player->GetInstanceId()))
+                    oldField = s.fieldDoor;
+            }
+            TakeDownDoor(player, oldField);
             ObjectGuid const door = ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(),
                                                    player->GetOrientation(), PORTAL_STAND_SECS);
             {
                 std::lock_guard<std::mutex> guard(sActionsLock);
                 State& s = sStates[player->GetObjectGuid()];
+                s.placeTownSince = now ? now : 1;
                 s.fieldDoor = door;
                 s.fieldDoorOn = { player->GetMapId(), player->GetInstanceId() };
                 s.placeTownDoor = true;
@@ -682,16 +700,25 @@ namespace Arpg
         if (player->IsInWorld() && !player->IsBeingTeleported() && player->IsAlive())
         {
             std::pair<uint32, uint32> const here{ player->GetMapId(), player->GetInstanceId() };
+            // Arrival is being in town, not a change of map: home is often on the same map as
+            // the field (a near teleport), and a map changed later (a boat) is not town.
+            bool const inTown = InTown(player);
             bool placeTown = false, walkIn = false;
-            ObjectGuid closeField, townDoor;
+            ObjectGuid closeField, townDoor, oldTownDoor;
             {
                 std::lock_guard<std::mutex> guard(sActionsLock);
                 State& s = sStates[player->GetObjectGuid()];
-                if (s.placeTownDoor && here != s.fieldDoorOn)
+                if (s.placeTownDoor && s.placeTownSince && WorldTimer::getMSTimeDiff(s.placeTownSince, now) > PORTAL_ARRIVE_MS)
+                    s.placeTownDoor = false;
+                if (s.placeTownDoor && inTown)
                 {
                     s.placeTownDoor = false;
                     s.arrivedAt = now ? now : 1;
                     placeTown = Later(s.returnUntil, now);
+                    // A town end left from an earlier portal on this map comes down first.
+                    if (s.townDoorOn == here)
+                        oldTownDoor = s.townDoor;
+                    s.townDoor = ObjectGuid();
                 }
                 if (s.closeFieldDoor && here == s.fieldDoorOn)
                 {
@@ -704,6 +731,7 @@ namespace Arpg
                          (!s.arrivedAt || WorldTimer::getMSTimeDiff(s.arrivedAt, now) >= PORTAL_SETTLE_MS);
             }
             TakeDownDoor(player, closeField);
+            TakeDownDoor(player, oldTownDoor);
             if (placeTown)
             {
                 float const o = player->GetOrientation();
@@ -760,7 +788,22 @@ namespace Arpg
     {
         if (!player)
             return;
-        std::lock_guard<std::mutex> guard(sActionsLock);
-        sStates.erase(player->GetObjectGuid());
+        // A portal's end on the player's map comes down with it; one elsewhere times out.
+        ObjectGuid ends[2];
+        {
+            std::lock_guard<std::mutex> guard(sActionsLock);
+            auto it = sStates.find(player->GetObjectGuid());
+            if (it != sStates.end())
+            {
+                std::pair<uint32, uint32> const here{ player->GetMapId(), player->GetInstanceId() };
+                if (it->second.fieldDoorOn == here)
+                    ends[0] = it->second.fieldDoor;
+                if (it->second.townDoorOn == here)
+                    ends[1] = it->second.townDoor;
+                sStates.erase(it);
+            }
+        }
+        for (ObjectGuid const& end : ends)
+            TakeDownDoor(player, end);
     }
 }
