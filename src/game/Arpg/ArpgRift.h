@@ -39,7 +39,11 @@
  *     then uint8 sites, and per site uint8 kind (1 farmstead, 2 crop plot, 3 gnoll camp,
  *     4 watchtower, 5 logging site, 6 Defias camp, 7 wolf den), float x, y, z (its levelled
  *     ground), orientation, radius; then uint8 flavour (0 none, 1 webs, 2 candles, 3 dig works,
- *     4 burnt farms, 5 wolf woods, 6 warren).
+ *     4 burnt farms, 5 wolf woods, 6 warren); then uint8 sites again, and per site its building:
+ *     a string (the vmaps model name, which is the WMO's file name; empty where it raised none, and
+ *     the client dresses the site from its own pick, without collision) and float z
+ *     (its origin's height). The server's collision is that model's, standing at the site's x, y
+ *     and that z, turned the site's orientation.
  *   kind 2, heights: uint8 2, uint32 layout id, uint16 first row, uint16 rows, then rows x 257
  *     int16: (height - base) * 8, row i, column j. An inner (cell centre) height is its four
  *     corners' mean.
@@ -50,11 +54,14 @@
 
 #include "Common.h"
 
+#include <vector>
+
 class GridMap;
 class Creature;
 class Map;
 class Unit;
 class Player;
+namespace G3D { class Vector3; }
 
 namespace Arpg
 {
@@ -85,8 +92,11 @@ namespace Arpg
     void OnRiftKill(Player* killer, Unit* victim);
     // A rift creature's corpse loot was made: a side area's boss's hoard. True when it was one.
     bool OnRiftBossLoot(Creature* victim);
-    // A map is going: a rift instance's layout record.
-    void ForgetRiftMap(Map const* map);
+    // A map is going: a rift instance's layout record, its buildings' collision.
+    void ForgetRiftMap(Map* map);
+    // A creature's straight walk on the rift map (no navmesh): round the area's buildings, by
+    // their corners, when one stands in the way. `points` is the walk's start and end.
+    void RiftDetour(Map const* map, std::vector<G3D::Vector3>& points);
 }
 
 #endif

@@ -125,6 +125,8 @@ namespace VMAP
             bool readFile(const std::string& filename);
             void setModelFlags(uint32 newFlags) { modelFlags = newFlags; }
             uint32 getModelFlags() const { return modelFlags; }
+            //! the groups' bounds merged (model space); zero with no groups
+            G3D::AABox getBounds() const;
         protected:
             uint32 RootWMOID;
             std::vector<GroupModel> groupModels;

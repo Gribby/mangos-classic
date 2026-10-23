@@ -332,6 +332,7 @@ namespace VMAP
 
     void VMapManager2::releaseModelInstance(const std::string& filename)
     {
+        std::lock_guard<std::mutex> lock(m_vmModelMutex);
         ModelFileMap::iterator model = iLoadedModelFiles.find(filename);
         if (model == iLoadedModelFiles.end())
         {

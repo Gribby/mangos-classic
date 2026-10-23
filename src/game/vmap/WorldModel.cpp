@@ -425,6 +425,16 @@ namespace VMAP
         bool hit;
     };
 
+    G3D::AABox WorldModel::getBounds() const
+    {
+        if (groupModels.empty())
+            return G3D::AABox::zero();
+        G3D::AABox bounds = groupModels[0].GetBound();
+        for (size_t i = 1; i < groupModels.size(); ++i)
+            bounds.merge(groupModels[i].GetBound());
+        return bounds;
+    }
+
     bool WorldModel::IntersectRay(const G3D::Ray& ray, float& distance, bool stopAtFirstHit, bool ignoreM2Model) const
     {
         if (ignoreM2Model && (modelFlags & MOD_M2))

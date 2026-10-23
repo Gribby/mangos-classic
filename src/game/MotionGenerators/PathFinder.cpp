@@ -23,6 +23,7 @@
 #include "Log/Log.h"
 #include "World/World.h"
 #include "Entities/Transports.h"
+#include "Arpg/ArpgRift.h"
 #include <Detour/Include/DetourCommon.h>
 #include <Detour/Include/DetourMath.h>
 
@@ -1014,6 +1015,10 @@ void PathFinder::BuildShortcut()
     // set start and a default next position
     m_pathPoints[0] = getStartPosition();
     m_pathPoints[1] = getActualEndPosition();
+
+    // ARPG: an area's buildings stand in a straight walk's way (no navmesh there).
+    if (m_sourceUnit && Arpg::IsRiftMap(m_sourceUnit->GetMapId()))
+        Arpg::RiftDetour(m_sourceUnit->GetMap(), m_pathPoints);
 
     NormalizePath();
 

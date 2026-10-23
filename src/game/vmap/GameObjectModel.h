@@ -60,6 +60,9 @@ class GameObjectModel
         bool intersectRay(const G3D::Ray& ray, float& MaxDist, bool StopAtFirstHit, bool ignoreM2Model) const;
 
         static GameObjectModel* construct(const GameObject* const pGo);
+        // A model by its vmaps name standing at (x, y, z) turned o, with no game object behind it:
+        // an ARPG area's building (Arpg/ArpgRift.cpp).
+        static GameObjectModel* constructNamed(std::string const& modelName, float x, float y, float z, float o);
 
         bool Relocate(GameObject const& go);
 };

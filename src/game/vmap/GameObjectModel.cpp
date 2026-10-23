@@ -141,6 +141,35 @@ GameObjectModel* GameObjectModel::construct(const GameObject* const pGo)
     return mdl;
 }
 
+GameObjectModel* GameObjectModel::constructNamed(std::string const& modelName, float x, float y, float z, float o)
+{
+    VMAP::WorldModel* model = ((VMAP::VMapManager2*)VMAP::VMapFactory::createOrGetVMapManager())->acquireModelInstance(sWorld.GetDataPath() + "vmaps/", modelName);
+    if (!model)
+        return nullptr;
+
+    GameObjectModel* mdl = new GameObjectModel();
+    mdl->iModel = model;
+    mdl->name = modelName;
+    G3D::AABox const mdl_box = model->getBounds();
+    if (mdl_box == G3D::AABox::zero())
+    {
+        delete mdl;
+        return nullptr;
+    }
+
+    mdl->iPos = Vector3(x, y, z);
+    mdl->collision_enabled = true;
+    mdl->iScale = 1.0f;
+    mdl->iInvScale = 1.0f;
+    G3D::Matrix3 iRotation = G3D::Matrix3::fromEulerAnglesZYX(o, 0, 0);
+    mdl->iInvRot = iRotation.inverse();
+    AABox rotated_bounds;
+    for (int i = 0; i < 8; ++i)
+        rotated_bounds.merge(iRotation * mdl_box.corner(i));
+    mdl->iBound = rotated_bounds + mdl->iPos;
+    return mdl;
+}
+
 bool GameObjectModel::intersectRay(const G3D::Ray& ray, float& MaxDist, bool StopAtFirstHit, bool ignoreM2Model) const
 {
     if (!collision_enabled)

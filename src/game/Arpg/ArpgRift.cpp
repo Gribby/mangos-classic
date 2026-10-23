@@ -29,8 +29,17 @@
 #include "Server/WorldSession.h"
 #include "Util/Timer.h"
 #include "World/World.h"
+#include "vmap/GameObjectModel.h"
+#include "vmap/MapTree.h"
+#include "vmap/ModelInstance.h"
+#include "vmap/VMapDefinitions.h"
+#include "vmap/VMapFactory.h"
+#include "vmap/VMapManager2.h"
+#include "vmap/WorldModel.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <array>
 #include <cmath>
 #include <deque>
@@ -148,6 +157,28 @@ namespace
         FLAVOUR_NONE = 0, FLAVOUR_WEBS, FLAVOUR_CANDLES, FLAVOUR_DIG, FLAVOUR_BURNT, FLAVOUR_WOLVES, FLAVOUR_WARREN
     };
     constexpr float SITE_BLEND = 6.0f;              // yards the levelled ground blends back over
+
+    // The buildings a farmstead or a watchtower raises: Elwynn's own WMOs, as its vmaps name them
+    // (the client draws the one named, from its source tiles), each standing where the site is
+    // and turned its way. Their collision is the vmaps model's, put into the instance's map
+    // (Map's dynamic tree) where line of sight, bolts and heights meet it; a creature walking
+    // straight goes round its footprint (RiftDetour).
+    enum BuildingUse : uint8 { USE_HOUSE, USE_TOWER, USE_BURNT };
+    struct Building
+    {
+        std::string name;
+        BuildingUse use;
+        uint8 gx, gy;                               // the source grid it stood in
+        float lift;                                 // its origin over the ground it stood on
+        float lo[2], hi[2];                         // its footprint, model space (X, Y)
+    };
+    // Where the hideout's burnt farms come from (the client's `borrowed_sources`, FLAVOUR_BURNT).
+    std::pair<int, int> const BURNT_GRIDS[] = { { 51, 29 }, { 52, 29 }, { 52, 30 }, { 53, 30 } };
+    // Names that are no farmstead's: the towns', the abbey, the walls and the mines.
+    char const* const GRAND[] = { "abbey", "church", "cathedral", "stormwind", "keep", "wall", "bridge", "inn", "mine",
+                                  "cave", "dungeon", "azora" };
+    constexpr float FOOT_PAD = 1.0f;                // a footprint's margin for a walk round it
+    constexpr float FOOT_TURN = 1.8f;               // the corners a walk turns at, out from the walls
     constexpr int SITE_APART = 4;                   // chunks between sites, at least
 
     struct AreaDef
@@ -292,6 +323,7 @@ namespace
         {
             SiteKind kind = SITE_NONE;
             float x = 0, y = 0, z = 0, o = 0, radius = 0;
+            int building = -1;                      // its building (sBuildings), -1 none
         };
         std::vector<Site> sites;
 
@@ -324,6 +356,7 @@ namespace
     std::vector<Piece> sLibrary;
     std::vector<uint32> sFlat;                      // the flat pieces' indexes
     std::vector<uint32> sPool[MAX_KIND], sPoolFlat[MAX_KIND];   // each kind's pieces
+    std::vector<Building> sBuildings;               // built with the library
     bool sLibraryBuilt = false;
     bool sRegistered = false;
     std::set<uint32> sObjectReady;                  // the object templates written
@@ -341,6 +374,20 @@ namespace
     bool sHubPlaced = false;
     float sGateZ[MAX_GATE] = { HUB_Z, HUB_Z, HUB_Z, HUB_Z };
     std::unordered_map<ObjectGuid, PlayerRift> sPlayers;
+    // An instance's buildings standing: their collision in its map, and their footprints for
+    // creatures to walk round. Under sWallLock (path finding asks from the maps' threads).
+    struct Footprint
+    {
+        float x, y, c, s;                           // where it stands, its turn's cosine and sine
+        float lo[2], hi[2];                         // model space, padded
+    };
+    struct Walls
+    {
+        std::vector<std::unique_ptr<GameObjectModel>> models;
+        std::vector<Footprint> feet;
+    };
+    std::mutex sWallLock;
+    std::unordered_map<uint32, Walls> sWalls;
     ObjectGuid sStones[STONE_COUNT];
     float sStoneZ[STONE_COUNT] = { STONES[0].z, STONES[1].z };
     MapEntry sRiftEntry;
@@ -358,6 +405,8 @@ namespace
     }
 
     // --- The piece library ---
+
+    void BuildBuildings();
 
     void BuildLibrary()
     {
@@ -437,6 +486,7 @@ namespace
             }
         }
         sLog.outString("ARPG rifts: %u pieces of Elwynn Forest, %u of them flat", uint32(sLibrary.size()), uint32(sFlat.size()));
+        BuildBuildings();
         // Each area's pieces: from its part of the forest, else (too few there) all of it.
         for (int kind = 0; kind < MAX_KIND; ++kind)
         {
@@ -463,6 +513,102 @@ namespace
             sLog.outString("ARPG rifts: %s takes %u pieces, %u flat", area.name, uint32(sPool[kind].size()),
                            uint32(sPoolFlat[kind].size()));
         }
+    }
+
+    // Whether a lowercased name has any of the words.
+    template <size_t N>
+    bool Named(std::string const& lower, char const* const (&words)[N])
+    {
+        for (char const* word : words)
+            if (lower.find(word) != std::string::npos)
+                return true;
+        return false;
+    }
+
+    // The buildings: every WMO standing in the source grids (and the burnt farms' grids) that is
+    // a farm's house or barn, a watchtower or a burnt farm, from map 0's vmaps. Under sLock.
+    void BuildBuildings()
+    {
+        std::string const vmaps = sWorld.GetDataPath() + "vmaps/";
+        VMAP::VMapManager2* manager = static_cast<VMAP::VMapManager2*>(VMAP::VMapFactory::createOrGetVMapManager());
+        std::set<std::string> seen;
+        auto grid = [&](int gx, int gy, bool burntOnly)
+        {
+            std::string const file = vmaps + VMAP::StaticMapTree::getTileFileName(SRC_MAP, uint32(gx), uint32(gy));
+            FILE* tf = fopen(file.c_str(), "rb");
+            if (!tf)
+                return;
+            char path[1024];
+            snprintf(path, sizeof(path), "%smaps/%03u%02u%02u.map", sWorld.GetDataPath().c_str(), SRC_MAP, gx, gy);
+            GridMap ground;
+            bool const hasGround = ground.loadData(path);
+            char magic[8];
+            uint32 spawns = 0;
+            if (fread(magic, 1, 8, tf) != 8 || memcmp(magic, VMAP::VMAP_MAGIC, 8) != 0 || fread(&spawns, sizeof(uint32), 1, tf) != 1)
+                spawns = 0;
+            float const mid = 0.5f * 64.0f * TILE;
+            for (uint32 n = 0; n < spawns; ++n)
+            {
+                VMAP::ModelSpawn spawn;
+                uint32 referenced;
+                if (!VMAP::ModelSpawn::readFromFile(tf, spawn) || fread(&referenced, sizeof(uint32), 1, tf) != 1)
+                    break;
+                if ((spawn.flags & VMAP::MOD_M2) || seen.count(spawn.name))
+                    continue;
+                // Its own grid's (one reaching over from the next is that grid's).
+                float const x = mid - spawn.iPos.x, y = mid - spawn.iPos.y;
+                if (int(32 - x / TILE) != gx || int(32 - y / TILE) != gy)
+                    continue;
+                std::string lower = spawn.name;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                if (Named(lower, GRAND))
+                    continue;
+                static char const* const BURNT[] = { "burnt", "burned", "destroyed", "ruin" };
+                static char const* const FARM[] = { "farm", "barn", "house", "shack", "cottage", "mill" };
+                static char const* const TOWER[] = { "tower" };
+                bool const burnt = Named(lower, BURNT), farm = Named(lower, FARM);
+                Building building;
+                if (burnt && farm)
+                    building.use = USE_BURNT;
+                else if (burntOnly)
+                    continue;
+                else if (Named(lower, TOWER))
+                    building.use = USE_TOWER;
+                else if (farm && !burnt)
+                    building.use = USE_HOUSE;
+                else
+                    continue;
+                VMAP::WorldModel* model = manager->acquireModelInstance(vmaps, spawn.name);
+                if (!model)
+                    continue;
+                G3D::AABox const bounds = model->getBounds();
+                manager->releaseModelInstance(spawn.name);
+                if (bounds == G3D::AABox::zero())
+                    continue;
+                seen.insert(spawn.name);
+                float const groundZ = hasGround ? ground.getHeight(x, y) : INVALID_HEIGHT;
+                building.name = spawn.name;
+                building.gx = uint8(gx);
+                building.gy = uint8(gy);
+                building.lift = groundZ > INVALID_HEIGHT ? spawn.iPos.z - groundZ : 0.0f;
+                building.lo[0] = bounds.low().x;
+                building.lo[1] = bounds.low().y;
+                building.hi[0] = bounds.high().x;
+                building.hi[1] = bounds.high().y;
+                sBuildings.push_back(building);
+            }
+            fclose(tf);
+        };
+        for (int gx = SRC_GX_FROM; gx <= SRC_GX_TO; ++gx)
+            for (int gy = SRC_GY_FROM; gy <= SRC_GY_TO; ++gy)
+                grid(gx, gy, false);
+        for (auto const& [gx, gy] : BURNT_GRIDS)
+            grid(gx, gy, true);
+        uint32 count[3] = {};
+        for (Building const& building : sBuildings)
+            ++count[building.use];
+        sLog.outString("ARPG rifts: %u farm buildings, %u towers, %u burnt farms from the vmaps%s", count[USE_HOUSE],
+                       count[USE_TOWER], count[USE_BURNT], sBuildings.empty() ? " (none: the areas' buildings stand without collision)" : "");
     }
 
     // --- The layout ---
@@ -913,6 +1059,9 @@ namespace
             }
             std::shuffle(clear.begin(), clear.end(), rng);
             std::uniform_real_distribution<float> turn(0.0f, 2.0f * float(M_PI));
+            std::vector<std::pair<uint8, uint8>> sourceGrids;
+            for (uint32 index : layout->pieces)
+                sourceGrids.emplace_back(sLibrary[index].gx, sLibrary[index].gy);
             for (auto const& [siteKind, count] : AREAS[kind].sites)
             {
                 for (uint8 n = 0; n < count && siteKind != SITE_NONE; ++n)
@@ -953,6 +1102,28 @@ namespace
                         }
                     }
                     site.z = BASE + level / HEIGHT_STEP;
+                    // Its building: one from the area's own grids; the hideout's farms burnt.
+                    if (siteKind == SITE_FARMSTEAD || siteKind == SITE_TOWER)
+                    {
+                        BuildingUse use = siteKind == SITE_TOWER ? USE_TOWER : USE_HOUSE;
+                        bool const burnt = siteKind == SITE_FARMSTEAD && AREAS[kind].flavour == FLAVOUR_BURNT;
+                        std::vector<int> own, burnts;
+                        for (int b = 0; b < int(sBuildings.size()); ++b)
+                        {
+                            Building const& building = sBuildings[b];
+                            if (building.use == USE_BURNT)
+                                burnts.push_back(b);
+                            if (building.use != use)
+                                continue;
+                            if (std::find(sourceGrids.begin(), sourceGrids.end(), std::make_pair(building.gx, building.gy)) != sourceGrids.end())
+                                own.push_back(b);
+                        }
+                        // Only those the client has (its tiles are the area's pieces' and, for the
+                        // burnt farms, the borrowed grids'); none, and the client picks its own.
+                        std::vector<int> const& from = burnt && !burnts.empty() ? burnts : own;
+                        if (!from.empty())
+                            site.building = from[rng() % from.size()];
+                    }
                     layout->sites.push_back(site);
                 }
             }
@@ -1069,6 +1240,14 @@ namespace
         for (Layout::Site const& site : layout.sites)
             data << uint8(site.kind) << float(site.x) << float(site.y) << float(site.z) << float(site.o) << float(site.radius);
         data << uint8(AREAS[layout.kind].flavour);
+        // Each site's building (its vmaps name, empty for none) and the height its origin stands
+        // at: the client draws that one, where its collision is.
+        data << uint8(layout.sites.size());
+        for (Layout::Site const& site : layout.sites)
+        {
+            Building const* building = site.building >= 0 ? &sBuildings[site.building] : nullptr;
+            data << (building ? building->name : std::string()) << float(building ? site.z + building->lift : site.z);
+        }
         player->GetSession()->SendPacket(data);
         for (int row = 0; row < NODES; row += ROWS_PER_PACKET)
         {
@@ -1100,6 +1279,105 @@ namespace
         return go;
     }
 
+    void ToFoot(Footprint const& foot, float x, float y, float& u, float& v);
+
+    // The layout's buildings' collision, into its instance's map; their footprints.
+    void RaiseBuildings(Map* map, Layout const& layout)
+    {
+        // The models read from disk first: path finding waits on the lock.
+        std::vector<std::pair<std::unique_ptr<GameObjectModel>, Footprint>> raised;
+        for (Layout::Site const& site : layout.sites)
+        {
+            if (site.building < 0)
+                continue;
+            Building const& building = sBuildings[site.building];
+            GameObjectModel* model = GameObjectModel::constructNamed(building.name, site.x, site.y, site.z + building.lift, site.o);
+            if (!model)
+                continue;
+            map->InsertGameObjectModel(*model);
+            Footprint foot;
+            foot.x = site.x;
+            foot.y = site.y;
+            foot.c = std::cos(site.o);
+            foot.s = std::sin(site.o);
+            for (int k = 0; k < 2; ++k)
+            {
+                foot.lo[k] = building.lo[k] - FOOT_PAD;
+                foot.hi[k] = building.hi[k] + FOOT_PAD;
+            }
+            raised.emplace_back(std::unique_ptr<GameObjectModel>(model), foot);
+        }
+        std::lock_guard<std::mutex> guard(sWallLock);
+        Walls& walls = sWalls[map->GetInstanceId()];
+        for (auto& [model, foot] : raised)
+        {
+            walls.models.push_back(std::move(model));
+            walls.feet.push_back(foot);
+        }
+    }
+
+    // The nearest point just outside a footprint, from one inside it.
+    void OutOfFoot(Footprint const& foot, float& x, float& y)
+    {
+        float u, v;
+        ToFoot(foot, x, y, u, v);
+        float const out = FOOT_TURN - FOOT_PAD;
+        float const gaps[4] = { u - foot.lo[0], foot.hi[0] - u, v - foot.lo[1], foot.hi[1] - v };
+        int const side = int(std::min_element(gaps, gaps + 4) - gaps);
+        if (side == 0)
+            u = foot.lo[0] - out;
+        else if (side == 1)
+            u = foot.hi[0] + out;
+        else if (side == 2)
+            v = foot.lo[1] - out;
+        else
+            v = foot.hi[1] + out;
+        x = foot.x + u * foot.c - v * foot.s;
+        y = foot.y + u * foot.s + v * foot.c;
+    }
+
+    // A point in a footprint's model space.
+    void ToFoot(Footprint const& foot, float x, float y, float& u, float& v)
+    {
+        float const dx = x - foot.x, dy = y - foot.y;
+        u = dx * foot.c + dy * foot.s;
+        v = -dx * foot.s + dy * foot.c;
+    }
+
+    bool InFoot(Footprint const& foot, float x, float y)
+    {
+        float u, v;
+        ToFoot(foot, x, y, u, v);
+        return u > foot.lo[0] && u < foot.hi[0] && v > foot.lo[1] && v < foot.hi[1];
+    }
+
+    // Whether the walk from a to b crosses the footprint (clipped against its box, Liang-Barsky).
+    bool CrossesFoot(Footprint const& foot, G3D::Vector3 const& a, G3D::Vector3 const& b)
+    {
+        float au, av, bu, bv;
+        ToFoot(foot, a.x, a.y, au, av);
+        ToFoot(foot, b.x, b.y, bu, bv);
+        float t0 = 0.0f, t1 = 1.0f;
+        float const d[2] = { bu - au, bv - av }, p0[2] = { au, av };
+        for (int k = 0; k < 2; ++k)
+        {
+            if (std::fabs(d[k]) < 1e-6f)
+            {
+                if (p0[k] <= foot.lo[k] || p0[k] >= foot.hi[k])
+                    return false;
+                continue;
+            }
+            float ta = (foot.lo[k] - p0[k]) / d[k], tb = (foot.hi[k] - p0[k]) / d[k];
+            if (ta > tb)
+                std::swap(ta, tb);
+            t0 = std::max(t0, ta);
+            t1 = std::min(t1, tb);
+            if (t0 >= t1)
+                return false;
+        }
+        return true;
+    }
+
     // The area's creatures, its exit and its way back: once a layout.
     void Populate(Player* player, Layout const& layout)
     {
@@ -1118,6 +1396,8 @@ namespace
         for (Layout::Branch const& branch : layout.branches)
             if (branch.kind != MAX_KIND && sObjectReady.count(AREAS[branch.kind].door))
                 PlaceObject(map, AREAS[branch.kind].door, branch.x, branch.y, branch.z, EXIT_SECS);
+
+        RaiseBuildings(map, layout);
 
         std::vector<uint32> const natives = NativesOf(layout.kind);
         if (natives.empty())
@@ -1937,10 +2217,124 @@ namespace Arpg
         return true;
     }
 
-    void ForgetRiftMap(Map const* map)
+    void RiftDetour(Map const* map, std::vector<G3D::Vector3>& points)
+    {
+        if (!map || points.size() != 2)
+            return;
+        std::vector<Footprint> feet;
+        {
+            std::lock_guard<std::mutex> guard(sWallLock);
+            auto it = sWalls.find(map->GetInstanceId());
+            if (it == sWalls.end())
+                return;
+            feet = it->second.feet;
+        }
+        G3D::Vector3 const start = points[0], end = points[1];
+        // A walk starting or ending in a footprint (by a wall, under the eaves, in a house) is
+        // routed to just outside it, the last step on from there. A point still in another
+        // footprint after that (two close together) leaves that one out.
+        G3D::Vector3 from = start, to = end;
+        for (Footprint const& foot : feet)
+        {
+            if (InFoot(foot, from.x, from.y))
+                OutOfFoot(foot, from.x, from.y);
+            if (InFoot(foot, to.x, to.y))
+                OutOfFoot(foot, to.x, to.y);
+        }
+        std::vector<bool> skip(feet.size());
+        for (size_t f = 0; f < feet.size(); ++f)
+            skip[f] = InFoot(feet[f], from.x, from.y) || InFoot(feet[f], to.x, to.y);
+        auto clear = [&](G3D::Vector3 const& a, G3D::Vector3 const& b)
+        {
+            for (size_t f = 0; f < feet.size(); ++f)
+                if (!skip[f] && CrossesFoot(feet[f], a, b))
+                    return false;
+            return true;
+        };
+        bool const moved = from != start || to != end;
+        if (!moved && clear(from, to))
+            return;
+        // The shortest way by the footprints' corners, a little out from them.
+        std::vector<G3D::Vector3> nodes = { from, to };
+        for (size_t f = 0; f < feet.size(); ++f)
+        {
+            if (skip[f])
+                continue;
+            Footprint const& foot = feet[f];
+            float const turn = FOOT_TURN - FOOT_PAD;
+            for (int corner = 0; corner < 4; ++corner)
+            {
+                float const u = (corner & 1) ? foot.hi[0] + turn : foot.lo[0] - turn;
+                float const v = (corner & 2) ? foot.hi[1] + turn : foot.lo[1] - turn;
+                G3D::Vector3 const node(foot.x + u * foot.c - v * foot.s, foot.y + u * foot.s + v * foot.c, from.z);
+                bool inside = false;
+                for (size_t g = 0; g < feet.size() && !inside; ++g)
+                    inside = !skip[g] && InFoot(feet[g], node.x, node.y);
+                if (!inside)
+                    nodes.push_back(node);
+            }
+        }
+        size_t const n = nodes.size();
+        std::vector<float> best(n, 1e30f);
+        std::vector<int> before(n, -1);
+        std::vector<bool> done(n, false);
+        best[0] = 0.0f;
+        for (size_t round = 0; round < n; ++round)
+        {
+            int at = -1;
+            for (size_t k = 0; k < n; ++k)
+                if (!done[k] && best[k] < 1e30f && (at < 0 || best[k] < best[at]))
+                    at = int(k);
+            if (at < 0 || at == 1)
+                break;
+            done[at] = true;
+            for (size_t k = 0; k < n; ++k)
+            {
+                if (done[k])
+                    continue;
+                float const step = std::hypot(nodes[k].x - nodes[at].x, nodes[k].y - nodes[at].y);
+                if (best[at] + step < best[k] && clear(nodes[at], nodes[k]))
+                {
+                    best[k] = best[at] + step;
+                    before[k] = at;
+                }
+            }
+        }
+        if (before[1] < 0)
+            return;
+        std::vector<G3D::Vector3> way;
+        for (int k = 1; k >= 0; k = before[k])
+            way.push_back(nodes[k]);
+        std::reverse(way.begin(), way.end());
+        if (from != start)
+            way.insert(way.begin(), start);
+        if (to != end)
+            way.push_back(end);
+        // Heights between, as the walk's (the path's normalising puts them on the ground).
+        float const total = best[1] > 0.0f ? best[1] : 1.0f;
+        float walked = 0.0f;
+        for (size_t k = 1; k + 1 < way.size(); ++k)
+        {
+            walked += std::hypot(way[k].x - way[k - 1].x, way[k].y - way[k - 1].y);
+            way[k].z = from.z + (to.z - from.z) * walked / total;
+        }
+        points = way;
+    }
+
+    void ForgetRiftMap(Map* map)
     {
         if (!map || map->GetId() != RIFT_MAP)
             return;
+        {
+            std::lock_guard<std::mutex> guard(sWallLock);
+            auto walls = sWalls.find(map->GetInstanceId());
+            if (walls != sWalls.end())
+            {
+                for (auto const& model : walls->second.models)
+                    map->RemoveGameObjectModel(*model);
+                sWalls.erase(walls);
+            }
+        }
         std::lock_guard<std::mutex> guard(sLock);
         uint32 const instance = map->GetInstanceId();
         for (auto b = sSideBosses.begin(); b != sSideBosses.end();)
