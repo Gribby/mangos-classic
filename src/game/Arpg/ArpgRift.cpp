@@ -2090,9 +2090,33 @@ namespace Arpg
             sLog.outError("ARPG rifts: no portal look in gameobject_template; no Rift Stones");
             return;
         }
-        // The palisade's look: a vanilla fence's or palisade's, if the world has one.
+        // The palisade's look: a game object model of the client's named a palisade, else a fence or
+        // a barricade (GameObjectDisplayInfo.dbc); else a world object's so named.
         uint32 wallLook = 0;
-        if (auto result = WorldDatabase.PQuery("SELECT displayId FROM gameobject_template WHERE displayId > 0 AND entry < %u AND "
+        {
+            char const* const words[] = { "palisade", "fence", "barricade" };
+            int bestRank = 3;
+            for (uint32 id = 0; id < sGameObjectDisplayInfoStore.GetNumRows(); ++id)
+            {
+                GameObjectDisplayInfoEntry const* info = sGameObjectDisplayInfoStore.LookupEntry(id);
+                if (!info || !info->filename)
+                    continue;
+                std::string lower = info->filename;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                for (int rank = 0; rank < bestRank; ++rank)
+                {
+                    if (lower.find(words[rank]) == std::string::npos)
+                        continue;
+                    bestRank = rank;
+                    wallLook = info->Displayid;
+                    break;
+                }
+            }
+            if (wallLook)
+                sLog.outString("ARPG rifts: Goldshire's palisade looks like %s", sGameObjectDisplayInfoStore.LookupEntry(wallLook)->filename);
+        }
+        if (!wallLook)
+            if (auto result = WorldDatabase.PQuery("SELECT displayId FROM gameobject_template WHERE displayId > 0 AND entry < %u AND "
                                                "(name LIKE '%%Palisade%%' OR name LIKE '%%Fence%%' OR name LIKE '%%Barricade%%') "
                                                "ORDER BY name LIKE '%%Palisade%%' DESC, entry LIMIT 1", SHRINE_ENTRY_FROM))
             wallLook = result->Fetch()[0].GetUInt32();
