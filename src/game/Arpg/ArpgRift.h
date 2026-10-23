@@ -34,6 +34,8 @@
  *     gy0 and j), uint16 nodes a side (257), uint16 area id, float base height, then 16x16 pieces
  *     (i-major, i along X): uint8 source gx, gy, chunk a, chunk b (the source square's first
  *     chunk in that map 0 grid, a along X).
+ *     Then (newer servers) uint8 theme (0 outdoors, 1 a roofless cave), uint8 marks, and per
+ *     mark uint8 kind (1 exit, 2 way back, 3 side area's entrance, 4 side area's boss), float x, y.
  *   kind 2, heights: uint8 2, uint32 layout id, uint16 first row, uint16 rows, then rows x 257
  *     int16: (height - base) * 8, row i, column j. An inner (cell centre) height is its four
  *     corners' mean.

@@ -40,6 +40,7 @@
 #include <random>
 #include <set>
 #include <unordered_map>
+#include <tuple>
 #include <vector>
 
 namespace
@@ -942,6 +943,22 @@ namespace
             }
         }
         data << uint8(AREAS[layout.kind].cave ? 1 : 0);    // the theme
+        // The marks the client's map shows once seen: 1 the exit, 2 the way back, 3 a side area's
+        // entrance, 4 a side area's boss.
+        AreaDef const& area = AREAS[layout.kind];
+        std::vector<std::tuple<uint8, float, float>> marks;
+        if (area.side)
+            marks.emplace_back(4, layout.exitX, layout.exitY);
+        else
+            marks.emplace_back(1, layout.exitX, layout.exitY);
+        if (layout.kind != KIND_FREE)
+            marks.emplace_back(2, layout.backX, layout.backY);
+        for (Layout::Branch const& branch : layout.branches)
+            if (branch.kind != MAX_KIND)
+                marks.emplace_back(3, branch.x, branch.y);
+        data << uint8(marks.size());
+        for (auto const& [kind, x, y] : marks)
+            data << uint8(kind) << float(x) << float(y);
         player->GetSession()->SendPacket(data);
         for (int row = 0; row < NODES; row += ROWS_PER_PACKET)
         {

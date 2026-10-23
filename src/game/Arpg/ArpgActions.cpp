@@ -70,6 +70,13 @@ namespace
     constexpr uint32 PORTAL_SWIRL = 8690;
     constexpr uint32 PORTAL_DOOR_ALLIANCE = 10059, PORTAL_DOOR_HORDE = 11417;
     constexpr uint32 PORTAL_DOOR_SECS = 8;
+    // While the way back is open, both ends stand: where it opened, and a few yards in front of
+    // the player in town; walking into the town end (within PORTAL_STEP yards, PORTAL_SETTLE_MS
+    // after arriving) goes back through it, as the key does. Going back closes both.
+    constexpr uint32 PORTAL_STAND_SECS = PORTAL_RETURN_MS / IN_MILLISECONDS;
+    constexpr float PORTAL_TOWN_AHEAD = 4.0f;
+    constexpr float PORTAL_STEP = 1.8f;
+    constexpr uint32 PORTAL_SETTLE_MS = 2500;
     // A death's checkpoint gives back this share of health and mana.
     constexpr float CHECKPOINT_RESTORE = 0.5f;
 
@@ -95,6 +102,13 @@ namespace
         uint32 returnUntil = 0;
         Spot returnTo;
         uint32 returnInstance = 0;
+        // The portal's two standing ends, each on its map and instance; the town end is placed on
+        // arrival there; an end is taken down on its own map once the way back is used.
+        ObjectGuid fieldDoor, townDoor;
+        std::pair<uint32, uint32> fieldDoorOn{ 0, 0 }, townDoorOn{ 0, 0 };
+        bool placeTownDoor = false;
+        bool closeFieldDoor = false;
+        uint32 arrivedAt = 0;
         // Where the player came into each map (and instance) it has been in: a dungeon death rises
         // there, at the door the player used. Stepping back through a town portal is not a door:
         // the dungeon's own door stays the one it rises at.
@@ -390,7 +404,7 @@ namespace Arpg
     }
 
     // A portal standing at (x, y, z) on `player`'s map for a few seconds.
-    void ShowPortalDoor(Player* player, float x, float y, float z, float o)
+    ObjectGuid ShowPortalDoor(Player* player, float x, float y, float z, float o, uint32 secs = PORTAL_DOOR_SECS)
     {
         SpellEntry const* door = sSpellTemplate.LookupEntry<SpellEntry>(
             player->GetTeam() == HORDE ? PORTAL_DOOR_HORDE : PORTAL_DOOR_ALLIANCE);
@@ -400,16 +414,16 @@ namespace Arpg
                 if (door->Effect[i] == SPELL_EFFECT_TRANS_DOOR)
                     entry = uint32(door->EffectMiscValue[i]);
         if (!entry || !ObjectMgr::GetGameObjectInfo(entry) || !player->IsInWorld())
-            return;
+            return ObjectGuid();
         Map* map = player->GetMap();
         GameObject* go = new GameObject;
         uint32 const low = map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT);
         if (!go->Create(low, low, entry, map, x, y, z, o))
         {
             delete go;
-            return;
+            return ObjectGuid();
         }
-        go->SetRespawnTime(PORTAL_DOOR_SECS);
+        go->SetRespawnTime(secs);
         go->SetOwnerGuid(player->GetObjectGuid());
         go->SetUInt32Value(GAMEOBJECT_LEVEL, player->GetLevel());
         go->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_NO_INTERACT);
@@ -417,6 +431,16 @@ namespace Arpg
         go->SetSpawnerGuid(player->GetObjectGuid());
         map->Add(go);
         go->AIM_Initialize();
+        return go->GetObjectGuid();
+    }
+
+    // Take down a portal end standing on `player`'s map.
+    void TakeDownDoor(Player* player, ObjectGuid guid)
+    {
+        if (guid.IsEmpty() || !player->IsInWorld())
+            return;
+        if (GameObject* go = player->GetMap()->GetGameObject(guid))
+            go->Delete();
     }
 
     bool InTown(Player* player)
@@ -478,9 +502,17 @@ namespace Arpg
                     return;
                 }
             }
-            // The portal stands in town as the player steps through (a far teleport takes the
-            // player out of this map at once).
-            ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
+            // Going back closes the portal: its town end goes now, its field end on arrival there.
+            ObjectGuid townDoor;
+            std::pair<uint32, uint32> townDoorOn;
+            {
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State const& s = sStates[player->GetObjectGuid()];
+                townDoor = s.townDoor;
+                townDoorOn = s.townDoorOn;
+            }
+            if (townDoorOn == std::make_pair(player->GetMapId(), player->GetInstanceId()))
+                TakeDownDoor(player, townDoor);
             bool const newMap = back.map != player->GetMapId();
             if (player->TeleportTo(back.map, back.x, back.y, back.z, back.o))
             {
@@ -488,10 +520,12 @@ namespace Arpg
                     std::lock_guard<std::mutex> guard(sActionsLock);
                     State& s = sStates[player->GetObjectGuid()];
                     s.returnUntil = 0;
+                    s.townDoor = ObjectGuid();
+                    s.closeFieldDoor = true;
                     // Only an arrival on another map is the portal's; a near one never changes map.
                     s.viaPortal = newMap;
                 }
-                chat.SendSysMessage("|cff80c0ffYou step back through your portal.|r");
+                chat.SendSysMessage("|cff80c0ffYou step back through your portal, and it closes behind you.|r");
             }
             return;
         }
@@ -627,11 +661,72 @@ namespace Arpg
         if (portalOpens)
         {
             ShowPortalSwirl(player, false, true);
-            // The portal stands where it opened, a moment, for anyone there to see.
-            ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(), player->GetOrientation());
-            ChatHandler(player).SendSysMessage("|cff80c0ffYou step through to town. Your portal stays open for 30 minutes: press it again in town to go back.|r");
+            // The portal stands where it opened while the way back is open; its other end rises in
+            // town as the player arrives.
+            ObjectGuid const door = ShowPortalDoor(player, player->GetPositionX(), player->GetPositionY(), player->GetPositionZ(),
+                                                   player->GetOrientation(), PORTAL_STAND_SECS);
+            {
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State& s = sStates[player->GetObjectGuid()];
+                s.fieldDoor = door;
+                s.fieldDoorOn = { player->GetMapId(), player->GetInstanceId() };
+                s.placeTownDoor = true;
+                s.closeFieldDoor = false;
+            }
+            ChatHandler(player).SendSysMessage("|cff80c0ffYou step through to town. Your portal stays open for 30 minutes: walk into it, or press it again, to go back.|r");
             player->TeleportToHomebind();
             return;
+        }
+        // The portal's ends: the town end rises on arrival there, the field end comes down once
+        // the way back was used and the player is there, and walking into the town end goes back.
+        if (player->IsInWorld() && !player->IsBeingTeleported() && player->IsAlive())
+        {
+            std::pair<uint32, uint32> const here{ player->GetMapId(), player->GetInstanceId() };
+            bool placeTown = false, walkIn = false;
+            ObjectGuid closeField, townDoor;
+            {
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State& s = sStates[player->GetObjectGuid()];
+                if (s.placeTownDoor && here != s.fieldDoorOn)
+                {
+                    s.placeTownDoor = false;
+                    s.arrivedAt = now ? now : 1;
+                    placeTown = Later(s.returnUntil, now);
+                }
+                if (s.closeFieldDoor && here == s.fieldDoorOn)
+                {
+                    s.closeFieldDoor = false;
+                    closeField = s.fieldDoor;
+                    s.fieldDoor = ObjectGuid();
+                }
+                townDoor = s.townDoor;
+                walkIn = !townDoor.IsEmpty() && here == s.townDoorOn && Later(s.returnUntil, now) &&
+                         (!s.arrivedAt || WorldTimer::getMSTimeDiff(s.arrivedAt, now) >= PORTAL_SETTLE_MS);
+            }
+            TakeDownDoor(player, closeField);
+            if (placeTown)
+            {
+                float const o = player->GetOrientation();
+                float const x = player->GetPositionX() + std::cos(o) * PORTAL_TOWN_AHEAD;
+                float const y = player->GetPositionY() + std::sin(o) * PORTAL_TOWN_AHEAD;
+                float z = player->GetMap()->GetHeight(x, y, player->GetPositionZ() + 3.0f);
+                if (z <= INVALID_HEIGHT)
+                    z = player->GetPositionZ();
+                ObjectGuid const door = ShowPortalDoor(player, x, y, z, o + float(M_PI), PORTAL_STAND_SECS);
+                std::lock_guard<std::mutex> guard(sActionsLock);
+                State& s = sStates[player->GetObjectGuid()];
+                s.townDoor = door;
+                s.townDoorOn = here;
+            }
+            else if (walkIn && !player->IsInCombat())
+            {
+                GameObject* go = player->GetMap()->GetGameObject(townDoor);
+                if (go && player->GetDistance2d(go->GetPositionX(), go->GetPositionY()) <= PORTAL_STEP)
+                {
+                    TownPortal(player);
+                    return;
+                }
+            }
         }
         {
             std::lock_guard<std::mutex> guard(sActionsLock);

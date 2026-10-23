@@ -16,9 +16,11 @@
  * of combat it refills a charge every FLASK_REST_MS.
  *
  * Town portal (kind 22): out of combat, two seconds standing still open a portal home (the
- * hearth's bind point), and the spot it opened from is kept for PORTAL_RETURN_MS. In town (resting,
- * or near the bind point) the same key goes back through it, into the same dungeon when it opened
- * in one. Moving, a blow or combat in the two seconds closes it.
+ * hearth's bind point), and the spot it opened from is kept for PORTAL_RETURN_MS. Both ends stand
+ * while it is open: a mage's portal where it opened, and another a few yards ahead of the player
+ * on arrival in town. Walking into the town end, or the same key in town (resting, or near the
+ * bind point), goes back through it, into the same dungeon or rift when it opened in one, and
+ * closes it: both ends come down. Moving, a blow or combat in the two seconds closes it.
  *
  * Death: an ARPG character who releases does not walk back as a ghost. It rises at once, at half
  * health and mana, at the dungeon's entrance inside the dungeon, or at the nearest graveyard
