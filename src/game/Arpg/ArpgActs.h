@@ -67,6 +67,12 @@ namespace Arpg
     // A logged-out character's packs ahead go.
     void ForgetActs(Player* player);
 
+    // The creature named `name` on map 0 (the one with the most spawns there), or 0: an area's
+    // creatures (Arpg/ArpgRift.h).
+    uint32 ActEntryNamed(char const* name);
+    // A summoned act leader (a Goldshire area's): crowned as the world's own spawn is.
+    void CrownActLeader(Creature* creature);
+
     // The hostile creatures that live on `map` (0 or 1) in the box, each with at least
     // `minSpawns` spawns there: a rift's natives (Arpg/ArpgRift.h).
     std::vector<uint32> NativesWithin(uint32 map, float minX, float maxX, float minY, float maxY, uint32 minSpawns);

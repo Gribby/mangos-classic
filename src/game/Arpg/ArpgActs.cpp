@@ -3,6 +3,7 @@
  */
 
 #include "Arpg/ArpgActs.h"
+#include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgShrines.h"
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgBases.h"
@@ -88,34 +89,27 @@ namespace
         static std::vector<ActQuest> const quests =
         {
             // --- Elwynn Forest ---
+            // Goldshire is the hub (Arpg/ArpgRift.h): a palisade, and gates into the areas the quests
+            // send the character to.
             { ACT_QUEST_FIRST + 0, SIDE_ALLIANCE, 12, 3, "Act I: The Northshire Watch",
-              "Marshal McBride", "Marshal McBride",
-              "You've arrived at a poor time, $N. Kobolds have crawled out of Echo Ridge and into our vineyards, and the "
-              "Defias Brotherhood has a camp on the valley's edge. Their leader, a cutthroat called Garrick Padfoot, "
-              "thinks Northshire is his for the taking.$B$BClear the vermin out, break the thugs, and bring me "
-              "Padfoot's end. Then we'll talk about what lies beyond the valley.",
-              "Slay the kobolds and Defias thugs of Northshire, and Garrick Padfoot.",
-              "The valley isn't safe yet, $N.",
-              "Well fought. Padfoot was only one of them, though; the Brotherhood is everywhere now. Marshal Dughan "
-              "in Goldshire will want a fighter like you.",
+              "Marshal Dughan", "Marshal Dughan",
+              "You've arrived at a poor time, $N. Goldshire's palisade holds, but only just. North through the gate, "
+              "kobolds have crawled out of Echo Ridge into the fields, and the Defias Brotherhood camps on the road to "
+              "Northshire. Their leader, a cutthroat called Garrick Padfoot, thinks the fields are his for the taking."
+              "$B$BClear the vermin out, break the thugs, and bring me Padfoot's end.",
+              "Slay the kobolds and Defias thugs of the Northshire Fields, through Goldshire's north gate, and Garrick Padfoot.",
+              "The fields aren't safe yet, $N.",
+              "Well fought. Padfoot was only one of them, though; the Brotherhood is everywhere now, and I've more work "
+              "for a fighter like you.",
               {{ {{ "Kobold Vermin", nullptr, nullptr }, 8 }, {{ "Defias Thug", nullptr, nullptr }, 6 }, {{ nullptr, nullptr, nullptr }, 0 } }},
               "Garrick Padfoot", LEAD_CHAMPION, "Extra Strong", 450, 100,
               {{ "Garrick Padfoot", "Kobold Camp Cleanup", nullptr }} },
 
-            { ACT_QUEST_FIRST + 1, SIDE_ALLIANCE, 12, 5, "Act I: The Road to Goldshire",
-              "Marshal McBride", "Marshal Dughan",
-              "Follow the road south out of the valley to Goldshire, $N. Marshal Dughan holds the town with too few "
-              "men. Tell him Northshire is cleared, and that I've sent him help.",
-              "Report to Marshal Dughan in Goldshire.",
-              "", "McBride sent you? Good. I can use every blade I can get.",
-              {{ {{ nullptr, nullptr, nullptr }, 0 }, {{ nullptr, nullptr, nullptr }, 0 }, {{ nullptr, nullptr, nullptr }, 0 } }},
-              nullptr, LEAD_NONE, nullptr, 200, 50, {{ nullptr, nullptr, nullptr }} },
-
             { ACT_QUEST_FIRST + 2, SIDE_ALLIANCE, 12, 7, "Act I: The Mines of Elwynn",
               "Marshal Dughan", "Marshal Dughan",
-              "The kobolds have taken Fargodeep Mine, just south of here, and they're led by a greedy brute the "
+              "The kobolds have taken Fargodeep Mine, out in the farmlands past the east gate, and they're led by a greedy brute the "
               "miners call Goldtooth. Every day they dig deeper and every night they raid the farms.$B$BGo into "
-              "Fargodeep, $N. Break their tunnellers and miners, and put an end to Goldtooth.",
+              "the farmlands, $N. Break their tunnellers and miners, and put an end to Goldtooth.",
               "Slay the kobolds of Fargodeep Mine, and Goldtooth.",
               "Fargodeep's still crawling with them.",
               "Goldtooth, dead. The miners will sing about this one. But the kobolds were never our real problem.",
@@ -125,7 +119,7 @@ namespace
 
             { ACT_QUEST_FIRST + 3, SIDE_ALLIANCE, 12, 8, "Act I: Fire on the Farms",
               "Marshal Dughan", "Marshal Dughan",
-              "There it is. The Defias Brotherhood is burning the farms east of Goldshire: the Brackwell pumpkin "
+              "There it is. The Defias Brotherhood is burning the farms past the east gate: the Brackwell pumpkin "
               "patch, the Maclure vineyards. Good folk driven off their land so the Brotherhood can take it.$B$BDrive "
               "them out, $N, and find whoever is giving the orders.",
               "Drive the Defias from the Brackwell Pumpkin Patch and the Maclure Vineyards, and slay their leader.",
@@ -137,7 +131,7 @@ namespace
 
             { ACT_QUEST_FIRST + 4, SIDE_ALLIANCE, 12, 9, "Act I: Jasperlode",
               "Marshal Dughan", "Marshal Dughan",
-              "More kobolds in Jasperlode Mine, to the north-east past the river, and these ones have their "
+              "More kobolds out of Jasperlode Mine, roaming the farmlands past the east gate, and these ones have their "
               "geomancers with them. The Eastvale loggers won't go near the hills.$B$BClear Jasperlode, $N.",
               "Slay the kobolds of Jasperlode Mine.",
               "The loggers are still too scared to work.",
@@ -149,8 +143,8 @@ namespace
             { ACT_QUEST_FIRST + 5, SIDE_ALLIANCE, 12, 10, "Act I: Hogger",
               "Marshal Dughan", "Marshal Dughan",
               "The Riverpaw gnolls have crossed into Elwynn from the west, and they follow a beast called Hogger. "
-              "He's killed guards, farmers, and three of the brave fools I sent after him. His camp is at Forest's "
-              "Edge, on the border with Westfall.$B$BBreak his pack, $N, and end him. Mind his charge.",
+              "He's killed guards, farmers, and three of the brave fools I sent after him. His camp is at the far "
+              "end of Forest's Edge, through the south gate.$B$BBreak his pack, $N, and end him. Mind his charge.",
               "Slay the Riverpaw gnolls at Forest's Edge, and Hogger.",
               "Hogger still lives?",
               "Hogger, dead at last. Elwynn owes you, $N. But the gnolls only came east because something drove them out "
@@ -162,7 +156,7 @@ namespace
             { ACT_QUEST_FIRST + 6, SIDE_ALLIANCE, 40, 10, "Act I: The Fields of Westfall",
               "Marshal Dughan", "Gryan Stoutmantle",
               "Westfall's farmers have fled their land, $N, and Stormwind won't lift a finger. Gryan Stoutmantle is "
-              "gathering a militia at Sentinel Hill, down the road west past Forest's Edge. He'll need you more than I "
+              "gathering a militia at Sentinel Hill. The west gate's road takes you there now. He'll need you more than I "
               "do now. Go with the Light.",
               "Report to Gryan Stoutmantle at Sentinel Hill in Westfall.",
               "", "Dughan sent you? Then you're welcome here. Westfall needs every hand it can get.",
@@ -726,8 +720,20 @@ namespace Arpg
     void OnActCreatureAdded(Creature* creature)
     {
         // Only the world's own spawn: not a pack's copy or a summon.
-        if (!creature || !ActsOn() || !sLeaders.count(creature->GetEntry()) || ChampionTier(creature) != 0 ||
-                creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData())
+        if (!creature || creature->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !creature->HasStaticDBSpawnData())
+            return;
+        CrownActLeader(creature);
+    }
+
+    uint32 ActEntryNamed(char const* name)
+    {
+        BuildSpawns();
+        return EntryNamed(name, 0);
+    }
+
+    void CrownActLeader(Creature* creature)
+    {
+        if (!creature || !ActsOn() || !sLeaders.count(creature->GetEntry()) || ChampionTier(creature) != 0)
             return;
         auto affix = sLeaderAffix.find(creature->GetEntry());
         std::vector<std::string> affixes;
@@ -739,7 +745,7 @@ namespace Arpg
     bool OnActBossLoot(Creature* victim)
     {
         if (!victim || !victim->m_loot || !ActsOn() || !sFinales.count(victim->GetEntry()) ||
-                victim->GetSubtype() != CREATURE_SUBTYPE_GENERIC || !victim->HasStaticDBSpawnData())
+                (!victim->HasStaticDBSpawnData() && !IsRiftMap(victim->GetMapId())))
             return false;
         AddLootPick(victim->m_loot, RARITY_BLUE, victim->GetLevel() + 2);
         return true;

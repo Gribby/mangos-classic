@@ -19,6 +19,15 @@
  * In a rift: packs of Elwynn's natives at the player's level, a rare at the exit, a portal
  * there back to the stone. No vmaps or mmaps: creatures walk straight.
  *
+ * Goldshire is Act I's hub, as Diablo II's Rogue Encampment: Alliance characters start there, and
+ * a palisade holds them in until Hogger falls (the act's Hogger quest done). Its gates lead into
+ * three areas, each a layout of pieces from its part of Elwynn with the act quests' creatures:
+ * the Northshire Fields (north gate, levels 1-5, Garrick Padfoot at the end), the Farmlands
+ * (east gate, 5-8, Goldtooth and Morgan the Collector), Forest's Edge (south gate, 8-11, Hogger).
+ * An area's exit leads into the next, in the same instance (its own block of the map); the last
+ * one's leads back to Goldshire, and each area's start has a way back. A gate opens at its
+ * level or once the quest before it is done; the west gate, the road to Westfall, once Hogger is.
+ *
  * SMSG_ARPG_RIFT (0x356):
  *   kind 1, the layout: uint8 1, uint32 layout id, uint8 gx0, uint8 gy0 (the block's first
  *     server grid; node (i, j) stands at X = (32 - gx0) * TILE - i * TILE / 128, Y likewise from
@@ -44,6 +53,10 @@ namespace Arpg
     constexpr uint32 RIFT_MAP = 520;
     constexpr uint32 RIFT_STONE_ENTRY = 98010;
     constexpr uint32 RIFT_EXIT_ENTRY = 98011;
+
+    // Where Alliance characters start: Goldshire, by Marshal Dughan (x, y, z, orientation).
+    constexpr uint32 GOLDSHIRE_AREA = 87;
+    constexpr float GOLDSHIRE_START[4] = { -9460.0f, 58.0f, 57.5f, 0.0f };
 
     // Whether `mapId` is the rifts' map, registered.
     bool IsRiftMap(uint32 mapId);
