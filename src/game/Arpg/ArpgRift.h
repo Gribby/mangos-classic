@@ -35,7 +35,9 @@
  *     (i-major, i along X): uint8 source gx, gy, chunk a, chunk b (the source square's first
  *     chunk in that map 0 grid, a along X).
  *     Then (newer servers) uint8 theme (0 outdoors, 1 a roofless cave), uint8 marks, and per
- *     mark uint8 kind (1 exit, 2 way back, 3 side area's entrance, 4 side area's boss), float x, y.
+ *     mark uint8 kind (1 exit, 2 way back, 3 side area's entrance, 4 side area's boss), float x, y;
+ *     then uint8 sites, and per site uint8 kind (1 farmstead, 2 crop plot, 3 gnoll camp,
+ *     4 watchtower, 5 logging site), float x, y, z (its levelled ground), orientation, radius.
  *   kind 2, heights: uint8 2, uint32 layout id, uint16 first row, uint16 rows, then rows x 257
  *     int16: (height - base) * 8, row i, column j. An inner (cell centre) height is its four
  *     corners' mean.

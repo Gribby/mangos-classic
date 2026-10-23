@@ -128,6 +128,14 @@ namespace
         MAX_KIND
     };
 
+    // A building site an area's layout keeps for the client to dress (its ground levelled, packs
+    // clear of it but a camp's own): a farmstead (a farmhouse or barn, a fence ring, hay, a cart),
+    // a fenced crop plot, a gnoll camp (tents, a fire), a watchtower, a logging site.
+    enum SiteKind : uint8 { SITE_NONE = 0, SITE_FARMSTEAD, SITE_PLOT, SITE_CAMP, SITE_TOWER, SITE_LOGGING, MAX_SITE };
+    float const SITE_RADIUS[MAX_SITE] = { 0.0f, 22.0f, 16.0f, 14.0f, 10.0f, 14.0f };
+    constexpr float SITE_BLEND = 6.0f;              // yards the levelled ground blends back over
+    constexpr int SITE_APART = 4;                   // chunks between sites, at least
+
     struct AreaDef
     {
         char const* name;
@@ -145,6 +153,7 @@ namespace
         PerkId perk;
         uint32 door;
         std::array<RiftKind, 2> branches;           // a main area's side areas (MAX_KIND: none)
+        std::array<std::pair<SiteKind, uint8>, 3> sites;    // its building sites, kind and how many
     };
 
     // Act I's Elwynn, as Diablo II's first act: three areas in a chain from Goldshire, each the
@@ -152,52 +161,52 @@ namespace
     AreaDef const AREAS[MAX_KIND] =
     {
         { "Elwynn Rift", 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, {{}}, nullptr, nullptr, MAX_KIND,
-          "the forest is torn open. A rare guards the way out.", false, false, PERK_NONE, 0, {{ MAX_KIND, MAX_KIND }} },
+          "the forest is torn open. A rare guards the way out.", false, false, PERK_NONE, 0, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_FARMSTEAD, 1 }, { SITE_PLOT, 1 }, { SITE_CAMP, 1 } }} },
         { "The Northshire Fields", 1, 5, -9300.0f, -8800.0f, -800.0f, 300.0f,
           {{ "Kobold Vermin", "Kobold Worker", "Defias Thug", "Young Wolf", "Timber Wolf", nullptr, nullptr }},
           nullptr, "Garrick Padfoot", KIND_FARMLANDS,
           "kobolds and Defias thugs overrun the fields. Garrick Padfoot holds the far end.",
-          false, false, PERK_NONE, 0, {{ KIND_ECHO_RIDGE, KIND_WOLF_RUN }} },
+          false, false, PERK_NONE, 0, {{ KIND_ECHO_RIDGE, KIND_WOLF_RUN }}, {{ { SITE_FARMSTEAD, 1 }, { SITE_PLOT, 2 }, { SITE_TOWER, 1 } }} },
         { "The Farmlands", 5, 8, -10000.0f, -9500.0f, -1500.0f, 0.0f,
           {{ "Kobold Tunneler", "Kobold Miner", "Kobold Laborer", "Defias Bandit", "Defias Cutpurse", "Defias Rogue Wizard", nullptr }},
           nullptr, nullptr, KIND_FOREST,
           "the farms burn and the mines crawl with kobolds. Goldtooth digs in Fargodeep Pit; the Defias hide off the road.",
-          false, false, PERK_NONE, 0, {{ KIND_FARGODEEP, KIND_HIDEOUT }} },
+          false, false, PERK_NONE, 0, {{ KIND_FARGODEEP, KIND_HIDEOUT }}, {{ { SITE_FARMSTEAD, 3 }, { SITE_PLOT, 3 }, { SITE_NONE, 0 } }} },
         { "Forest's Edge", 8, 11, -10300.0f, -9600.0f, 200.0f, 1100.0f,
           {{ "Riverpaw Gnoll", "Riverpaw Runt", "Riverpaw Outrunner", "Prowler", "Young Forest Bear", nullptr, nullptr }},
           nullptr, "Hogger", MAX_KIND,
           "the Riverpaw gnolls hold the forest's edge, and Hogger's camp is at the end of it.",
-          false, false, PERK_NONE, 0, {{ KIND_JASPERLODE, KIND_WARREN }} },
+          false, false, PERK_NONE, 0, {{ KIND_JASPERLODE, KIND_WARREN }}, {{ { SITE_CAMP, 3 }, { SITE_TOWER, 1 }, { SITE_LOGGING, 1 } }} },
         { "Echo Ridge Diggings", 2, 5, -9100.0f, -8700.0f, -600.0f, 100.0f,
           {{ "Kobold Vermin", "Kobold Worker", "Kobold Laborer", nullptr, nullptr, nullptr, nullptr }},
           nullptr, nullptr, MAX_KIND,
           "the kobolds of Echo Ridge dig here, and something bigger digs with them.",
-          true, true, PERK_ECHO_RIDGE, 98021, {{ MAX_KIND, MAX_KIND }} },
+          true, true, PERK_ECHO_RIDGE, 98021, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_NONE, 0 }, { SITE_NONE, 0 }, { SITE_NONE, 0 } }} },
         { "Wolf Run", 3, 5, -9300.0f, -8800.0f, -800.0f, 300.0f,
           {{ "Young Wolf", "Timber Wolf", "Gray Forest Wolf", nullptr, nullptr, nullptr, nullptr }},
           nullptr, "Gruff Swiftbite", MAX_KIND,
           "the wolves run thick here. Gruff Swiftbite leads them.",
-          true, false, PERK_WOLF_RUN, 98022, {{ MAX_KIND, MAX_KIND }} },
+          true, false, PERK_WOLF_RUN, 98022, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_LOGGING, 1 }, { SITE_NONE, 0 }, { SITE_NONE, 0 } }} },
         { "Fargodeep Pit", 5, 8, -9950.0f, -9600.0f, -200.0f, 400.0f,
           {{ "Kobold Tunneler", "Kobold Miner", "Kobold Laborer", nullptr, nullptr, nullptr, nullptr }},
           nullptr, "Goldtooth", MAX_KIND,
           "the kobolds have dug Fargodeep into a pit. Goldtooth guards his candle-gold at the bottom.",
-          true, true, PERK_FARGODEEP, 98023, {{ MAX_KIND, MAX_KIND }} },
+          true, true, PERK_FARGODEEP, 98023, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_NONE, 0 }, { SITE_NONE, 0 }, { SITE_NONE, 0 } }} },
         { "The Defias Hideout", 6, 8, -10000.0f, -9600.0f, -900.0f, -200.0f,
           {{ "Defias Bandit", "Defias Cutpurse", "Defias Rogue Wizard", nullptr, nullptr, nullptr, nullptr }},
           nullptr, "Morgan the Collector", MAX_KIND,
           "the Brotherhood's hideout among the burnt farms. Morgan the Collector counts the take inside.",
-          true, false, PERK_HIDEOUT, 98024, {{ MAX_KIND, MAX_KIND }} },
+          true, false, PERK_HIDEOUT, 98024, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_FARMSTEAD, 2 }, { SITE_PLOT, 1 }, { SITE_NONE, 0 } }} },
         { "Jasperlode Hollow", 8, 10, -9300.0f, -8900.0f, -1200.0f, -500.0f,
           {{ "Kobold Geomancer", "Kobold Laborer", "Mine Spider", nullptr, nullptr, nullptr, nullptr }},
           nullptr, "Mother Fang", MAX_KIND,
           "geomancers and spiders share the hollow. Mother Fang nests at its end.",
-          true, true, PERK_JASPERLODE, 98025, {{ MAX_KIND, MAX_KIND }} },
+          true, true, PERK_JASPERLODE, 98025, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_NONE, 0 }, { SITE_NONE, 0 }, { SITE_NONE, 0 } }} },
         { "Riverpaw Warren", 9, 11, -10300.0f, -9600.0f, 200.0f, 1100.0f,
           {{ "Riverpaw Gnoll", "Riverpaw Runt", "Riverpaw Outrunner", nullptr, nullptr, nullptr, nullptr }},
           nullptr, nullptr, MAX_KIND,
           "the Riverpaw's warren. Hogger's lieutenant keeps it.",
-          true, false, PERK_WARREN, 98026, {{ MAX_KIND, MAX_KIND }} },
+          true, false, PERK_WARREN, 98026, {{ MAX_KIND, MAX_KIND }}, {{ { SITE_CAMP, 3 }, { SITE_NONE, 0 }, { SITE_NONE, 0 } }} },
     };
     constexpr uint32 WAY_OUT_ENTRY = 98027;         // a side area's way back to the one it branches off
 
@@ -264,6 +273,12 @@ namespace
         uint32 parentId = 0;
         float returnX = 0, returnY = 0, returnZ = 0;
         std::vector<std::array<float, 3>> spots;    // packs' places
+        struct Site
+        {
+            SiteKind kind = SITE_NONE;
+            float x = 0, y = 0, z = 0, o = 0, radius = 0;
+        };
+        std::vector<Site> sites;
 
         float X(float i) const { return (32 - gx0) * TILE - i * UNIT; }
         float Y(float j) const { return (32 - gy0) * TILE - j * UNIT; }
@@ -856,7 +871,76 @@ namespace
             }
         }
 
-        // Packs: on open chunks a walk from the start, apart, not at the exit or a branch.
+        // Building sites: clearings (a chunk open all round), away from the start, the exit, the
+        // branches and each other; the ground levelled under each, blending back at its edge.
+        std::vector<int> siteChunks;
+        if (!cave)
+        {
+            auto apartFrom = [](int a, int b, int d)
+            {
+                return std::abs(a / CHUNKS - b / CHUNKS) + std::abs(a % CHUNKS - b % CHUNKS) >= d;
+            };
+            std::vector<int> clear;
+            for (int c = 0; c < CHUNKS * CHUNKS; ++c)
+            {
+                int const ci = c / CHUNKS, cj = c % CHUNKS;
+                if (!open[c] || ci < 1 || cj < 1 || ci >= CHUNKS - 1 || cj >= CHUNKS - 1)
+                    continue;
+                bool all = true;
+                for (int di = -1; di <= 1; ++di)
+                    for (int dj = -1; dj <= 1; ++dj)
+                        all = all && open[(ci + di) * CHUNKS + cj + dj];
+                bool apart = all && apartFrom(c, start, 4) && apartFrom(c, exit, 4);
+                for (int b : branchChunks)
+                    apart = apart && apartFrom(c, b, 3);
+                if (apart)
+                    clear.push_back(c);
+            }
+            std::shuffle(clear.begin(), clear.end(), rng);
+            std::uniform_real_distribution<float> turn(0.0f, 2.0f * float(M_PI));
+            for (auto const& [siteKind, count] : AREAS[kind].sites)
+            {
+                for (uint8 n = 0; n < count && siteKind != SITE_NONE; ++n)
+                {
+                    auto it = std::find_if(clear.begin(), clear.end(), [&](int c)
+                    {
+                        for (int other : siteChunks)
+                            if (!apartFrom(c, other, SITE_APART))
+                                return false;
+                        return true;
+                    });
+                    if (it == clear.end())
+                        break;
+                    int const c = *it;
+                    clear.erase(it);
+                    siteChunks.push_back(c);
+                    Layout::Site site;
+                    site.kind = siteKind;
+                    centre(c, site.x, site.y, site.z);
+                    site.o = turn(rng);
+                    site.radius = SITE_RADIUS[siteKind];
+                    // Level the ground: within the radius to the centre's height, blending back.
+                    float const ci = ((32 - layout->gx0) * TILE - site.x) / UNIT;
+                    float const cj = ((32 - layout->gy0) * TILE - site.y) / UNIT;
+                    int16 const level = layout->q[int(ci + 0.5f) * NODES + int(cj + 0.5f)];
+                    float const reach = (site.radius + SITE_BLEND) / UNIT;
+                    for (int i = std::max(0, int(ci - reach)); i <= std::min(NODES - 1, int(ci + reach) + 1); ++i)
+                    {
+                        for (int j = std::max(0, int(cj - reach)); j <= std::min(NODES - 1, int(cj + reach) + 1); ++j)
+                        {
+                            float const d = std::sqrt((i - ci) * (i - ci) + (j - cj) * (j - cj)) * UNIT;
+                            float const w = d <= site.radius ? 1.0f : std::max(0.0f, 1.0f - (d - site.radius) / SITE_BLEND);
+                            int16& q = layout->q[i * NODES + j];
+                            q = int16(std::lround(q + (level - q) * w));
+                        }
+                    }
+                    site.z = BASE + level / HEIGHT_STEP;
+                    layout->sites.push_back(site);
+                }
+            }
+        }
+
+        // Packs: on open chunks a walk from the start, apart, not at the exit, a branch or a site.
         std::vector<int> candidates;
         for (int c = 0; c < CHUNKS * CHUNKS; ++c)
             if (open[c] && dist[c] >= (side ? PACK_FROM_START / 2 : PACK_FROM_START) && c != exit)
@@ -875,6 +959,9 @@ namespace
                 apart = false;
             for (int b : branchChunks)
                 if (std::abs(c / CHUNKS - b / CHUNKS) + std::abs(c % CHUNKS - b % CHUNKS) < 2)
+                    apart = false;
+            for (int site : siteChunks)
+                if (std::abs(c / CHUNKS - site / CHUNKS) + std::abs(c % CHUNKS - site % CHUNKS) < 2)
                     apart = false;
             if (!apart)
                 continue;
@@ -959,6 +1046,10 @@ namespace
         data << uint8(marks.size());
         for (auto const& [kind, x, y] : marks)
             data << uint8(kind) << float(x) << float(y);
+        // The building sites, for the client to dress.
+        data << uint8(layout.sites.size());
+        for (Layout::Site const& site : layout.sites)
+            data << uint8(site.kind) << float(site.x) << float(site.y) << float(site.z) << float(site.o) << float(site.radius);
         player->GetSession()->SendPacket(data);
         for (int row = 0; row < NODES; row += ROWS_PER_PACKET)
         {
@@ -1045,6 +1136,11 @@ namespace
                 OnShrinePackPlaced(leader);
             }
         }
+        // A gnoll camp has its own pack, round its fire.
+        for (Layout::Site const& site : layout.sites)
+            if (site.kind == SITE_CAMP)
+                if (Creature* leader = summon(anyNative(), site.x + 3.0f, site.y, site.z, level))
+                    FormRoadPack(leader);
         // A named one halfway, crowned as the act crowns it (Arpg/ArpgActs.h).
         if (area.midLeader && !layout.spots.empty())
         {
