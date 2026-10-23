@@ -1335,7 +1335,9 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y, bool mapOnl
     if (mapOnly)
         return m_GridMaps[x][y];
 
-    if (!m_vmgr->IsTileLoaded(m_mapId, x, y))
+    // An ARPG rift has no vmaps of its own (its buildings' collision is put in its maps' dynamic
+    // trees), and the vmap manager knows no map registered after startup: it asserts on one.
+    if (!Arpg::IsRiftMap(m_mapId) && !m_vmgr->IsTileLoaded(m_mapId, x, y))
     {
         // load VMAPs for current map/grid...
         const MapEntry* i_mapEntry = sMapStore.LookupEntry(m_mapId);
@@ -1356,7 +1358,7 @@ GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y, bool mapOnl
         }
     }
 
-    if (!MMAP::MMapFactory::createOrGetMMapManager()->IsMMapIsLoaded(m_mapId, x, y))
+    if (!Arpg::IsRiftMap(m_mapId) && !MMAP::MMapFactory::createOrGetMMapManager()->IsMMapIsLoaded(m_mapId, x, y))
     {
         // load navmesh
         MMAP::MMapFactory::createOrGetMMapManager()->loadMap(sWorld.GetDataPath(), m_mapId, x, y);
