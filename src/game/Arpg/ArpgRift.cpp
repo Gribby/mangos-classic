@@ -150,6 +150,7 @@ namespace
     constexpr float WALL_STEP = 7.0f;               // between the palisade's posts
     constexpr uint32 HUB_SECS = 2 * HOUR;
     constexpr uint32 HUB_CHAPTER_DONE = ACT_QUEST_FIRST + 5;   // Hogger: Elwynn opens
+    constexpr uint32 HUB_LEVEL_MAX = 15;            // past it, the palisade holds no one
     // The Westfall road's end: Sentinel Hill.
     constexpr float WESTFALL_X = -10628.0f, WESTFALL_Y = 1037.0f, WESTFALL_Z = 35.0f, WESTFALL_O = 3.1f;
 
@@ -228,6 +229,7 @@ namespace
     std::set<uint32> sPopulated;                                 // layouts whose creatures stand
     std::vector<ObjectGuid> sHubObjects;                         // the palisade's posts
     ObjectGuid sHubGates[MAX_GATE];
+    bool sHubPlaced = false;
     float sGateZ[MAX_GATE] = { HUB_Z, HUB_Z, HUB_Z, HUB_Z };
     std::unordered_map<ObjectGuid, PlayerRift> sPlayers;
     ObjectGuid sStones[STONE_COUNT];
@@ -917,51 +919,44 @@ namespace
     // From the world (a stone or a gate): into a new instance, or a party member's.
     void EnterArea(Player* player, RiftKind kind, int stone)
     {
-        LayoutPtr layout;
-        ObjectGuid joinGuid;
-        bool joined = false;
-        {
-            std::lock_guard<std::mutex> guard(sLock);
-            // A party member in a rift: its instance, and its area when it is this one.
-            if (Group* group = player->GetGroup())
-            {
-                for (GroupReference* ref = group->GetFirstMember(); ref && !joined; ref = ref->next())
-                {
-                    Player* member = ref->getSource();
-                    if (!member || member == player || !member->IsInWorld() || member->GetMapId() != RIFT_MAP)
-                        continue;
-                    auto it = sInstances.find(member->GetInstanceId());
-                    if (it == sInstances.end())
-                        continue;
-                    joined = true;
-                    joinGuid = member->GetObjectGuid();
-                    for (LayoutPtr const& l : it->second)
-                        if (l->kind == kind && l->Inside(member->GetPositionX(), member->GetPositionY()))
-                            layout = l;
-                }
-            }
-            if (!layout)
-                layout = NewLayout(player, kind);
-            if (!layout)
-                return;
-            PlayerRift& pr = sPlayers[player->GetObjectGuid()];
-            pr.pending = layout;
-            pr.returnStone = stone;
-            pr.sentId = layout->id;
-        }
-        // Binds change on the world thread (the instances' records are its), before the maps
-        // update: the old binds go, or the party member's instance is bound, then the way in.
+        // All on the world thread, before the maps update: a party member in a rift is read
+        // there (its map is not updating), the binds change there (the instances' records are
+        // its), then the way in.
         ObjectGuid const guid = player->GetObjectGuid();
-        sWorld.GetMessager().AddMessage([guid, joinGuid, layout](World* /*world*/)
+        sWorld.GetMessager().AddMessage([guid, kind, stone](World* /*world*/)
         {
             Player* player = sObjectMgr.GetPlayer(guid);
             if (!player || !player->IsInWorld() || player->IsBeingTeleported())
+                return;
+            LayoutPtr layout;
+            ObjectGuid joinGuid;
             {
                 std::lock_guard<std::mutex> guard(sLock);
-                auto it = sPlayers.find(guid);
-                if (it != sPlayers.end() && it->second.pending == layout)
-                    it->second.pending = nullptr;
-                return;
+                // A party member in a rift: its instance, and its area when it is this one.
+                if (Group* group = player->GetGroup())
+                {
+                    for (GroupReference* ref = group->GetFirstMember(); ref && joinGuid.IsEmpty(); ref = ref->next())
+                    {
+                        Player* member = ref->getSource();
+                        if (!member || member == player || !member->IsInWorld() || member->GetMapId() != RIFT_MAP)
+                            continue;
+                        auto it = sInstances.find(member->GetInstanceId());
+                        if (it == sInstances.end())
+                            continue;
+                        joinGuid = member->GetObjectGuid();
+                        for (LayoutPtr const& l : it->second)
+                            if (l->kind == kind && l->Inside(member->GetPositionX(), member->GetPositionY()))
+                                layout = l;
+                    }
+                }
+                if (!layout)
+                    layout = NewLayout(player, kind);
+                if (!layout)
+                    return;
+                PlayerRift& pr = sPlayers[guid];
+                pr.pending = layout;
+                pr.returnStone = stone;
+                pr.sentId = layout->id;
             }
             player->UnbindInstance(RIFT_MAP);
             Player* member = joinGuid.IsEmpty() ? nullptr : sObjectMgr.GetPlayer(joinGuid);
@@ -1006,7 +1001,9 @@ namespace
                 layout = NewLayout(player, kind);
             if (!layout)
                 return;
-            sInstances[player->GetInstanceId()].push_back(layout);
+            std::vector<LayoutPtr>& areas = sInstances[player->GetInstanceId()];
+            if (std::find(areas.begin(), areas.end(), layout) == areas.end())
+                areas.push_back(layout);
             sPlayers[player->GetObjectGuid()].sentId = layout->id;
         }
         SendLayout(player, *layout);
@@ -1017,22 +1014,33 @@ namespace
     // Goldshire's palisade, its gates and the stones are placed near a player: ground under each.
     void PlaceHub(Map* map)
     {
-        // Under no lock: placing takes the map's.
-        bool missing;
+        // Under no lock: placing takes the map's. Placed once, and again when any of it went.
+        std::vector<ObjectGuid> placedBefore;
+        bool placedOnce;
         {
             std::lock_guard<std::mutex> guard(sLock);
-            missing = sHubGates[0].IsEmpty();
+            placedOnce = sHubPlaced;
+            placedBefore = sHubObjects;
+            for (ObjectGuid const& g : sHubGates)
+                if (!g.IsEmpty())
+                    placedBefore.push_back(g);
         }
-        if (!missing)
+        if (placedOnce)
         {
-            ObjectGuid guid;
-            {
-                std::lock_guard<std::mutex> guard(sLock);
-                guid = sHubGates[0];
-            }
-            if (map->GetGameObject(guid))
+            bool gone = false;
+            for (ObjectGuid const& g : placedBefore)
+                if (!map->GetGameObject(g))
+                {
+                    gone = true;
+                    break;
+                }
+            if (!gone)
                 return;
         }
+        // The town's grids stay loaded, so its palisade and gates stay with them.
+        for (float ox = -1.0f; ox <= 1.0f; ox += 2.0f)
+            for (float oy = -1.0f; oy <= 1.0f; oy += 2.0f)
+                map->ForceLoadGrid(HUB_X + ox * HUB_RADIUS, HUB_Y + oy * HUB_RADIUS);
         // All again: what is left of the last goes first.
         std::vector<ObjectGuid> old;
         {
@@ -1076,6 +1084,7 @@ namespace
             }
         }
         std::lock_guard<std::mutex> guard(sLock);
+        sHubPlaced = true;
         sHubObjects.swap(placed);
         for (int g = 0; g < MAX_GATE; ++g)
         {
@@ -1088,6 +1097,7 @@ namespace
     bool Walled(Player const* player)
     {
         return sWorld.getConfig(CONFIG_BOOL_ARPG_ACTS) && player->GetTeam() == ALLIANCE && !player->IsGameMaster() &&
+               player->GetLevel() <= HUB_LEVEL_MAX && sObjectMgr.GetQuestTemplate(HUB_CHAPTER_DONE) &&
                !player->GetQuestRewardStatus(HUB_CHAPTER_DONE) && !player->IsTaxiFlying();
     }
 
