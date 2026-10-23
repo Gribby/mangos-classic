@@ -73,6 +73,12 @@ namespace Arpg
     constexpr uint32 GOLDSHIRE_AREA = 87;
     constexpr float GOLDSHIRE_START[4] = { -9460.0f, 58.0f, 57.5f, 0.0f };
 
+    // Whether (x, y) on `map` is inside Goldshire's palisade (the hub, while rifts are on).
+    bool InHub(Map const* map, float x, float y);
+    // A creature entering the world: one hostile to the Alliance inside the palisade is
+    // despawned at once (the town is kept clear of monsters). True when it was.
+    bool KeepOutOfHub(Creature* creature);
+
     // Whether `mapId` is the rifts' map, registered.
     bool IsRiftMap(uint32 mapId);
 

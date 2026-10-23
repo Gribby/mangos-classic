@@ -804,7 +804,7 @@ namespace Arpg
                 continue;
             at.z = ground;
             uint32 const entry = NativeOf(player->GetMapId(), at, player->GetLevel());
-            if (!entry || !SpotClear(player, at))
+            if (!entry || !SpotClear(player, at) || InHub(map, at.x, at.y))
                 continue;
             TempSpawnSettings settings;
             settings.entry = entry;

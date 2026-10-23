@@ -10,6 +10,7 @@
 #include "Arpg/ArpgAffixes.h"
 #include "Arpg/ArpgCombat.h"
 #include "Arpg/ArpgDungeons.h"
+#include "Arpg/ArpgRift.h"
 #include "Arpg/ArpgLoot.h"
 #include "Arpg/ArpgThreats.h"
 #include "Arpg/ArpgUniques.h"
@@ -847,6 +848,9 @@ namespace Arpg
 
     void OnCreatureAdded(Creature* creature)
     {
+        // Goldshire's palisade keeps its town clear of monsters (Arpg/ArpgRift.h).
+        if (KeepOutOfHub(creature))
+            return;
         // An act's named leaders are crowned (Arpg/ArpgActs.h).
         OnActCreatureAdded(creature);
         // Instances and open-world elites: group scaling and dungeon champions (Arpg/ArpgDungeons.h).

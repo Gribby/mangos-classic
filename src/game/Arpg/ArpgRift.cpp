@@ -258,7 +258,7 @@ namespace
 
     // Goldshire, the hub: a palisade round the town, its gates the ways out.
     constexpr float HUB_X = -9464.0f, HUB_Y = 62.0f, HUB_Z = 57.0f;
-    constexpr float HUB_RADIUS = 105.0f;
+    constexpr float HUB_RADIUS = 70.0f;             // the town's houses, the gates just past them
     constexpr float HUB_SHOW = 260.0f;              // placed when an ARPG player is this close
     constexpr float GATE_IN = 6.0f;                 // a gate stands this far inside the palisade
     constexpr float GATE_ARRIVE = 8.0f;             // one coming back arrives this far inside its gate
@@ -2009,6 +2009,31 @@ namespace
 
 namespace Arpg
 {
+    bool InHub(Map const* map, float x, float y)
+    {
+        if (!map || map->GetId() != 0 || map->Instanceable() || !RiftsOn())
+            return false;
+        float const dx = x - HUB_X, dy = y - HUB_Y;
+        return dx * dx + dy * dy <= HUB_RADIUS * HUB_RADIUS;
+    }
+
+    bool KeepOutOfHub(Creature* creature)
+    {
+        if (!creature || creature->IsPet() || creature->IsPlayerControlled() ||
+                !InHub(creature->GetMap(), creature->GetPositionX(), creature->GetPositionY()))
+            return false;
+        static FactionTemplateEntry const* const human = sFactionTemplateStore.LookupEntry(1);
+        FactionTemplateEntry const* faction = creature->GetFactionTemplateEntry();
+        if (!human || !faction || !faction->IsHostileTo(*human))
+            return false;
+        // Not from inside AddToWorld: on its first update.
+        creature->m_events.AddEvent(new UnitLambdaEvent(*creature, [](Unit& unit)
+        {
+            static_cast<Creature&>(unit).ForcedDespawn();
+        }), creature->m_events.CalculateTime(1));
+        return true;
+    }
+
     bool IsRiftMap(uint32 mapId)
     {
         return mapId == RIFT_MAP && sRegistered;
