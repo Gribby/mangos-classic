@@ -259,6 +259,8 @@ namespace
     // Goldshire, the hub: a palisade round the town, its gates the ways out.
     constexpr float HUB_X = -9464.0f, HUB_Y = 62.0f, HUB_Z = 57.0f;
     constexpr float HUB_RADIUS = 70.0f;             // the town's houses, the gates just past them
+    constexpr float HUB_CLEAR = 20.0f;              // kept clear of monsters this far past the palisade
+    constexpr uint32 HUB_SWEEP_MS = 2000;
     constexpr float HUB_SHOW = 260.0f;              // placed when an ARPG player is this close
     constexpr float GATE_IN = 6.0f;                 // a gate stands this far inside the palisade
     constexpr float GATE_ARRIVE = 8.0f;             // one coming back arrives this far inside its gate
@@ -1796,6 +1798,27 @@ namespace
         return (def.openLevel && player->GetLevel() >= def.openLevel) || (def.openQuest && player->GetQuestRewardStatus(def.openQuest));
     }
 
+    // The town kept clear: a hostile creature in it or by its palisade goes, one that wandered in
+    // or stood there before (KeepOutOfHub takes those spawning there). Every HUB_SWEEP_MS, from a
+    // player in the town.
+    void SweepHub(Player* player, float fromCentre, uint32 now)
+    {
+        static uint32 sweptAt = 0;                  // map 0's thread only
+        if (sweptAt && WorldTimer::getMSTimeDiff(sweptAt, now) < HUB_SWEEP_MS)
+            return;
+        sweptAt = now ? now : 1;
+        for (Unit* unit : EnemiesNear(player, fromCentre + HUB_RADIUS + HUB_CLEAR))
+        {
+            if (unit->GetTypeId() != TYPEID_UNIT || !unit->IsAlive())
+                continue;
+            Creature* creature = static_cast<Creature*>(unit);
+            if (creature->IsPet() || creature->IsPlayerControlled() ||
+                    !InHub(creature->GetMap(), creature->GetPositionX(), creature->GetPositionY()))
+                continue;
+            creature->ForcedDespawn();
+        }
+    }
+
     // On map 0: Goldshire, its palisade and gates.
     void UpdateHub(Player* player, uint32 now)
     {
@@ -1807,6 +1830,8 @@ namespace
         bool const walled = Walled(player);
         if (d <= HUB_SHOW)
             PlaceHub(map);
+        if (d <= HUB_RADIUS && RiftsOn())
+            SweepHub(player, d, now);
         if (walled && player->IsAlive() && d > HUB_RADIUS - 2.0f)
         {
             // Far off (a character from before the palisade, a summon): into the town.
@@ -2014,7 +2039,8 @@ namespace Arpg
         if (!map || map->GetId() != 0 || map->Instanceable() || !RiftsOn())
             return false;
         float const dx = x - HUB_X, dy = y - HUB_Y;
-        return dx * dx + dy * dy <= HUB_RADIUS * HUB_RADIUS;
+        float const reach = HUB_RADIUS + HUB_CLEAR;
+        return dx * dx + dy * dy <= reach * reach;
     }
 
     bool KeepOutOfHub(Creature* creature)
