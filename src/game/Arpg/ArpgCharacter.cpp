@@ -1169,6 +1169,8 @@ namespace Arpg
         UpdateShrines(player);
         // The Rift Stones, and a rift's layout, creatures and exit (Arpg/ArpgRift.h).
         UpdateRift(player);
+        if (!player->IsInWorld())
+            return;
         // A dungeon's nightmare, as standing boons (Arpg/ArpgDungeons.h).
         UpdateNightmareBoons(player);
         // Barrier and the timed boons, and the HUD's line of them (Arpg/ArpgBoons.h).

@@ -1486,8 +1486,12 @@ void Player::Update(const uint32 diff)
         }
     }
 
-    // ARPG: the ARPG client's held swing (Arpg/ArpgCombat.h)
+    // ARPG: the ARPG client's held swing (Arpg/ArpgCombat.h), and the ARPG updates under it. A
+    // teleport they make (a gate, a rift's exit, a town portal) waits for the update's end, as
+    // one from Unit::Update does: a far one now would take the player off its map mid-update.
+    SetCanDelayTeleport(true);
     Arpg::UpdateSwing(this);
+    SetCanDelayTeleport(false);
 
     if (hasUnitState(UNIT_STAT_MELEE_ATTACKING))
     {
