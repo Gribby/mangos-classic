@@ -375,6 +375,9 @@ namespace
     ObjectGuid sHubGates[MAX_GATE];
     bool sHubPlaced = false;
     float sGateZ[MAX_GATE] = { HUB_Z, HUB_Z, HUB_Z, HUB_Z };
+    // Where one coming back through a gate stands: the ground there, read from map 0's files at
+    // startup, so a return before the town is placed (a relog out of a rift) is not under it.
+    float sArriveZ[MAX_GATE] = { HUB_Z, HUB_Z, HUB_Z, HUB_Z };
     std::unordered_map<ObjectGuid, PlayerRift> sPlayers;
     // An instance's buildings standing: their collision in its map, and their footprints for
     // creatures to walk round. Under sWallLock (path finding asks from the maps' threads).
@@ -404,6 +407,17 @@ namespace
     {
         AreaTableEntry const* area = sAreaStore.LookupEntry(SRC_ZONE);
         return area ? uint16(area->exploreFlag) : 0;
+    }
+
+    // The ground at (x, y) on `map`, from its .map file (no map or thread needed); INVALID_HEIGHT
+    // without one.
+    float GroundFromFile(uint32 map, float x, float y)
+    {
+        int const gx = int(32 - x / TILE), gy = int(32 - y / TILE);
+        char path[1024];
+        snprintf(path, sizeof(path), "%smaps/%03u%02u%02u.map", sWorld.GetDataPath().c_str(), map, gx, gy);
+        GridMap grid;
+        return grid.loadData(path) ? grid.getHeight(x, y) : INVALID_HEIGHT;
     }
 
     // --- The piece library ---
@@ -1511,9 +1525,9 @@ namespace
         GateAt(gate, GATE_ARRIVE, x, y);
         {
             std::lock_guard<std::mutex> guard(sLock);
-            z = sGateZ[gate];
+            z = sArriveZ[gate];
         }
-        player->TeleportTo(0, x, y, z + 2.0f, GATES[gate].bearing + float(M_PI));
+        player->TeleportTo(0, x, y, z + 1.0f, GATES[gate].bearing + float(M_PI));
     }
 
     // Out of an area or rift, the way it was entered.
@@ -2101,6 +2115,18 @@ namespace Arpg
     {
         if (!sRegistered)
             return;
+        // The gates' and their arrivals' ground, before the town is ever placed.
+        for (int g = 0; g < MAX_GATE; ++g)
+        {
+            float x, y;
+            GateAt(g, 0.0f, x, y);
+            float ground = GroundFromFile(0, x, y);
+            if (ground > INVALID_HEIGHT)
+                sGateZ[g] = ground;
+            GateAt(g, GATE_ARRIVE, x, y);
+            ground = GroundFromFile(0, x, y);
+            sArriveZ[g] = ground > INVALID_HEIGHT ? ground : sGateZ[g];
+        }
         // The look: a vanilla portal's.
         std::vector<uint32> looks;
         if (auto result = WorldDatabase.PQuery("SELECT displayId FROM gameobject_template WHERE displayId > 0 AND entry < %u AND "
@@ -2120,8 +2146,11 @@ namespace Arpg
         // a barricade (GameObjectDisplayInfo.dbc); else a world object's so named.
         uint32 wallLook = 0;
         {
+            // Wooden: a wood palisade first, then any palisade, a wood fence, any fence, a barricade;
+            // never a stone, rock, iron or brick one.
             char const* const words[] = { "palisade", "fence", "barricade" };
-            int bestRank = 3;
+            char const* const hard[] = { "stone", "rock", "iron", "metal", "brick" };
+            int bestRank = 6;
             for (uint32 id = 0; id < sGameObjectDisplayInfoStore.GetNumRows(); ++id)
             {
                 GameObjectDisplayInfoEntry const* info = sGameObjectDisplayInfoStore.LookupEntry(id);
@@ -2129,12 +2158,19 @@ namespace Arpg
                     continue;
                 std::string lower = info->filename;
                 std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                for (int rank = 0; rank < bestRank; ++rank)
+                if (Named(lower, hard))
+                    continue;
+                bool const wood = lower.find("wood") != std::string::npos;
+                for (int word = 0; word < 3; ++word)
                 {
-                    if (lower.find(words[rank]) == std::string::npos)
+                    if (lower.find(words[word]) == std::string::npos)
                         continue;
-                    bestRank = rank;
-                    wallLook = info->Displayid;
+                    int const rank = word == 2 ? 5 : word * 2 + (wood ? 0 : 1);
+                    if (rank < bestRank)
+                    {
+                        bestRank = rank;
+                        wallLook = info->Displayid;
+                    }
                     break;
                 }
             }
